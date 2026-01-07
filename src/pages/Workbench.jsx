@@ -29,7 +29,6 @@ export default function Workbench() {
     notes: '',
   });
   const [suggestedActions, setSuggestedActions] = useState([]);
-  const [processingActionIndex, setProcessingActionIndex] = useState(null);
 
   const { data: task, isLoading: taskLoading } = useQuery({
     queryKey: ['task', taskId],
@@ -61,34 +60,11 @@ export default function Workbench() {
   });
 
   const executeActionsMutation = useMutation({
-    mutationFn: async (payload) => {
-      const selectedActions = payload.selected_actions;
-      const results = [];
-      for (let i = 0; i < selectedActions.length; i++) {
-        setProcessingActionIndex(i);
-        try {
-          const result = await base44.functions.invoke('executeMailActions', {
-            task_id: payload.task_id,
-            selected_actions: [selectedActions[i]],
-            case_id: payload.case_id,
-            client_id: payload.client_id,
-          });
-          results.push({ action: selectedActions[i].action_type, status: 'success', data: result.data });
-        } catch (error) {
-          results.push({ action: selectedActions[i].action_type, status: 'error', error: error.message });
-        }
-      }
-      setProcessingActionIndex(null);
-      return results;
-    },
-    onSuccess: (results) => {
+    mutationFn: (payload) => base44.functions.invoke('executeMailActions', payload),
+    onSuccess: () => {
       queryClient.invalidateQueries(['task', taskId]);
       queryClient.invalidateQueries(['tasks']);
       queryClient.invalidateQueries(['mails']);
-      const hasErrors = results.some(r => r.status === 'error');
-      if (hasErrors) {
-        alert(isRTL ? 'חלק מהפעולות נכשלו' : 'Some actions failed');
-      }
       window.location.href = createPageUrl('MailRoom');
     },
   });
@@ -138,10 +114,6 @@ export default function Workbench() {
 
   const handleApproveAndExecute = () => {
     const selectedActions = suggestedActions.filter(a => a.selected);
-    if (selectedActions.length === 0) {
-      alert(isRTL ? 'בחר לפחות פעולה אחת' : 'Select at least one action');
-      return;
-    }
     executeActionsMutation.mutate({
       task_id: taskId,
       selected_actions: selectedActions,
@@ -231,7 +203,6 @@ export default function Workbench() {
                     onApprove={handleApproveAndExecute}
                     onSkip={handleSkip}
                     isApproving={executeActionsMutation.isPending}
-                    processingActionIndex={processingActionIndex}
                   />
                 </div>
               </ResizablePanel>
@@ -254,7 +225,6 @@ export default function Workbench() {
                     onApprove={handleApproveAndExecute}
                     onSkip={handleSkip}
                     isApproving={executeActionsMutation.isPending}
-                    processingActionIndex={processingActionIndex}
                   />
                 </div>
               </ResizablePanel>

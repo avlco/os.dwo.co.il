@@ -48,9 +48,6 @@ const actionTypes = [
   { value: 'log_time', label: 'רישום שעות', labelEn: 'Log Time', icon: Clock },
   { value: 'create_deadline', label: 'יצירת מועד', labelEn: 'Create Deadline', icon: Calendar },
   { value: 'create_task', label: 'יצירת משימה', labelEn: 'Create Task', icon: FileText },
-  { value: 'send_email', label: 'שליחת מייל', labelEn: 'Send Email', icon: Mail },
-  { value: 'create_calendar_event', label: 'יצירת אירוע יומן', labelEn: 'Create Calendar Event', icon: Calendar },
-  { value: 'upload_to_dropbox', label: 'העלאה ל-Dropbox', labelEn: 'Upload to Dropbox', icon: FileText },
 ];
 
 export default function MailRules() {
@@ -470,48 +467,11 @@ export default function MailRules() {
                         </div>
                       )}
                     </div>
-                    {action.action_type === 'upload_to_dropbox' && (
-                      <div className="mt-4 space-y-2">
-                        <Label className="dark:text-slate-300">{isRTL ? 'נתיב Dropbox' : 'Dropbox Path'}</Label>
-                        <Input
-                          value={action.dropbox_folder_path || ''}
-                          onChange={(e) => updateAction(index, 'dropbox_folder_path', e.target.value)}
-                          placeholder="/Clients/{{client_name}}/{{case_number}}"
-                          className="dark:bg-slate-800 dark:border-slate-600"
-                        />
-                      </div>
-                    )}
-
-                    {action.action_type === 'create_calendar_event' && (
-                      <div className="mt-4 space-y-2">
-                        <Label className="dark:text-slate-300">{isRTL ? 'כותרת אירוע' : 'Event Title'}</Label>
-                        <Input
-                          value={action.calendar_event_template?.title_template || ''}
-                          onChange={(e) => updateAction(index, 'calendar_event_template', { ...action.calendar_event_template, title_template: e.target.value })}
-                          placeholder="{{case_number}} - Reminder"
-                          className="dark:bg-slate-800 dark:border-slate-600"
-                        />
-                      </div>
-                    )}
-
-                    {action.action_type === 'send_email' && (
-                      <div className="mt-4 space-y-2">
-                        <Label className="dark:text-slate-300">{isRTL ? 'תבנית תשובה' : 'Reply Template'}</Label>
-                        <Textarea
-                          value={action.auto_reply_template || ''}
-                          onChange={(e) => updateAction(index, 'auto_reply_template', e.target.value)}
-                          placeholder={isRTL ? 'שלום {{client_name}}...' : 'Hello {{client_name}}...'}
-                          rows={2}
-                          className="dark:bg-slate-800 dark:border-slate-600"
-                        />
-                      </div>
-                    )}
-
                     <Button
                       variant="ghost"
                       size="sm"
                       onClick={() => removeAction(index)}
-                      className="mt-4 text-red-600 hover:text-red-700"
+                      className="mt-2 text-red-600 hover:text-red-700"
                     >
                       <Trash2 className="w-4 h-4 mr-1" />
                       {isRTL ? 'הסר' : 'Remove'}
