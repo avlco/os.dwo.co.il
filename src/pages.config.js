@@ -1,29 +1,29 @@
-import Dashboard from './pages/Dashboard';
-import Cases from './pages/Cases';
 import CaseView from './pages/CaseView';
+import Cases from './pages/Cases';
 import Clients from './pages/Clients';
-import Tasks from './pages/Tasks';
+import Dashboard from './pages/Dashboard';
 import Docketing from './pages/Docketing';
 import Financials from './pages/Financials';
 import MailRoom from './pages/MailRoom';
-import Workbench from './pages/Workbench';
 import MailView from './pages/MailView';
 import Settings from './pages/Settings';
+import Tasks from './pages/Tasks';
+import Workbench from './pages/Workbench';
 import __Layout from './Layout.jsx';
 
 
 export const PAGES = {
-    "Dashboard": Dashboard,
-    "Cases": Cases,
     "CaseView": CaseView,
+    "Cases": Cases,
     "Clients": Clients,
-    "Tasks": Tasks,
+    "Dashboard": Dashboard,
     "Docketing": Docketing,
     "Financials": Financials,
     "MailRoom": MailRoom,
-    "Workbench": Workbench,
     "MailView": MailView,
     "Settings": Settings,
+    "Tasks": Tasks,
+    "Workbench": Workbench,
 }
 
 export const pagesConfig = {
