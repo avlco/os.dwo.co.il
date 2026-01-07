@@ -199,12 +199,40 @@ Deno.serve(async (req) => {
       }
     }
 
-    // Update task status to completed
+    // Build execution log from executed actions
+    const executionLog = executedActions.map(action => ({
+      action_type: action.type,
+      status: action.status || 'success',
+      executed_at: new Date().toISOString(),
+      result_id: action.id,
+      result_url: action.dropbox_url || action.calendar_link || null,
+      details: action
+    }));
+
+    // Add errors to log
+    errors.forEach(err => {
+      executionLog.push({
+        action_type: err.action,
+        status: 'error',
+        executed_at: new Date().toISOString(),
+        error: err.error
+      });
+    });
+
+    // Update task status to completed with execution log
+    const existingExtractedData = task.extracted_data || {};
     await base44.entities.Task.update(task_id, {
       status: 'completed',
       completed_at: new Date().toISOString(),
       case_id: case_id || task.case_id,
-      client_id: client_id || task.client_id
+      client_id: client_id || task.client_id,
+      extracted_data: {
+        ...existingExtractedData,
+        execution_log: [
+          ...(existingExtractedData.execution_log || []),
+          ...executionLog
+        ]
+      }
     });
 
     // Update mail status to processed
