@@ -1,5 +1,6 @@
 import React from 'react';
 import { Badge } from "@/components/ui/badge";
+import { format } from 'date-fns';
 
 const statusConfig = {
   // Case statuses
@@ -30,6 +31,13 @@ const statusConfig = {
   viewed: { label: 'נצפה', className: 'bg-purple-50 text-purple-700 border-purple-200' },
   partially_paid: { label: 'שולם חלקית', className: 'bg-amber-50 text-amber-700 border-amber-200' },
   paid: { label: 'שולם', className: 'bg-green-50 text-green-700 border-green-200' },
+  
+  // Mail processing statuses
+  processing: { label: 'מעבד', className: 'bg-blue-50 text-blue-700 border-blue-200' },
+  triaged: { label: 'מסווג', className: 'bg-purple-50 text-purple-700 border-purple-200' },
+  processed: { label: 'טופל', className: 'bg-green-50 text-green-700 border-green-200' },
+  archived: { label: 'בארכיון', className: 'bg-slate-100 text-slate-600 border-slate-200' },
+  error: { label: 'שגיאה', className: 'bg-red-50 text-red-700 border-red-200' },
   
   // Priority
   low: { label: 'נמוך', className: 'bg-slate-100 text-slate-600 border-slate-200' },
