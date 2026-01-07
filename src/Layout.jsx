@@ -30,6 +30,7 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 
 const navigation = [
   { name: 'לוח בקרה', href: 'Dashboard', icon: LayoutDashboard },
+  { name: 'חדר דואר', href: 'MailRoom', icon: Mail },
   { name: 'תיקים', href: 'Cases', icon: Briefcase },
   { name: 'לקוחות', href: 'Clients', icon: Users },
   { name: 'יומן', href: 'Docketing', icon: Calendar },

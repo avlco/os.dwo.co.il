@@ -14,8 +14,12 @@ import {
   Receipt,
   Clock,
   ArrowLeft,
-  FileText
+  FileText,
+  Mail,
+  TrendingUp
 } from 'lucide-react';
+import PieChart from '../components/charts/PieChart';
+import BarChart from '../components/charts/BarChart';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -48,6 +52,13 @@ export default function Dashboard() {
     queryKey: ['clients'],
     queryFn: () => base44.entities.Client.list('-created_date', 100),
   });
+
+  const { data: mails = [] } = useQuery({
+    queryKey: ['mails'],
+    queryFn: () => base44.entities.Mail.list('-received_at', 100),
+  });
+
+  const unprocessedMails = mails.filter(m => m.processing_status === 'pending' || m.processing_status === 'triaged').length;
 
   // Calculate stats
   const activeCases = cases.filter(c => !['abandoned', 'expired'].includes(c.status)).length;
@@ -98,7 +109,7 @@ export default function Dashboard() {
       </div>
 
       {/* Stats Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-5">
         <StatsCard
           title="תיקים פעילים"
           value={isLoading ? '-' : activeCases}
@@ -118,11 +129,72 @@ export default function Dashboard() {
           color="red"
         />
         <StatsCard
+          title="מיילים לא מטופלים"
+          value={isLoading ? '-' : unprocessedMails}
+          icon={Mail}
+          color="purple"
+        />
+        <StatsCard
           title="הכנסות החודש"
           value={isLoading ? '-' : `₪${monthlyRevenue.toLocaleString()}`}
           icon={Receipt}
           color="green"
         />
+      </div>
+
+      {/* Charts Row */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <Card className="border-slate-200 shadow-sm">
+          <CardHeader>
+            <CardTitle className="text-lg font-semibold text-slate-800 flex items-center gap-2">
+              <TrendingUp className="w-5 h-5 text-blue-500" />
+              תיקים לפי סטטוס
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {casesLoading ? (
+              <Skeleton className="h-64 w-full" />
+            ) : (
+              <PieChart
+                data={[
+                  { name: 'הוגש', value: cases.filter(c => c.status === 'filed').length },
+                  { name: 'בבחינה', value: cases.filter(c => c.status === 'under_examination').length },
+                  { name: 'רשום', value: cases.filter(c => c.status === 'registered').length },
+                  { name: 'ממתין', value: cases.filter(c => c.status === 'pending').length },
+                  { name: 'אחר', value: cases.filter(c => !['filed', 'under_examination', 'registered', 'pending'].includes(c.status)).length },
+                ].filter(d => d.value > 0)}
+                height={250}
+              />
+            )}
+          </CardContent>
+        </Card>
+
+        <Card className="border-slate-200 shadow-sm">
+          <CardHeader>
+            <CardTitle className="text-lg font-semibold text-slate-800 flex items-center gap-2">
+              <FileText className="w-5 h-5 text-amber-500" />
+              משימות לפי עדיפות
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {tasksLoading ? (
+              <Skeleton className="h-64 w-full" />
+            ) : (
+              <BarChart
+                data={[
+                  { name: 'נמוך', value: tasks.filter(t => t.priority === 'low').length },
+                  { name: 'בינוני', value: tasks.filter(t => t.priority === 'medium').length },
+                  { name: 'גבוה', value: tasks.filter(t => t.priority === 'high').length },
+                  { name: 'קריטי', value: tasks.filter(t => t.priority === 'critical').length },
+                ]}
+                dataKey="value"
+                xKey="name"
+                color="#f59e0b"
+                height={250}
+              />
+            )}
+          </CardContent>
+        </Card>
       </div>
 
       {/* Main Grid */}
