@@ -15,7 +15,8 @@ import {
   X,
   Bell,
   Search,
-  ChevronDown
+  ChevronDown,
+  Mail
 } from 'lucide-react';
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
