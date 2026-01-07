@@ -7,6 +7,7 @@ import {
   Bell,
   Shield,
   Users,
+  UserPlus,
   Mail,
   Settings as SettingsIcon
 } from 'lucide-react';
@@ -36,7 +37,6 @@ export default function Settings() {
   const [preferences, setPreferences] = useState({
     language: 'he',
     theme: 'light',
-    deadline_reminder_days: 7,
   });
   const [notifications, setNotifications] = useState({
     email_new_task: true,
@@ -44,6 +44,9 @@ export default function Settings() {
     email_overdue: true,
     email_frequency: 'immediate',
   });
+  const [inviteEmail, setInviteEmail] = useState('');
+  const [inviteRole, setInviteRole] = useState('user');
+  const [inviting, setInviting] = useState(false);
 
   useEffect(() => {
     loadUser();
@@ -58,6 +61,10 @@ export default function Settings() {
         phone: userData.phone || '',
         signature: userData.signature || '',
       });
+      setPreferences({
+        language: userData.language || 'he',
+        theme: userData.theme || 'light',
+      });
     } catch (e) {
       console.error('Error loading user:', e);
     }
@@ -70,6 +77,49 @@ export default function Settings() {
       loadUser();
     } catch (e) {
       alert('שגיאה בשמירת הפרופיל');
+    }
+  };
+
+  const handleSavePreferences = async () => {
+    try {
+      await base44.auth.updateMe(preferences);
+      
+      // Apply theme
+      if (preferences.theme === 'dark') {
+        document.documentElement.classList.add('dark');
+      } else if (preferences.theme === 'light') {
+        document.documentElement.classList.remove('dark');
+      } else {
+        // auto - check system preference
+        if (window.matchMedia('(prefers-color-scheme: dark)').matches) {
+          document.documentElement.classList.add('dark');
+        } else {
+          document.documentElement.classList.remove('dark');
+        }
+      }
+      
+      alert('ההעדפות עודכנו בהצלחה');
+    } catch (e) {
+      alert('שגיאה בשמירת ההעדפות');
+    }
+  };
+
+  const handleInviteUser = async () => {
+    if (!inviteEmail) {
+      alert('נא להזין כתובת אימייל');
+      return;
+    }
+    
+    setInviting(true);
+    try {
+      await base44.users.inviteUser(inviteEmail, inviteRole);
+      alert('המשתמש הוזמן בהצלחה');
+      setInviteEmail('');
+      setInviteRole('user');
+    } catch (e) {
+      alert('שגיאה בהזמנת משתמש: ' + e.message);
+    } finally {
+      setInviting(false);
     }
   };
 
@@ -102,6 +152,10 @@ export default function Settings() {
           <TabsTrigger value="preferences" className="gap-2">
             <SettingsIcon className="w-4 h-4" />
             העדפות
+          </TabsTrigger>
+          <TabsTrigger value="users" className="gap-2">
+            <Users className="w-4 h-4" />
+            משתמשים
           </TabsTrigger>
         </TabsList>
 
@@ -298,22 +352,69 @@ export default function Settings() {
                 </Select>
               </div>
 
-              <div className="space-y-2">
-                <Label>ימי תזכורת למועדים</Label>
-                <Select 
-                  value={preferences.deadline_reminder_days.toString()}
-                  onValueChange={(v) => setPreferences({ ...preferences, deadline_reminder_days: parseInt(v) })}
+              <div className="flex justify-end">
+                <Button onClick={handleSavePreferences} className="bg-slate-800">
+                  שמור שינויים
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="users">
+          <Card>
+            <CardHeader>
+              <CardTitle>צירוף והרשאות משתמשים</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <div className="p-4 bg-blue-50 rounded-xl border border-blue-200">
+                <p className="text-sm text-blue-800">
+                  הזמן משתמשים חדשים למערכת. הם יקבלו מייל הזמנה עם קישור להצטרפות.
+                </p>
+              </div>
+
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <Label>כתובת אימייל</Label>
+                  <Input
+                    type="email"
+                    placeholder="user@example.com"
+                    value={inviteEmail}
+                    onChange={(e) => setInviteEmail(e.target.value)}
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label>תפקיד</Label>
+                  <Select value={inviteRole} onValueChange={setInviteRole}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="user">משתמש רגיל</SelectItem>
+                      <SelectItem value="admin">מנהל</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <Button 
+                  onClick={handleInviteUser} 
+                  disabled={inviting}
+                  className="w-full bg-slate-800 gap-2"
                 >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="3">3 ימים לפני</SelectItem>
-                    <SelectItem value="7">7 ימים לפני</SelectItem>
-                    <SelectItem value="14">14 ימים לפני</SelectItem>
-                    <SelectItem value="30">30 ימים לפני</SelectItem>
-                  </SelectContent>
-                </Select>
+                  <UserPlus className="w-4 h-4" />
+                  {inviting ? 'שולח הזמנה...' : 'הזמן משתמש'}
+                </Button>
+              </div>
+
+              <div className="pt-6 border-t">
+                <p className="text-sm text-slate-500 mb-4">
+                  <strong>הבדלים בין תפקידים:</strong>
+                </p>
+                <div className="space-y-2 text-sm text-slate-600">
+                  <p>• <strong>מנהל:</strong> גישה מלאה לכל התיקים, הלקוחות והמשימות. יכול לנהל משתמשים.</p>
+                  <p>• <strong>משתמש רגיל:</strong> גישה לתיקים ומשימות שהוקצו לו.</p>
+                </div>
               </div>
             </CardContent>
           </Card>
