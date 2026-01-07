@@ -5,10 +5,10 @@ import Dashboard from './pages/Dashboard';
 import Docketing from './pages/Docketing';
 import Financials from './pages/Financials';
 import MailRoom from './pages/MailRoom';
+import MailRules from './pages/MailRules';
 import MailView from './pages/MailView';
 import Settings from './pages/Settings';
 import Tasks from './pages/Tasks';
-import MailRules from './pages/MailRules';
 import Workbench from './pages/Workbench';
 import __Layout from './Layout.jsx';
 
@@ -21,10 +21,10 @@ export const PAGES = {
     "Docketing": Docketing,
     "Financials": Financials,
     "MailRoom": MailRoom,
+    "MailRules": MailRules,
     "MailView": MailView,
     "Settings": Settings,
     "Tasks": Tasks,
-    "MailRules": MailRules,
     "Workbench": Workbench,
 }
 

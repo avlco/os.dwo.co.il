@@ -51,6 +51,7 @@ const actionTypes = [
   { value: 'send_email', label: 'שליחת מייל', labelEn: 'Send Email', icon: Mail },
   { value: 'create_calendar_event', label: 'יצירת אירוע יומן', labelEn: 'Calendar Event', icon: Calendar },
   { value: 'upload_to_dropbox', label: 'העלאה ל-Dropbox', labelEn: 'Upload to Dropbox', icon: FileText },
+  { value: 'create_invoice_draft', label: 'יצירת טיוטת חשבונית', labelEn: 'Create Invoice Draft', icon: FileText },
 ];
 
 export default function MailRules() {
@@ -517,6 +518,18 @@ export default function MailRules() {
                           onChange={(e) => updateAction(index, 'auto_reply_template', e.target.value)}
                           rows={3}
                           placeholder={isRTL ? 'שלום {{client_name}}, קיבלנו את פנייתך...' : 'Hello {{client_name}}, we received your inquiry...'}
+                          className="dark:bg-slate-800 dark:border-slate-600"
+                        />
+                      </div>
+                    )}
+
+                    {action.action_type === 'create_invoice_draft' && (
+                      <div className="mt-4 space-y-2">
+                        <Label className="dark:text-slate-300">{isRTL ? 'תיאור חשבונית' : 'Invoice Description'}</Label>
+                        <Input
+                          value={action.invoice_description || ''}
+                          onChange={(e) => updateAction(index, 'invoice_description', e.target.value)}
+                          placeholder={isRTL ? 'חשבונית עבור {{case_number}}' : 'Invoice for {{case_number}}'}
                           className="dark:bg-slate-800 dark:border-slate-600"
                         />
                       </div>

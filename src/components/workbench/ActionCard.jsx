@@ -3,7 +3,9 @@ import { useTranslation } from 'react-i18next';
 import { Checkbox } from "@/components/ui/checkbox";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Clock, Calendar, FileText, Paperclip, RefreshCw, Mail, Cloud, Loader2 } from 'lucide-react';
+import { Clock, Calendar, FileText, Paperclip, RefreshCw, Mail, Cloud, Loader2, Receipt } from 'lucide-react';
+
+import { Receipt } from 'lucide-react';
 
 const actionIcons = {
   log_time: Clock,
@@ -14,6 +16,7 @@ const actionIcons = {
   send_email: Mail,
   create_calendar_event: Calendar,
   upload_to_dropbox: Cloud,
+  create_invoice_draft: Receipt,
 };
 
 const actionColors = {
@@ -25,6 +28,7 @@ const actionColors = {
   send_email: 'bg-indigo-100 text-indigo-600 dark:bg-indigo-900/30 dark:text-indigo-400',
   create_calendar_event: 'bg-red-100 text-red-600 dark:bg-red-900/30 dark:text-red-400',
   upload_to_dropbox: 'bg-cyan-100 text-cyan-600 dark:bg-cyan-900/30 dark:text-cyan-400',
+  create_invoice_draft: 'bg-emerald-100 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-400',
 };
 
 export default function ActionCard({ action, selected, onToggle, onUpdate, isProcessing }) {
@@ -102,6 +106,12 @@ export default function ActionCard({ action, selected, onToggle, onUpdate, isPro
             {action.action_type === 'send_email' && action.auto_reply_template && (
               <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 truncate">
                 {action.auto_reply_template.substring(0, 50)}...
+              </p>
+            )}
+
+            {action.action_type === 'create_invoice_draft' && (
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                {isRTL ? 'יצירת טיוטת חשבונית' : 'Create invoice draft'}
               </p>
             )}
           </div>

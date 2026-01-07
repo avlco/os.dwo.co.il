@@ -7,6 +7,8 @@ import { useTranslation } from 'react-i18next';
 import StatusBadge from '../components/ui/StatusBadge';
 import TaskControlPanel from '../components/workbench/TaskControlPanel';
 import MailContent from '../components/workbench/MailContent';
+import ExecutionSummary from '../components/workbench/ExecutionSummary';
+import { toast } from 'sonner';
 import {
   ResizableHandle,
   ResizablePanel,
@@ -30,6 +32,8 @@ export default function Workbench() {
   });
   const [suggestedActions, setSuggestedActions] = useState([]);
   const [processingActionIndex, setProcessingActionIndex] = useState(null);
+  const [executionResults, setExecutionResults] = useState(null);
+  const [showSummary, setShowSummary] = useState(false);
 
   const { data: task, isLoading: taskLoading } = useQuery({
     queryKey: ['task', taskId],
@@ -65,15 +69,20 @@ export default function Workbench() {
       setProcessingActionIndex(null);
       const results = [];
       for (let i = 0; i < payload.selected_actions.length; i++) {
-        setProcessingActionIndex(i);
-        const actionPayload = {
-          task_id: taskId,
-          selected_actions: [payload.selected_actions[i]],
-          case_id: payload.case_id,
-          client_id: payload.client_id,
-        };
-        const result = await base44.functions.invoke('executeMailActions', actionPayload);
-        results.push({ action: payload.selected_actions[i].action_type, status: 'success', data: result.data });
+        const actionIndex = suggestedActions.findIndex(a => a.id === payload.selected_actions[i].id);
+        setProcessingActionIndex(actionIndex >= 0 ? actionIndex : i);
+        try {
+          const actionPayload = {
+            task_id: taskId,
+            selected_actions: [payload.selected_actions[i]],
+            case_id: payload.case_id,
+            client_id: payload.client_id,
+          };
+          const result = await base44.functions.invoke('executeMailActions', actionPayload);
+          results.push({ action: payload.selected_actions[i].action_type, status: 'success', data: result.data });
+        } catch (err) {
+          results.push({ action: payload.selected_actions[i].action_type, status: 'error', error: err.message });
+        }
       }
       return results;
     },
@@ -82,11 +91,25 @@ export default function Workbench() {
       queryClient.invalidateQueries(['tasks']);
       queryClient.invalidateQueries(['mails']);
       setProcessingActionIndex(null);
-      window.location.href = createPageUrl('MailRoom');
+      setExecutionResults(results);
+      setShowSummary(true);
+      
+      const successCount = results.filter(r => r.status === 'success').length;
+      const errorCount = results.filter(r => r.status === 'error').length;
+      
+      if (errorCount > 0 && successCount > 0) {
+        toast.warning(isRTL 
+          ? `בוצעו ${successCount} פעולות בהצלחה, ${errorCount} נכשלו` 
+          : `${successCount} actions succeeded, ${errorCount} failed`);
+      } else if (errorCount > 0) {
+        toast.error(isRTL ? `${errorCount} פעולות נכשלו` : `${errorCount} actions failed`);
+      } else {
+        toast.success(isRTL ? `${successCount} פעולות בוצעו בהצלחה` : `${successCount} actions completed successfully`);
+      }
     },
     onError: (error) => {
       setProcessingActionIndex(null);
-      alert(isRTL ? 'שגיאה בביצוע פעולות: ' + error.message : 'Error executing actions: ' + error.message);
+      toast.error(isRTL ? 'שגיאה בביצוע פעולות: ' + error.message : 'Error executing actions: ' + error.message);
     },
   });
 
@@ -171,6 +194,32 @@ export default function Workbench() {
             {isRTL ? 'חזרה לחדר דואר' : 'Back to Mail Room'}
           </Button>
         </Link>
+      </div>
+    );
+  }
+
+  // Show execution summary after completing actions
+  if (showSummary && executionResults) {
+    return (
+      <div className="h-[calc(100vh-8rem)] flex flex-col">
+        <div className="flex items-center gap-4 mb-4 flex-shrink-0">
+          <div className="flex-1">
+            <h1 className="text-xl font-bold text-slate-800 dark:text-slate-200">
+              {isRTL ? 'ביצוע הושלם' : 'Execution Complete'}
+            </h1>
+          </div>
+        </div>
+        <div className="flex-1 flex items-start justify-center pt-8">
+          <div className="w-full max-w-2xl">
+            <ExecutionSummary 
+              results={executionResults} 
+              onClose={() => {
+                setShowSummary(false);
+                setExecutionResults(null);
+              }}
+            />
+          </div>
+        </div>
       </div>
     );
   }

@@ -154,6 +154,45 @@ Deno.serve(async (req) => {
               executedActions.push({ type: 'update_case_status', new_status: action.new_status });
             }
             break;
+
+          case 'create_invoice_draft':
+            if (client_id) {
+              const clients = await base44.entities.Client.filter({ id: client_id });
+              const client = clients.length > 0 ? clients[0] : null;
+              
+              // Extract amount from mail if available
+              const extractedAmount = task.extracted_data?.amount || 0;
+              
+              const invoiceNumber = `INV-${Date.now()}`;
+              const invoice = await base44.entities.Invoice.create({
+                invoice_number: invoiceNumber,
+                client_id: client_id,
+                issued_date: new Date().toISOString().split('T')[0],
+                due_date: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+                currency: 'ILS',
+                subtotal: extractedAmount,
+                tax_rate: 17,
+                tax_amount: extractedAmount * 0.17,
+                total: extractedAmount * 1.17,
+                status: 'draft',
+                paid_amount: 0,
+                line_items: case_id ? [{
+                  case_id: case_id,
+                  description: action.invoice_description || `שירותים משפטיים - ${mail?.subject || 'כללי'}`,
+                  quantity: 1,
+                  unit_price: extractedAmount,
+                  amount: extractedAmount
+                }] : [],
+                notes: `נוצר אוטומטית מעיבוד מייל: ${mail?.subject || ''}`
+              });
+              executedActions.push({ 
+                type: 'create_invoice_draft', 
+                id: invoice.id, 
+                invoice_number: invoiceNumber,
+                amount: extractedAmount 
+              });
+            }
+            break;
         }
       } catch (actionError) {
         errors.push({ action: action.action_type, error: actionError.message });
