@@ -130,6 +130,9 @@ Deno.serve(async (req) => {
       selected: true // Default to selected
     }));
 
+    // Calculate estimated time saved (5 minutes per suggested action)
+    const timeSavedMinutes = suggestedActions.length * 5;
+
     // Create task with awaiting_approval status
     const taskData = {
       mail_id: mail_id,
@@ -141,6 +144,10 @@ Deno.serve(async (req) => {
       status: matchedRule.approval_required ? 'awaiting_approval' : 'pending',
       priority: mail.priority || 'medium',
       assigned_to_email: user.email,
+      manual_override: false,
+      time_saved_minutes: timeSavedMinutes,
+      original_inferred_case_id: relatedCase?.id || null,
+      original_inferred_client_id: relatedClient?.id || null,
       extracted_data: {
         rule_id: matchedRule.id,
         rule_name: matchedRule.name,
@@ -167,7 +174,9 @@ Deno.serve(async (req) => {
       related_case_id: relatedCase?.id || null,
       related_client_id: relatedClient?.id || null,
       inferred_case_id: relatedCase?.id || null,
-      inferred_confidence: relatedCase ? 0.9 : 0
+      inferred_confidence: relatedCase ? 0.9 : 0,
+      auto_triaged: true,
+      matched_rule_id: matchedRule.id
     });
 
     return Response.json({
