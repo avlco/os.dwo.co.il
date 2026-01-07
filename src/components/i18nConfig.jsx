@@ -14,6 +14,7 @@ const translations = {
         tasks: "משימות",
         financials: "כספים",
         settings: "הגדרות",
+        mail_rules: "חוקי דואר",
         logout: "התנתק"
       },
       common: {
@@ -87,6 +88,7 @@ const translations = {
         tasks: "Tasks",
         financials: "Financials",
         settings: "Settings",
+        mail_rules: "Mail Rules",
         logout: "Logout"
       },
       common: {

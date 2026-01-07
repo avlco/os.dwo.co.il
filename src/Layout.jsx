@@ -19,7 +19,8 @@ import {
   Bell,
   Search,
   ChevronDown,
-  Mail
+  Mail,
+  Cog
 } from 'lucide-react';
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -47,6 +48,7 @@ function LayoutContent({ children, currentPageName }) {
     { name: t('nav.docketing'), href: 'Docketing', icon: Calendar },
     { name: t('nav.tasks'), href: 'Tasks', icon: FileText },
     { name: t('nav.financials'), href: 'Financials', icon: Receipt },
+    { name: t('nav.mail_rules'), href: 'MailRules', icon: Cog },
     { name: t('nav.settings'), href: 'Settings', icon: Settings },
   ];
 
