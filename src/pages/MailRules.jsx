@@ -4,6 +4,7 @@ import { base44 } from '@/api/base44Client';
 import { useTranslation } from 'react-i18next';
 import PageHeader from '../components/ui/PageHeader';
 import RuleOptimizationBanner from '../components/mailrules/RuleOptimizationBanner';
+import RuleOnboardingWizard from '../components/mailrules/RuleOnboardingWizard';
 import {
   Settings,
   Plus,
@@ -63,6 +64,7 @@ export default function MailRules() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingRule, setEditingRule] = useState(null);
   const [expandedRules, setExpandedRules] = useState({});
+  const [showWizard, setShowWizard] = useState(false);
   const [formData, setFormData] = useState({
     name: '',
     description: '',
@@ -205,18 +207,30 @@ export default function MailRules() {
       {isLoading ? (
         <div className="text-center py-12 text-slate-500">{isRTL ? 'טוען...' : 'Loading...'}</div>
       ) : rules.length === 0 ? (
-        <Card className="dark:bg-slate-800 dark:border-slate-700">
-          <CardContent className="py-12 text-center">
-            <Settings className="w-12 h-12 mx-auto text-slate-300 dark:text-slate-600 mb-4" />
-            <p className="text-slate-500 dark:text-slate-400">
-              {isRTL ? 'לא הוגדרו חוקים עדיין' : 'No rules defined yet'}
-            </p>
-            <Button className="mt-4" onClick={() => { resetForm(); setDialogOpen(true); }}>
-              <Plus className="w-4 h-4 mr-2" />
-              {isRTL ? 'צור חוק ראשון' : 'Create first rule'}
-            </Button>
-          </CardContent>
-        </Card>
+        showWizard ? (
+          <RuleOnboardingWizard 
+            onClose={() => setShowWizard(false)}
+            onRuleCreated={() => setShowWizard(false)}
+          />
+        ) : (
+          <Card className="dark:bg-slate-800 dark:border-slate-700">
+            <CardContent className="py-12 text-center">
+              <Settings className="w-12 h-12 mx-auto text-slate-300 dark:text-slate-600 mb-4" />
+              <p className="text-slate-500 dark:text-slate-400">
+                {isRTL ? 'לא הוגדרו חוקים עדיין' : 'No rules defined yet'}
+              </p>
+              <div className="flex flex-col sm:flex-row gap-3 justify-center mt-4">
+                <Button onClick={() => setShowWizard(true)} className="gap-2 bg-blue-600 hover:bg-blue-700">
+                  {isRTL ? 'התחל עם האשף' : 'Start with Wizard'}
+                </Button>
+                <Button variant="outline" onClick={() => { resetForm(); setDialogOpen(true); }} className="gap-2 dark:border-slate-600">
+                  <Plus className="w-4 h-4" />
+                  {isRTL ? 'צור ידנית' : 'Create Manually'}
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        )
       ) : (
         <div className="space-y-4">
           {rules.map((rule) => (

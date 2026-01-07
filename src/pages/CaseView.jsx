@@ -13,7 +13,8 @@ import {
   Clock,
   Plus,
   Edit,
-  Trash2
+  Trash2,
+  Cloud
 } from 'lucide-react';
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -35,6 +36,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
+import CaseDocuments from '../components/case/CaseDocuments';
 
 const caseTypes = {
   patent: 'פטנט',
@@ -220,11 +222,15 @@ export default function CaseView() {
 
       {/* Tabs */}
       <Tabs defaultValue="details" className="space-y-6">
-        <TabsList className="bg-white border">
-          <TabsTrigger value="details">פרטים</TabsTrigger>
-          <TabsTrigger value="deadlines">מועדים</TabsTrigger>
-          <TabsTrigger value="tasks">משימות</TabsTrigger>
-          <TabsTrigger value="financials">כספים</TabsTrigger>
+        <TabsList className="bg-white dark:bg-slate-800 border dark:border-slate-700">
+          <TabsTrigger value="details" className="dark:text-slate-300 dark:data-[state=active]:bg-slate-700">פרטים</TabsTrigger>
+          <TabsTrigger value="deadlines" className="dark:text-slate-300 dark:data-[state=active]:bg-slate-700">מועדים</TabsTrigger>
+          <TabsTrigger value="tasks" className="dark:text-slate-300 dark:data-[state=active]:bg-slate-700">משימות</TabsTrigger>
+          <TabsTrigger value="documents" className="dark:text-slate-300 dark:data-[state=active]:bg-slate-700">
+            <Cloud className="w-4 h-4 ml-1" />
+            מסמכים
+          </TabsTrigger>
+          <TabsTrigger value="financials" className="dark:text-slate-300 dark:data-[state=active]:bg-slate-700">כספים</TabsTrigger>
         </TabsList>
 
         <TabsContent value="details">
@@ -343,6 +349,10 @@ export default function CaseView() {
               )}
             </CardContent>
           </Card>
+        </TabsContent>
+
+        <TabsContent value="documents">
+          <CaseDocuments caseId={caseId} />
         </TabsContent>
 
         <TabsContent value="financials">

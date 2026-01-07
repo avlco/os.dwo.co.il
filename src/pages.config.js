@@ -4,13 +4,13 @@ import Clients from './pages/Clients';
 import Dashboard from './pages/Dashboard';
 import Docketing from './pages/Docketing';
 import Financials from './pages/Financials';
+import MailAnalytics from './pages/MailAnalytics';
 import MailRoom from './pages/MailRoom';
 import MailRules from './pages/MailRules';
 import MailView from './pages/MailView';
 import Settings from './pages/Settings';
 import Tasks from './pages/Tasks';
 import Workbench from './pages/Workbench';
-import MailAnalytics from './pages/MailAnalytics';
 import __Layout from './Layout.jsx';
 
 
@@ -21,13 +21,13 @@ export const PAGES = {
     "Dashboard": Dashboard,
     "Docketing": Docketing,
     "Financials": Financials,
+    "MailAnalytics": MailAnalytics,
     "MailRoom": MailRoom,
     "MailRules": MailRules,
     "MailView": MailView,
     "Settings": Settings,
     "Tasks": Tasks,
     "Workbench": Workbench,
-    "MailAnalytics": MailAnalytics,
 }
 
 export const pagesConfig = {
