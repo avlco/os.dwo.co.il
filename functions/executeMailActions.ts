@@ -22,6 +22,9 @@ Deno.serve(async (req) => {
     }
     const task = tasks[0];
 
+    // Fetch the original mail if mail_id is available
+    const mail = task.mail_id ? (await base44.entities.Mail.filter({ id: task.mail_id }))[0] : null;
+
     const executedActions = [];
     const errors = [];
 
@@ -31,17 +34,26 @@ Deno.serve(async (req) => {
         switch (action.action_type) {
           case 'log_time':
             if (action.hours && case_id) {
+              // Dynamic rate from client
+              let hourlyRate = 0;
+              if (client_id) {
+                const clients = await base44.entities.Client.filter({ id: client_id });
+                if (clients.length > 0 && clients[0].hourly_rate) {
+                  hourlyRate = clients[0].hourly_rate;
+                }
+              }
+
               const timeEntry = await base44.entities.TimeEntry.create({
                 case_id: case_id,
                 task_id: task_id,
                 description: action.action_label || `רישום שעות מעיבוד מייל`,
                 hours: action.hours,
-                rate: 0,
+                rate: hourlyRate,
                 is_billable: true,
                 date_worked: new Date().toISOString().split('T')[0],
                 billed: false
               });
-              executedActions.push({ type: 'log_time', id: timeEntry.id, hours: action.hours });
+              executedActions.push({ type: 'log_time', id: timeEntry.id, hours: action.hours, rate: hourlyRate });
             }
             break;
 
@@ -78,7 +90,6 @@ Deno.serve(async (req) => {
             break;
 
           case 'attach_document':
-            // Document attachment would need file handling - mark as executed
             executedActions.push({ type: 'attach_document', status: 'pending_manual' });
             break;
 
@@ -86,6 +97,75 @@ Deno.serve(async (req) => {
             if (case_id && action.new_status) {
               await base44.entities.Case.update(case_id, { status: action.new_status });
               executedActions.push({ type: 'update_case_status', new_status: action.new_status });
+            }
+            break;
+
+          case 'upload_to_dropbox':
+            if (case_id && mail?.attachments?.length > 0 && action.dropbox_folder_path) {
+              const cases = await base44.entities.Case.filter({ id: case_id });
+              const currentCase = cases.length > 0 ? cases[0] : null;
+              let clientName = 'Unknown_Client';
+              if (client_id) {
+                const clients = await base44.entities.Client.filter({ id: client_id });
+                if (clients.length > 0) clientName = clients[0].name;
+              }
+              
+              const folderPath = action.dropbox_folder_path
+                .replace(/\{\{client_name\}\}/g, clientName.replace(/[/\\]/g, '_'))
+                .replace(/\{\{case_number\}\}/g, currentCase?.case_number || 'Unknown_Case');
+
+              for (const attachment of mail.attachments) {
+                console.log(`Dropbox upload: ${attachment.filename} to ${folderPath}`);
+                executedActions.push({ 
+                  type: 'upload_to_dropbox', 
+                  filename: attachment.filename, 
+                  destination: folderPath,
+                  status: 'simulated_success'
+                });
+              }
+            }
+            break;
+          
+          case 'create_calendar_event':
+            if (case_id && action.calendar_event_template) {
+              const cases = await base44.entities.Case.filter({ id: case_id });
+              const currentCase = cases.length > 0 ? cases[0] : null;
+              
+              const titleTemplate = action.calendar_event_template.title_template || '';
+              const descTemplate = action.calendar_event_template.description_template || '';
+              
+              const eventTitle = titleTemplate
+                .replace(/\{\{case_number\}\}/g, currentCase?.case_number || 'N/A')
+                .replace(/\{\{mail_subject\}\}/g, mail?.subject || 'N/A');
+              
+              const eventDescription = descTemplate
+                .replace(/\{\{case_number\}\}/g, currentCase?.case_number || 'N/A')
+                .replace(/\{\{mail_subject\}\}/g, mail?.subject || 'N/A')
+                .replace(/\{\{mail_sender\}\}/g, mail?.sender_name || mail?.sender_email || 'N/A');
+              
+              console.log(`Calendar event: ${eventTitle}`);
+              executedActions.push({ type: 'create_calendar_event', title: eventTitle, description: eventDescription, status: 'simulated_success' });
+            }
+            break;
+
+          case 'send_email':
+            if (mail?.sender_email && action.auto_reply_template) {
+              let clientName = mail.sender_name || 'לקוח';
+              if (client_id) {
+                const clients = await base44.entities.Client.filter({ id: client_id });
+                if (clients.length > 0) clientName = clients[0].name;
+              }
+
+              const emailBody = action.auto_reply_template
+                .replace(/\{\{client_name\}\}/g, clientName)
+                .replace(/\{\{mail_subject\}\}/g, mail?.subject || 'פנייתך');
+              
+              await base44.integrations.Core.SendEmail({
+                to: mail.sender_email,
+                subject: `Re: ${mail.subject || 'Your Inquiry'}`,
+                body: emailBody
+              });
+              executedActions.push({ type: 'send_email', to: mail.sender_email, status: 'success' });
             }
             break;
         }

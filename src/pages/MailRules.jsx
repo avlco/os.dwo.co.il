@@ -48,6 +48,9 @@ const actionTypes = [
   { value: 'log_time', label: 'רישום שעות', labelEn: 'Log Time', icon: Clock },
   { value: 'create_deadline', label: 'יצירת מועד', labelEn: 'Create Deadline', icon: Calendar },
   { value: 'create_task', label: 'יצירת משימה', labelEn: 'Create Task', icon: FileText },
+  { value: 'send_email', label: 'שליחת מייל', labelEn: 'Send Email', icon: Mail },
+  { value: 'create_calendar_event', label: 'יצירת אירוע יומן', labelEn: 'Create Calendar Event', icon: Calendar },
+  { value: 'upload_to_dropbox', label: 'העלאה ל-Dropbox', labelEn: 'Upload to Dropbox', icon: FileText },
 ];
 
 export default function MailRules() {
