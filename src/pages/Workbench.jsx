@@ -231,6 +231,7 @@ export default function Workbench() {
                     onApprove={handleApproveAndExecute}
                     onSkip={handleSkip}
                     isApproving={executeActionsMutation.isPending}
+                    processingActionIndex={processingActionIndex}
                   />
                 </div>
               </ResizablePanel>
@@ -253,6 +254,7 @@ export default function Workbench() {
                     onApprove={handleApproveAndExecute}
                     onSkip={handleSkip}
                     isApproving={executeActionsMutation.isPending}
+                    processingActionIndex={processingActionIndex}
                   />
                 </div>
               </ResizablePanel>
