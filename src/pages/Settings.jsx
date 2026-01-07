@@ -1,13 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import { base44 } from '@/api/base44Client';
 import { format } from 'date-fns';
+import { useTranslation } from 'react-i18next';
+import { useTheme } from '../components/ThemeProvider';
 import PageHeader from '../components/ui/PageHeader';
+import UserManagement from '../components/settings/UserManagement';
 import {
   User,
   Bell,
   Shield,
   Users,
-  Mail,
   Settings as SettingsIcon
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -27,16 +29,13 @@ import {
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 
 export default function Settings() {
+  const { t, i18n } = useTranslation();
+  const { theme, setTheme } = useTheme();
   const [user, setUser] = useState(null);
   const [profile, setProfile] = useState({
     full_name: '',
     phone: '',
     signature: '',
-  });
-  const [preferences, setPreferences] = useState({
-    language: 'he',
-    theme: 'light',
-    deadline_reminder_days: 7,
   });
   const [notifications, setNotifications] = useState({
     email_new_task: true,
@@ -66,11 +65,16 @@ export default function Settings() {
   const handleSaveProfile = async () => {
     try {
       await base44.auth.updateMe(profile);
-      alert('הפרופיל עודכן בהצלחה');
+      alert(t('settings.saved_successfully'));
       loadUser();
     } catch (e) {
-      alert('שגיאה בשמירת הפרופיל');
+      alert(t('settings.save_error'));
     }
+  };
+
+  const handleLanguageChange = (lang) => {
+    i18n.changeLanguage(lang);
+    localStorage.setItem('language', lang);
   };
 
   const getInitials = (name) => {
@@ -81,86 +85,95 @@ export default function Settings() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="הגדרות"
-        subtitle="ניהול פרופיל והעדפות מערכת"
+        title={t('settings.title')}
+        subtitle={t('settings.subtitle')}
       />
 
       <Tabs defaultValue="profile" className="space-y-6">
-        <TabsList className="bg-white border">
-          <TabsTrigger value="profile" className="gap-2">
+        <TabsList className="bg-white dark:bg-slate-800 border dark:border-slate-700">
+          <TabsTrigger value="profile" className="gap-2 dark:text-slate-300 dark:data-[state=active]:bg-slate-700">
             <User className="w-4 h-4" />
-            פרופיל
+            {t('settings.profile')}
           </TabsTrigger>
-          <TabsTrigger value="notifications" className="gap-2">
+          <TabsTrigger value="notifications" className="gap-2 dark:text-slate-300 dark:data-[state=active]:bg-slate-700">
             <Bell className="w-4 h-4" />
-            התראות
+            {t('settings.notifications')}
           </TabsTrigger>
-          <TabsTrigger value="security" className="gap-2">
+          <TabsTrigger value="security" className="gap-2 dark:text-slate-300 dark:data-[state=active]:bg-slate-700">
             <Shield className="w-4 h-4" />
-            אבטחה
+            {t('settings.security')}
           </TabsTrigger>
-          <TabsTrigger value="preferences" className="gap-2">
+          <TabsTrigger value="preferences" className="gap-2 dark:text-slate-300 dark:data-[state=active]:bg-slate-700">
             <SettingsIcon className="w-4 h-4" />
-            העדפות
+            {t('settings.preferences')}
           </TabsTrigger>
+          {user?.role === 'admin' && (
+            <TabsTrigger value="users" className="gap-2 dark:text-slate-300 dark:data-[state=active]:bg-slate-700">
+              <Users className="w-4 h-4" />
+              {t('settings.user_management')}
+            </TabsTrigger>
+          )}
         </TabsList>
 
         <TabsContent value="profile">
-          <Card>
+          <Card className="dark:bg-slate-800 dark:border-slate-700">
             <CardHeader>
-              <CardTitle>פרטים אישיים</CardTitle>
+              <CardTitle className="dark:text-slate-100">{t('settings.personal_details')}</CardTitle>
             </CardHeader>
             <CardContent className="space-y-6">
               <div className="flex items-center gap-6">
                 <Avatar className="h-20 w-20">
-                  <AvatarFallback className="bg-slate-200 text-slate-600 text-xl font-medium">
+                  <AvatarFallback className="bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300 text-xl font-medium">
                     {getInitials(user?.full_name)}
                   </AvatarFallback>
                 </Avatar>
                 <div>
-                  <p className="font-medium text-slate-800">{user?.full_name}</p>
-                  <p className="text-sm text-slate-500">{user?.email}</p>
+                  <p className="font-medium text-slate-800 dark:text-slate-200">{user?.full_name}</p>
+                  <p className="text-sm text-slate-500 dark:text-slate-400">{user?.email}</p>
                   {user?.role && (
-                    <p className="text-sm text-slate-500 mt-1">תפקיד: {user.role}</p>
+                    <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">{t('settings.role')}: {user.role}</p>
                   )}
                 </div>
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label>שם מלא</Label>
+                  <Label className="dark:text-slate-300">{t('settings.full_name')}</Label>
                   <Input
                     value={profile.full_name}
                     onChange={(e) => setProfile({ ...profile, full_name: e.target.value })}
+                    className="dark:bg-slate-900 dark:border-slate-600 dark:text-slate-200"
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label>טלפון</Label>
+                  <Label className="dark:text-slate-300">{t('settings.phone')}</Label>
                   <Input
                     value={profile.phone}
                     onChange={(e) => setProfile({ ...profile, phone: e.target.value })}
+                    className="dark:bg-slate-900 dark:border-slate-600 dark:text-slate-200"
                   />
                 </div>
               </div>
 
               <div className="space-y-2">
-                <Label>אימייל (לקריאה בלבד)</Label>
-                <Input value={user?.email} disabled />
+                <Label className="dark:text-slate-300">{t('settings.email_readonly')}</Label>
+                <Input value={user?.email} disabled className="dark:bg-slate-900 dark:border-slate-600 dark:text-slate-400" />
               </div>
 
               <div className="space-y-2">
-                <Label>חתימת מייל</Label>
+                <Label className="dark:text-slate-300">{t('settings.signature')}</Label>
                 <Textarea
                   value={profile.signature}
                   onChange={(e) => setProfile({ ...profile, signature: e.target.value })}
                   rows={4}
-                  placeholder="הוסף חתימה למיילים יוצאים..."
+                  placeholder={t('settings.signature_placeholder')}
+                  className="dark:bg-slate-900 dark:border-slate-600 dark:text-slate-200"
                 />
               </div>
 
               <div className="flex justify-end">
-                <Button onClick={handleSaveProfile} className="bg-slate-800">
-                  שמור שינויים
+                <Button onClick={handleSaveProfile} className="bg-slate-800 hover:bg-slate-700 dark:bg-slate-700 dark:hover:bg-slate-600">
+                  {t('common.save_changes')}
                 </Button>
               </div>
             </CardContent>
@@ -168,16 +181,16 @@ export default function Settings() {
         </TabsContent>
 
         <TabsContent value="notifications">
-          <Card>
+          <Card className="dark:bg-slate-800 dark:border-slate-700">
             <CardHeader>
-              <CardTitle>העדפות התראות</CardTitle>
+              <CardTitle className="dark:text-slate-100">{t('settings.notification_preferences')}</CardTitle>
             </CardHeader>
             <CardContent className="space-y-6">
               <div className="space-y-4">
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="font-medium text-slate-800">משימה חדשה</p>
-                    <p className="text-sm text-slate-500">קבל התראה כשמשימה חדשה משויכת אליך</p>
+                    <p className="font-medium text-slate-800 dark:text-slate-200">{t('settings.new_task')}</p>
+                    <p className="text-sm text-slate-500 dark:text-slate-400">{t('settings.new_task_desc')}</p>
                   </div>
                   <Switch
                     checked={notifications.email_new_task}
@@ -187,8 +200,8 @@ export default function Settings() {
 
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="font-medium text-slate-800">מועד קרוב</p>
-                    <p className="text-sm text-slate-500">קבל תזכורת למועדים קרובים</p>
+                    <p className="font-medium text-slate-800 dark:text-slate-200">{t('settings.upcoming_deadline')}</p>
+                    <p className="text-sm text-slate-500 dark:text-slate-400">{t('settings.upcoming_deadline_desc')}</p>
                   </div>
                   <Switch
                     checked={notifications.email_deadline}
@@ -198,8 +211,8 @@ export default function Settings() {
 
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="font-medium text-slate-800">מועד באיחור</p>
-                    <p className="text-sm text-slate-500">קבל התראה על מועדים שעברו</p>
+                    <p className="font-medium text-slate-800 dark:text-slate-200">{t('settings.overdue_deadline')}</p>
+                    <p className="text-sm text-slate-500 dark:text-slate-400">{t('settings.overdue_deadline_desc')}</p>
                   </div>
                   <Switch
                     checked={notifications.email_overdue}
@@ -209,18 +222,18 @@ export default function Settings() {
               </div>
 
               <div className="space-y-2">
-                <Label>תדירות התראות</Label>
+                <Label className="dark:text-slate-300">{t('settings.notification_frequency')}</Label>
                 <Select 
                   value={notifications.email_frequency}
                   onValueChange={(v) => setNotifications({ ...notifications, email_frequency: v })}
                 >
-                  <SelectTrigger>
+                  <SelectTrigger className="dark:bg-slate-900 dark:border-slate-600 dark:text-slate-200">
                     <SelectValue />
                   </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="immediate">מיידי</SelectItem>
-                    <SelectItem value="daily">סיכום יומי</SelectItem>
-                    <SelectItem value="weekly">סיכום שבועי</SelectItem>
+                  <SelectContent className="dark:bg-slate-800 dark:border-slate-700">
+                    <SelectItem value="immediate" className="dark:text-slate-200">{t('settings.immediate')}</SelectItem>
+                    <SelectItem value="daily" className="dark:text-slate-200">{t('settings.daily')}</SelectItem>
+                    <SelectItem value="weekly" className="dark:text-slate-200">{t('settings.weekly')}</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -229,29 +242,29 @@ export default function Settings() {
         </TabsContent>
 
         <TabsContent value="security">
-          <Card>
+          <Card className="dark:bg-slate-800 dark:border-slate-700">
             <CardHeader>
-              <CardTitle>אבטחה וסיסמה</CardTitle>
+              <CardTitle className="dark:text-slate-100">{t('settings.security_password')}</CardTitle>
             </CardHeader>
             <CardContent className="space-y-6">
-              <div className="p-4 bg-blue-50 rounded-xl border border-blue-200">
-                <p className="text-sm text-blue-800">
-                  לשינוי סיסמה או הגדרות אבטחה נוספות, אנא פנה למנהל המערכת או השתמש במערכת האימות של Base44.
+              <div className="p-4 bg-blue-50 dark:bg-blue-900/20 rounded-xl border border-blue-200 dark:border-blue-800">
+                <p className="text-sm text-blue-800 dark:text-blue-300">
+                  {t('settings.security_info')}
                 </p>
               </div>
 
               <div className="space-y-4">
                 <div>
-                  <p className="font-medium text-slate-800 mb-2">התחברות אחרונה</p>
-                  <p className="text-sm text-slate-500">
-                    {user?.last_login_at ? format(new Date(user.last_login_at), 'dd/MM/yyyy HH:mm') : 'לא זמין'}
+                  <p className="font-medium text-slate-800 dark:text-slate-200 mb-2">{t('settings.last_login')}</p>
+                  <p className="text-sm text-slate-500 dark:text-slate-400">
+                    {user?.last_login_at ? format(new Date(user.last_login_at), 'dd/MM/yyyy HH:mm') : 'N/A'}
                   </p>
                 </div>
 
                 <div>
-                  <p className="font-medium text-slate-800 mb-2">תאריך יצירת חשבון</p>
-                  <p className="text-sm text-slate-500">
-                    {user?.created_date ? format(new Date(user.created_date), 'dd/MM/yyyy') : 'לא זמין'}
+                  <p className="font-medium text-slate-800 dark:text-slate-200 mb-2">{t('settings.account_created')}</p>
+                  <p className="text-sm text-slate-500 dark:text-slate-400">
+                    {user?.created_date ? format(new Date(user.created_date), 'dd/MM/yyyy') : 'N/A'}
                   </p>
                 </div>
               </div>
@@ -260,63 +273,49 @@ export default function Settings() {
         </TabsContent>
 
         <TabsContent value="preferences">
-          <Card>
+          <Card className="dark:bg-slate-800 dark:border-slate-700">
             <CardHeader>
-              <CardTitle>העדפות מערכת</CardTitle>
+              <CardTitle className="dark:text-slate-100">{t('settings.system_preferences')}</CardTitle>
             </CardHeader>
             <CardContent className="space-y-6">
               <div className="space-y-2">
-                <Label>שפה</Label>
+                <Label className="dark:text-slate-300">{t('settings.language')}</Label>
                 <Select 
-                  value={preferences.language}
-                  onValueChange={(v) => setPreferences({ ...preferences, language: v })}
+                  value={i18n.language}
+                  onValueChange={handleLanguageChange}
                 >
-                  <SelectTrigger>
+                  <SelectTrigger className="dark:bg-slate-900 dark:border-slate-600 dark:text-slate-200">
                     <SelectValue />
                   </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="he">עברית</SelectItem>
-                    <SelectItem value="en">English</SelectItem>
+                  <SelectContent className="dark:bg-slate-800 dark:border-slate-700">
+                    <SelectItem value="he" className="dark:text-slate-200">{t('settings.hebrew')}</SelectItem>
+                    <SelectItem value="en" className="dark:text-slate-200">{t('settings.english')}</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
 
               <div className="space-y-2">
-                <Label>ערכת נושא</Label>
+                <Label className="dark:text-slate-300">{t('settings.theme')}</Label>
                 <Select 
-                  value={preferences.theme}
-                  onValueChange={(v) => setPreferences({ ...preferences, theme: v })}
+                  value={theme}
+                  onValueChange={setTheme}
                 >
-                  <SelectTrigger>
+                  <SelectTrigger className="dark:bg-slate-900 dark:border-slate-600 dark:text-slate-200">
                     <SelectValue />
                   </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="light">בהיר</SelectItem>
-                    <SelectItem value="dark">כהה</SelectItem>
-                    <SelectItem value="auto">אוטומטי</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="space-y-2">
-                <Label>ימי תזכורת למועדים</Label>
-                <Select 
-                  value={preferences.deadline_reminder_days.toString()}
-                  onValueChange={(v) => setPreferences({ ...preferences, deadline_reminder_days: parseInt(v) })}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="3">3 ימים לפני</SelectItem>
-                    <SelectItem value="7">7 ימים לפני</SelectItem>
-                    <SelectItem value="14">14 ימים לפני</SelectItem>
-                    <SelectItem value="30">30 ימים לפני</SelectItem>
+                  <SelectContent className="dark:bg-slate-800 dark:border-slate-700">
+                    <SelectItem value="light" className="dark:text-slate-200">{t('settings.light')}</SelectItem>
+                    <SelectItem value="dark" className="dark:text-slate-200">{t('settings.dark')}</SelectItem>
+                    <SelectItem value="auto" className="dark:text-slate-200">{t('settings.auto')}</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
             </CardContent>
           </Card>
+        </TabsContent>
+
+        <TabsContent value="users">
+          <UserManagement currentUser={user} />
         </TabsContent>
       </Tabs>
     </div>
