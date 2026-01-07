@@ -30,6 +30,7 @@ export default function TaskControlPanel({
   onApprove,
   onSkip,
   isApproving,
+  processingActionIndex,
 }) {
   const { t, i18n } = useTranslation();
   const isRTL = i18n.language === 'he';
@@ -148,6 +149,7 @@ export default function TaskControlPanel({
                 selected={action.selected}
                 onToggle={() => onActionToggle(index)}
                 onUpdate={(updated) => onActionUpdate(index, updated)}
+                isProcessing={isApproving && processingActionIndex === index}
               />
             ))}
           </CardContent>

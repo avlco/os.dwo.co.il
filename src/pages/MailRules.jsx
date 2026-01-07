@@ -48,6 +48,9 @@ const actionTypes = [
   { value: 'log_time', label: 'רישום שעות', labelEn: 'Log Time', icon: Clock },
   { value: 'create_deadline', label: 'יצירת מועד', labelEn: 'Create Deadline', icon: Calendar },
   { value: 'create_task', label: 'יצירת משימה', labelEn: 'Create Task', icon: FileText },
+  { value: 'send_email', label: 'שליחת מייל', labelEn: 'Send Email', icon: Mail },
+  { value: 'create_calendar_event', label: 'יצירת אירוע יומן', labelEn: 'Calendar Event', icon: Calendar },
+  { value: 'upload_to_dropbox', label: 'העלאה ל-Dropbox', labelEn: 'Upload to Dropbox', icon: FileText },
 ];
 
 export default function MailRules() {
@@ -416,7 +419,7 @@ export default function MailRules() {
               {formData.despatch_config.map((action, index) => (
                 <Card key={index} className="dark:bg-slate-900 dark:border-slate-700">
                   <CardContent className="p-4">
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div className="space-y-2">
                         <Label className="dark:text-slate-300">{isRTL ? 'סוג פעולה' : 'Action Type'}</Label>
                         <Select
@@ -443,35 +446,87 @@ export default function MailRules() {
                           className="dark:bg-slate-800 dark:border-slate-600"
                         />
                       </div>
-                      {action.action_type === 'log_time' && (
-                        <div className="space-y-2">
-                          <Label className="dark:text-slate-300">{isRTL ? 'שעות' : 'Hours'}</Label>
-                          <Input
-                            type="number"
-                            step="0.25"
-                            value={action.hours || 0}
-                            onChange={(e) => updateAction(index, 'hours', parseFloat(e.target.value) || 0)}
-                            className="dark:bg-slate-800 dark:border-slate-600"
-                          />
-                        </div>
-                      )}
-                      {action.action_type === 'create_deadline' && (
-                        <div className="space-y-2">
-                          <Label className="dark:text-slate-300">{isRTL ? 'ימים' : 'Days'}</Label>
-                          <Input
-                            type="number"
-                            value={action.days_offset || 30}
-                            onChange={(e) => updateAction(index, 'days_offset', parseInt(e.target.value) || 30)}
-                            className="dark:bg-slate-800 dark:border-slate-600"
-                          />
-                        </div>
-                      )}
                     </div>
+                    
+                    {action.action_type === 'log_time' && (
+                      <div className="mt-4 space-y-2">
+                        <Label className="dark:text-slate-300">{isRTL ? 'שעות' : 'Hours'}</Label>
+                        <Input
+                          type="number"
+                          step="0.25"
+                          value={action.hours || 0}
+                          onChange={(e) => updateAction(index, 'hours', parseFloat(e.target.value) || 0)}
+                          className="dark:bg-slate-800 dark:border-slate-600 w-32"
+                        />
+                      </div>
+                    )}
+                    
+                    {action.action_type === 'create_deadline' && (
+                      <div className="mt-4 space-y-2">
+                        <Label className="dark:text-slate-300">{isRTL ? 'ימים מהיום' : 'Days from today'}</Label>
+                        <Input
+                          type="number"
+                          value={action.days_offset || 30}
+                          onChange={(e) => updateAction(index, 'days_offset', parseInt(e.target.value) || 30)}
+                          className="dark:bg-slate-800 dark:border-slate-600 w-32"
+                        />
+                      </div>
+                    )}
+                    
+                    {action.action_type === 'upload_to_dropbox' && (
+                      <div className="mt-4 space-y-2">
+                        <Label className="dark:text-slate-300">{isRTL ? 'נתיב יעד ב-Dropbox' : 'Dropbox Destination Path'}</Label>
+                        <Input
+                          value={action.dropbox_folder_path || ''}
+                          onChange={(e) => updateAction(index, 'dropbox_folder_path', e.target.value)}
+                          placeholder="/Clients/{{client_name}}/{{case_number}}"
+                          className="dark:bg-slate-800 dark:border-slate-600"
+                        />
+                      </div>
+                    )}
+
+                    {action.action_type === 'create_calendar_event' && (
+                      <div className="mt-4 space-y-3">
+                        <div className="space-y-2">
+                          <Label className="dark:text-slate-300">{isRTL ? 'תבנית כותרת' : 'Title Template'}</Label>
+                          <Input
+                            value={action.calendar_event_template?.title_template || ''}
+                            onChange={(e) => updateAction(index, 'calendar_event_template', { ...action.calendar_event_template, title_template: e.target.value })}
+                            placeholder="{{case_number}} - Deadline"
+                            className="dark:bg-slate-800 dark:border-slate-600"
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label className="dark:text-slate-300">{isRTL ? 'תבנית תיאור' : 'Description Template'}</Label>
+                          <Textarea
+                            value={action.calendar_event_template?.description_template || ''}
+                            onChange={(e) => updateAction(index, 'calendar_event_template', { ...action.calendar_event_template, description_template: e.target.value })}
+                            rows={2}
+                            placeholder="Mail: {{mail_subject}}"
+                            className="dark:bg-slate-800 dark:border-slate-600"
+                          />
+                        </div>
+                      </div>
+                    )}
+
+                    {action.action_type === 'send_email' && (
+                      <div className="mt-4 space-y-2">
+                        <Label className="dark:text-slate-300">{isRTL ? 'תבנית תשובה אוטומטית' : 'Auto Reply Template'}</Label>
+                        <Textarea
+                          value={action.auto_reply_template || ''}
+                          onChange={(e) => updateAction(index, 'auto_reply_template', e.target.value)}
+                          rows={3}
+                          placeholder={isRTL ? 'שלום {{client_name}}, קיבלנו את פנייתך...' : 'Hello {{client_name}}, we received your inquiry...'}
+                          className="dark:bg-slate-800 dark:border-slate-600"
+                        />
+                      </div>
+                    )}
+
                     <Button
                       variant="ghost"
                       size="sm"
                       onClick={() => removeAction(index)}
-                      className="mt-2 text-red-600 hover:text-red-700"
+                      className="mt-4 text-red-600 hover:text-red-700 dark:hover:bg-slate-700"
                     >
                       <Trash2 className="w-4 h-4 mr-1" />
                       {isRTL ? 'הסר' : 'Remove'}

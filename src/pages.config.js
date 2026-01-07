@@ -8,8 +8,8 @@ import MailRoom from './pages/MailRoom';
 import MailView from './pages/MailView';
 import Settings from './pages/Settings';
 import Tasks from './pages/Tasks';
-import Workbench from './pages/Workbench';
 import MailRules from './pages/MailRules';
+import Workbench from './pages/Workbench';
 import __Layout from './Layout.jsx';
 
 
@@ -24,8 +24,8 @@ export const PAGES = {
     "MailView": MailView,
     "Settings": Settings,
     "Tasks": Tasks,
-    "Workbench": Workbench,
     "MailRules": MailRules,
+    "Workbench": Workbench,
 }
 
 export const pagesConfig = {
