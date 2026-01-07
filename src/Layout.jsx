@@ -49,6 +49,7 @@ function LayoutContent({ children, currentPageName }) {
     { name: t('nav.tasks'), href: 'Tasks', icon: FileText },
     { name: t('nav.financials'), href: 'Financials', icon: Receipt },
     { name: t('nav.mail_rules'), href: 'MailRules', icon: Cog },
+    { name: i18n.language === 'he' ? 'אנליטיקה' : 'Analytics', href: 'MailAnalytics', icon: Bell },
     { name: t('nav.settings'), href: 'Settings', icon: Settings },
   ];
 

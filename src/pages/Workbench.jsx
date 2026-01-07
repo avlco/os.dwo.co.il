@@ -144,10 +144,17 @@ export default function Workbench() {
   };
 
   const handleSave = () => {
+    // Check if user changed case/client from original inference
+    const originalCaseId = currentTask?.original_inferred_case_id || currentTask?.extracted_data?.inferred_case?.id;
+    const originalClientId = currentTask?.original_inferred_client_id || currentTask?.extracted_data?.inferred_client?.id;
+    const hasOverride = (formData.case_id && formData.case_id !== originalCaseId) || 
+                        (formData.client_id && formData.client_id !== originalClientId);
+    
     updateTaskMutation.mutate({
       id: taskId,
       data: {
         ...formData,
+        manual_override: hasOverride,
         extracted_data: {
           ...currentTask?.extracted_data,
           suggested_actions: suggestedActions,
@@ -162,6 +169,21 @@ export default function Workbench() {
       alert(isRTL ? 'בחר לפחות פעולה אחת' : 'Select at least one action');
       return;
     }
+    
+    // Check if user changed case/client from original inference
+    const originalCaseId = currentTask?.original_inferred_case_id || currentTask?.extracted_data?.inferred_case?.id;
+    const originalClientId = currentTask?.original_inferred_client_id || currentTask?.extracted_data?.inferred_client?.id;
+    const hasOverride = (formData.case_id && formData.case_id !== originalCaseId) || 
+                        (formData.client_id && formData.client_id !== originalClientId);
+    
+    // Update manual_override before executing
+    if (hasOverride) {
+      updateTaskMutation.mutate({
+        id: taskId,
+        data: { manual_override: true }
+      });
+    }
+    
     executeActionsMutation.mutate({
       task_id: taskId,
       selected_actions: selectedActions,

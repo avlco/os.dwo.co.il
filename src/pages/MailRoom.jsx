@@ -19,7 +19,9 @@ import {
   ArrowLeft,
   Filter,
   Search,
-  Play
+  Play,
+  CheckSquare,
+  Square
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -41,6 +43,8 @@ export default function MailRoom() {
   const [filterStatus, setFilterStatus] = useState('all');
   const [filterPriority, setFilterPriority] = useState('all');
   const [processingMail, setProcessingMail] = useState(null);
+  const [selectedMails, setSelectedMails] = useState([]);
+  const [bulkProcessing, setBulkProcessing] = useState(false);
 
   const { data: mails = [], isLoading: mailsLoading } = useQuery({
     queryKey: ['mails'],
@@ -89,6 +93,51 @@ export default function MailRoom() {
       alert(isRTL ? 'שגיאה בעיבוד המייל' : 'Error processing email');
     } finally {
       setProcessingMail(null);
+    }
+  };
+
+  // Handle bulk process
+  const handleBulkProcess = async () => {
+    if (selectedMails.length === 0) return;
+    
+    setBulkProcessing(true);
+    let successCount = 0;
+    let errorCount = 0;
+    
+    for (const mailId of selectedMails) {
+      try {
+        await base44.functions.invoke('processIncomingMail', { mail_id: mailId });
+        successCount++;
+      } catch (e) {
+        console.error('Error processing mail:', mailId, e);
+        errorCount++;
+      }
+    }
+    
+    setBulkProcessing(false);
+    setSelectedMails([]);
+    
+    // Refresh data
+    window.location.reload();
+  };
+
+  const toggleMailSelection = (mailId) => {
+    setSelectedMails(prev => 
+      prev.includes(mailId) 
+        ? prev.filter(id => id !== mailId)
+        : [...prev, mailId]
+    );
+  };
+
+  const toggleAllMails = () => {
+    const unprocessedMailIds = filteredMails
+      .filter(m => m.processing_status === 'pending' || !m.processing_status)
+      .map(m => m.id);
+    
+    if (selectedMails.length === unprocessedMailIds.length) {
+      setSelectedMails([]);
+    } else {
+      setSelectedMails(unprocessedMailIds);
     }
   };
 
@@ -262,20 +311,52 @@ export default function MailRoom() {
         </TabsContent>
 
         <TabsContent value="mailbox" className="space-y-4">
-          {/* Search */}
-          <div className="relative max-w-md">
-            <Search className={`absolute ${isRTL ? 'right-3' : 'left-3'} top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400`} />
-            <Input
-              placeholder={isRTL ? "חיפוש מיילים..." : "Search emails..."}
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className={`${isRTL ? 'pr-10' : 'pl-10'} bg-white dark:bg-slate-800 dark:border-slate-700`}
-            />
+          {/* Search and Bulk Actions */}
+          <div className="flex flex-wrap gap-4 items-center justify-between">
+            <div className="relative flex-1 min-w-[200px] max-w-md">
+              <Search className={`absolute ${isRTL ? 'right-3' : 'left-3'} top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400`} />
+              <Input
+                placeholder={isRTL ? "חיפוש מיילים..." : "Search emails..."}
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className={`${isRTL ? 'pr-10' : 'pl-10'} bg-white dark:bg-slate-800 dark:border-slate-700`}
+              />
+            </div>
+            {selectedMails.length > 0 && (
+              <Button
+                onClick={handleBulkProcess}
+                disabled={bulkProcessing}
+                className="bg-blue-600 hover:bg-blue-700 gap-2"
+              >
+                <Play className="w-4 h-4" />
+                {isRTL 
+                  ? `עבד ${selectedMails.length} נבחרים` 
+                  : `Process ${selectedMails.length} Selected`}
+              </Button>
+            )}
           </div>
 
           {/* Mails Table */}
           <Card className="dark:bg-slate-800 dark:border-slate-700">
             <CardContent className="p-0">
+              {/* Select All Header */}
+              {filteredMails.some(m => m.processing_status === 'pending' || !m.processing_status) && (
+                <div className="flex items-center gap-3 p-3 border-b border-slate-100 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50">
+                  <button 
+                    onClick={toggleAllMails}
+                    className="p-1 hover:bg-slate-200 dark:hover:bg-slate-700 rounded"
+                  >
+                    {selectedMails.length === filteredMails.filter(m => m.processing_status === 'pending' || !m.processing_status).length ? (
+                      <CheckSquare className="w-5 h-5 text-blue-600" />
+                    ) : (
+                      <Square className="w-5 h-5 text-slate-400" />
+                    )}
+                  </button>
+                  <span className="text-sm text-slate-500 dark:text-slate-400">
+                    {isRTL ? 'בחר הכל' : 'Select All'}
+                  </span>
+                </div>
+              )}
               <div className="divide-y divide-slate-100 dark:divide-slate-700">
                 {filteredMails.length === 0 ? (
                   <p className="text-center text-slate-400 dark:text-slate-500 py-12">
@@ -287,6 +368,19 @@ export default function MailRoom() {
                       key={mail.id}
                       className="flex items-start gap-4 p-4 hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors"
                     >
+                      {/* Checkbox for unprocessed mails */}
+                      {(mail.processing_status === 'pending' || !mail.processing_status) && (
+                        <button 
+                          onClick={() => toggleMailSelection(mail.id)}
+                          className="p-1 hover:bg-slate-200 dark:hover:bg-slate-700 rounded flex-shrink-0 mt-1"
+                        >
+                          {selectedMails.includes(mail.id) ? (
+                            <CheckSquare className="w-5 h-5 text-blue-600" />
+                          ) : (
+                            <Square className="w-5 h-5 text-slate-400" />
+                          )}
+                        </button>
+                      )}
                       <div className="w-10 h-10 rounded-xl bg-slate-100 dark:bg-slate-700 flex items-center justify-center flex-shrink-0">
                         <Mail className="w-5 h-5 text-slate-500 dark:text-slate-400" />
                       </div>
