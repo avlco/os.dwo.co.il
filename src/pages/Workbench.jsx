@@ -18,9 +18,23 @@ import { ArrowRight, ArrowLeft } from 'lucide-react';
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 
+// Custom hook for detecting mobile screens
+function useIsMobile(breakpoint = 768) {
+  const [isMobile, setIsMobile] = useState(window.innerWidth < breakpoint);
+  
+  useEffect(() => {
+    const handleResize = () => setIsMobile(window.innerWidth < breakpoint);
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, [breakpoint]);
+  
+  return isMobile;
+}
+
 export default function Workbench() {
   const { t, i18n } = useTranslation();
   const isRTL = i18n.language === 'he';
+  const isMobile = useIsMobile();
   const queryClient = useQueryClient();
   const urlParams = new URLSearchParams(window.location.search);
   const taskId = urlParams.get('taskId');
@@ -269,72 +283,99 @@ export default function Workbench() {
         </div>
       </div>
 
-      {/* Split View */}
+      {/* Split View - Stack on mobile, side-by-side on desktop */}
       <div className="flex-1 min-h-0">
-        <ResizablePanelGroup 
-          direction="horizontal" 
-          className="h-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800"
-        >
-          {isRTL ? (
-            <>
-              {/* RTL: Mail on Right, Controls on Left */}
-              <ResizablePanel defaultSize={65} minSize={40}>
-                <div className="h-full p-4 overflow-hidden">
-                  <MailContent mail={currentMail} />
-                </div>
-              </ResizablePanel>
-              <ResizableHandle withHandle className="bg-slate-200 dark:bg-slate-700" />
-              <ResizablePanel defaultSize={35} minSize={25}>
-                <div className="h-full p-4 overflow-hidden">
-                  <TaskControlPanel
-                    task={currentTask}
-                    cases={cases}
-                    clients={clients}
-                    formData={formData}
-                    setFormData={setFormData}
-                    suggestedActions={suggestedActions}
-                    onActionToggle={handleActionToggle}
-                    onActionUpdate={handleActionUpdate}
-                    onSave={handleSave}
-                    onApprove={handleApproveAndExecute}
-                    onSkip={handleSkip}
-                    isApproving={executeActionsMutation.isPending}
-                    processingActionIndex={processingActionIndex}
-                  />
-                </div>
-              </ResizablePanel>
-            </>
-          ) : (
-            <>
-              {/* LTR: Controls on Left, Mail on Right */}
-              <ResizablePanel defaultSize={35} minSize={25}>
-                <div className="h-full p-4 overflow-hidden">
-                  <TaskControlPanel
-                    task={currentTask}
-                    cases={cases}
-                    clients={clients}
-                    formData={formData}
-                    setFormData={setFormData}
-                    suggestedActions={suggestedActions}
-                    onActionToggle={handleActionToggle}
-                    onActionUpdate={handleActionUpdate}
-                    onSave={handleSave}
-                    onApprove={handleApproveAndExecute}
-                    onSkip={handleSkip}
-                    isApproving={executeActionsMutation.isPending}
-                    processingActionIndex={processingActionIndex}
-                  />
-                </div>
-              </ResizablePanel>
-              <ResizableHandle withHandle className="bg-slate-200 dark:bg-slate-700" />
-              <ResizablePanel defaultSize={65} minSize={40}>
-                <div className="h-full p-4 overflow-hidden">
-                  <MailContent mail={currentMail} />
-                </div>
-              </ResizablePanel>
-            </>
-          )}
-        </ResizablePanelGroup>
+        {isMobile ? (
+          // Mobile: Stack layout
+          <div className="h-full flex flex-col gap-4 overflow-auto">
+            <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-4">
+              <TaskControlPanel
+                task={currentTask}
+                cases={cases}
+                clients={clients}
+                formData={formData}
+                setFormData={setFormData}
+                suggestedActions={suggestedActions}
+                onActionToggle={handleActionToggle}
+                onActionUpdate={handleActionUpdate}
+                onSave={handleSave}
+                onApprove={handleApproveAndExecute}
+                onSkip={handleSkip}
+                isApproving={executeActionsMutation.isPending}
+                processingActionIndex={processingActionIndex}
+              />
+            </div>
+            <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-4 min-h-[400px]">
+              <MailContent mail={currentMail} />
+            </div>
+          </div>
+        ) : (
+          // Desktop: Resizable split view
+          <ResizablePanelGroup 
+            direction="horizontal" 
+            className="h-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800"
+          >
+            {isRTL ? (
+              <>
+                {/* RTL: Mail on Right, Controls on Left */}
+                <ResizablePanel defaultSize={65} minSize={40}>
+                  <div className="h-full p-4 overflow-hidden">
+                    <MailContent mail={currentMail} />
+                  </div>
+                </ResizablePanel>
+                <ResizableHandle withHandle className="bg-slate-200 dark:bg-slate-700" />
+                <ResizablePanel defaultSize={35} minSize={25}>
+                  <div className="h-full p-4 overflow-hidden">
+                    <TaskControlPanel
+                      task={currentTask}
+                      cases={cases}
+                      clients={clients}
+                      formData={formData}
+                      setFormData={setFormData}
+                      suggestedActions={suggestedActions}
+                      onActionToggle={handleActionToggle}
+                      onActionUpdate={handleActionUpdate}
+                      onSave={handleSave}
+                      onApprove={handleApproveAndExecute}
+                      onSkip={handleSkip}
+                      isApproving={executeActionsMutation.isPending}
+                      processingActionIndex={processingActionIndex}
+                    />
+                  </div>
+                </ResizablePanel>
+              </>
+            ) : (
+              <>
+                {/* LTR: Controls on Left, Mail on Right */}
+                <ResizablePanel defaultSize={35} minSize={25}>
+                  <div className="h-full p-4 overflow-hidden">
+                    <TaskControlPanel
+                      task={currentTask}
+                      cases={cases}
+                      clients={clients}
+                      formData={formData}
+                      setFormData={setFormData}
+                      suggestedActions={suggestedActions}
+                      onActionToggle={handleActionToggle}
+                      onActionUpdate={handleActionUpdate}
+                      onSave={handleSave}
+                      onApprove={handleApproveAndExecute}
+                      onSkip={handleSkip}
+                      isApproving={executeActionsMutation.isPending}
+                      processingActionIndex={processingActionIndex}
+                    />
+                  </div>
+                </ResizablePanel>
+                <ResizableHandle withHandle className="bg-slate-200 dark:bg-slate-700" />
+                <ResizablePanel defaultSize={65} minSize={40}>
+                  <div className="h-full p-4 overflow-hidden">
+                    <MailContent mail={currentMail} />
+                  </div>
+                </ResizablePanel>
+              </>
+            )}
+          </ResizablePanelGroup>
+        )}
       </div>
     </div>
   );
