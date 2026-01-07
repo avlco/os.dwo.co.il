@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { base44 } from '@/api/base44Client';
 import { useTranslation } from 'react-i18next';
 import PageHeader from '../components/ui/PageHeader';
+import RuleOptimizationBanner from '../components/mailrules/RuleOptimizationBanner';
 import {
   Settings,
   Plus,
@@ -192,6 +193,13 @@ export default function MailRules() {
         action={() => { resetForm(); setDialogOpen(true); }}
         actionLabel={isRTL ? 'חוק חדש' : 'New Rule'}
         actionIcon={Plus}
+      />
+
+      <RuleOptimizationBanner 
+        onEditRule={(ruleId) => {
+          const rule = rules.find(r => r.id === ruleId);
+          if (rule) handleEdit(rule);
+        }}
       />
 
       {isLoading ? (
