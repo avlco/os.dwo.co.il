@@ -5,8 +5,6 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Clock, Calendar, FileText, Paperclip, RefreshCw, Mail, Cloud, Loader2, Receipt } from 'lucide-react';
 
-import { Receipt } from 'lucide-react';
-
 const actionIcons = {
   log_time: Clock,
   create_deadline: Calendar,
