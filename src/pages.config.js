@@ -10,6 +10,7 @@ import MailView from './pages/MailView';
 import Settings from './pages/Settings';
 import Tasks from './pages/Tasks';
 import Workbench from './pages/Workbench';
+import MailAnalytics from './pages/MailAnalytics';
 import __Layout from './Layout.jsx';
 
 
@@ -26,6 +27,7 @@ export const PAGES = {
     "Settings": Settings,
     "Tasks": Tasks,
     "Workbench": Workbench,
+    "MailAnalytics": MailAnalytics,
 }
 
 export const pagesConfig = {
