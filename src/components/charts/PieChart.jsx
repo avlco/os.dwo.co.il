@@ -1,6 +1,5 @@
 import React from 'react';
-import { PieChart as RechartsP
-ie, Pie, Cell, ResponsiveContainer, Legend, Tooltip } from 'recharts';
+import { PieChart as RechartsPie, Pie, Cell, ResponsiveContainer, Legend, Tooltip } from 'recharts';
 
 const COLORS = {
   blue: '#3b82f6',
