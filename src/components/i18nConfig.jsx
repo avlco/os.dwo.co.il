@@ -73,6 +73,27 @@ const translations = {
         user_invited: "המשתמש הוזמן בהצלחה",
         invite_error: "שגיאה בהזמנת המשתמש",
         admin_only: "פעולה זו זמינה למנהלי מערכת בלבד"
+      },
+      wizard: {
+        title: "אשף הגדרת חוקים",
+        step: "שלב {{current}} מתוך {{total}}",
+        select_template: "בחר את סוג המיילים שברצונך לעבד אוטומטית",
+        review_settings: "בדוק את שם החוק והגדרות הזיהוי",
+        select_actions: "בחר את הפעולות שיבוצעו כשמייל מתאים יזוהה",
+        rule_name: "שם החוק",
+        detection_conditions: "תנאי זיהוי (מוגדרים מראש)",
+        sender: "שולח",
+        subject: "נושא",
+        previous: "הקודם",
+        next: "הבא",
+        close: "סגור",
+        create_rule: "צור חוק"
+      },
+      case_view: {
+        documents: "מסמכים",
+        dropbox_documents: "מסמכים מ-Dropbox",
+        no_documents: "לא נמצאו מסמכים מועלים",
+        documents_hint: "מסמכים שיועלו ל-Dropbox דרך המערכת יופיעו כאן"
       }
     }
   },
@@ -147,6 +168,27 @@ const translations = {
         user_invited: "User invited successfully",
         invite_error: "Error inviting user",
         admin_only: "This action is available to system administrators only"
+      },
+      wizard: {
+        title: "Rule Setup Wizard",
+        step: "Step {{current}} of {{total}}",
+        select_template: "Select the type of emails you want to process automatically",
+        review_settings: "Review the rule name and detection settings",
+        select_actions: "Select the actions to perform when a matching email is detected",
+        rule_name: "Rule Name",
+        detection_conditions: "Detection Conditions (Pre-configured)",
+        sender: "Sender",
+        subject: "Subject",
+        previous: "Previous",
+        next: "Next",
+        close: "Close",
+        create_rule: "Create Rule"
+      },
+      case_view: {
+        documents: "Documents",
+        dropbox_documents: "Dropbox Documents",
+        no_documents: "No uploaded documents found",
+        documents_hint: "Documents uploaded to Dropbox via the system will appear here"
       }
     }
   }
