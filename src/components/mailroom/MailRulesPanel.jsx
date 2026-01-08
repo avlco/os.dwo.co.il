@@ -156,19 +156,10 @@ export default function MailRulesPanel({ onClose }) {
   };
 
   const handleSubmit = () => {
-    // Convert subject_contains to subject_regex for backward compatibility
-    const dataToSave = {
-      ...formData,
-      catch_config: {
-        ...formData.catch_config,
-        subject_regex: formData.catch_config.subject_contains,
-      }
-    };
-    
     if (editingRule) {
-      updateRuleMutation.mutate({ id: editingRule.id, data: dataToSave });
+      updateRuleMutation.mutate({ id: editingRule.id, data: formData });
     } else {
-      createRuleMutation.mutate(dataToSave);
+      createRuleMutation.mutate(formData);
     }
   };
 
