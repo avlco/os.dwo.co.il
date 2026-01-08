@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { base44 } from '@/api/base44Client';
+import { useTranslation } from 'react-i18next';
 import PageHeader from '../components/ui/PageHeader';
 import DataTable from '../components/ui/DataTable';
 import EmptyState from '../components/ui/EmptyState';
@@ -39,18 +40,9 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 
-const clientTypes = [
-  { value: 'individual', label: 'יחיד' },
-  { value: 'company', label: 'חברה' },
-];
-
-const paymentTerms = [
-  { value: 'immediate', label: 'מידי' },
-  { value: 'net_30', label: 'שוטף + 30' },
-  { value: 'net_60', label: 'שוטף + 60' },
-];
-
 export default function Clients() {
+  const { t, i18n } = useTranslation();
+  const isRTL = i18n.language === 'he';
   const queryClient = useQueryClient();
   const [searchTerm, setSearchTerm] = useState('');
   const [filterType, setFilterType] = useState('all');
@@ -69,6 +61,17 @@ export default function Clients() {
     is_active: true,
     notes: '',
   });
+
+  const clientTypes = [
+    { value: 'individual', label: t('clients.type_individual') },
+    { value: 'company', label: t('clients.type_company') },
+  ];
+
+  const paymentTerms = [
+    { value: 'immediate', label: t('clients.terms_immediate') },
+    { value: 'net_30', label: t('clients.terms_net_30') },
+    { value: 'net_60', label: t('clients.terms_net_60') },
+  ];
 
   const { data: clients = [], isLoading } = useQuery({
     queryKey: ['clients'],
@@ -167,36 +170,38 @@ export default function Clients() {
 
   const columns = [
     {
-      header: 'שם',
+      header: t('clients.name'),
       accessor: 'name',
       render: (row) => (
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-slate-100 flex items-center justify-center">
+          <div className="w-10 h-10 rounded-xl bg-slate-100 dark:bg-slate-700 flex items-center justify-center">
             {row.type === 'company' ? (
-              <Building2 className="w-5 h-5 text-slate-500" />
+              <Building2 className="w-5 h-5 text-slate-500 dark:text-slate-400" />
             ) : (
-              <Users className="w-5 h-5 text-slate-500" />
+              <Users className="w-5 h-5 text-slate-500 dark:text-slate-400" />
             )}
           </div>
           <div>
-            <p className="font-medium text-slate-800">{row.name}</p>
-            <p className="text-sm text-slate-500">{row.type === 'company' ? 'חברה' : 'יחיד'}</p>
+            <p className="font-medium text-slate-800 dark:text-slate-200">{row.name}</p>
+            <p className="text-sm text-slate-500 dark:text-slate-400">
+              {row.type === 'company' ? t('clients.type_company') : t('clients.type_individual')}
+            </p>
           </div>
         </div>
       ),
     },
     {
-      header: 'פרטי קשר',
+      header: t('clients.contact_details'),
       render: (row) => (
         <div className="space-y-1">
           {row.email && (
-            <div className="flex items-center gap-2 text-sm text-slate-600">
+            <div className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-400">
               <Mail className="w-3 h-3" />
               {row.email}
             </div>
           )}
           {row.phone && (
-            <div className="flex items-center gap-2 text-sm text-slate-600">
+            <div className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-400">
               <Phone className="w-3 h-3" />
               {row.phone}
             </div>
@@ -205,26 +210,26 @@ export default function Clients() {
       ),
     },
     {
-      header: 'תיקים',
+      header: t('clients.cases_count'),
       render: (row) => (
-        <Badge variant="secondary" className="bg-blue-50 text-blue-700">
-          {getCasesCount(row.id)} תיקים
+        <Badge variant="secondary" className="bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300">
+          {t('clients.cases_label', { count: getCasesCount(row.id) })}
         </Badge>
       ),
     },
     {
-      header: 'תנאי תשלום',
+      header: t('clients.payment_terms'),
       render: (row) => {
         const terms = paymentTerms.find(t => t.value === row.payment_terms);
-        return terms?.label || '-';
+        return <span className="dark:text-slate-300">{terms?.label || '-'}</span>;
       },
     },
     {
-      header: 'סטטוס',
+      header: t('clients.status'),
       render: (row) => (
         <Badge variant={row.is_active !== false ? 'default' : 'secondary'} 
-          className={row.is_active !== false ? 'bg-green-50 text-green-700' : 'bg-slate-100 text-slate-600'}>
-          {row.is_active !== false ? 'פעיל' : 'לא פעיל'}
+          className={row.is_active !== false ? 'bg-green-50 dark:bg-green-900/30 text-green-700 dark:text-green-300' : 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-400'}>
+          {row.is_active !== false ? t('clients.active') : t('clients.inactive')}
         </Badge>
       ),
     },
@@ -233,21 +238,21 @@ export default function Clients() {
       render: (row) => (
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="ghost" size="icon" className="h-8 w-8">
+            <Button variant="ghost" size="icon" className="h-8 w-8 dark:hover:bg-slate-700">
               <MoreHorizontal className="w-4 h-4" />
             </Button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            <DropdownMenuItem onClick={() => openEditDialog(row)} className="flex items-center gap-2">
+          <DropdownMenuContent align="end" className="dark:bg-slate-800 dark:border-slate-700">
+            <DropdownMenuItem onClick={() => openEditDialog(row)} className="flex items-center gap-2 dark:text-slate-200 dark:hover:bg-slate-700">
               <Edit className="w-4 h-4" />
-              עריכה
+              {t('clients.edit')}
             </DropdownMenuItem>
             <DropdownMenuItem 
               onClick={() => deleteMutation.mutate(row.id)} 
-              className="flex items-center gap-2 text-rose-600"
+              className="flex items-center gap-2 text-rose-600 dark:text-rose-400 dark:hover:bg-slate-700"
             >
               <Trash2 className="w-4 h-4" />
-              מחיקה
+              {t('clients.delete')}
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
@@ -258,31 +263,31 @@ export default function Clients() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="ניהול לקוחות"
-        subtitle={`${clients.length} לקוחות במערכת`}
+        title={t('clients.title')}
+        subtitle={t('clients.clients_count', { count: clients.length })}
         action={openCreateDialog}
-        actionLabel="לקוח חדש"
+        actionLabel={t('clients.new_client')}
       />
 
       {/* Filters */}
       <div className="flex flex-wrap gap-4 items-center">
         <div className="relative flex-1 min-w-[200px] max-w-md">
-          <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+          <Search className={`absolute ${isRTL ? 'right-3' : 'left-3'} top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400`} />
           <Input
-            placeholder="חיפוש לפי שם, אימייל..."
+            placeholder={t('clients.search_placeholder')}
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="pr-10 bg-white"
+            className={`${isRTL ? 'pr-10' : 'pl-10'} bg-white dark:bg-slate-800 dark:border-slate-700`}
           />
         </div>
         <Select value={filterType} onValueChange={setFilterType}>
-          <SelectTrigger className="w-40 bg-white">
-            <SelectValue placeholder="סוג לקוח" />
+          <SelectTrigger className="w-40 bg-white dark:bg-slate-800 dark:border-slate-700">
+            <SelectValue placeholder={t('clients.client_type')} />
           </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">כל הסוגים</SelectItem>
+          <SelectContent className="dark:bg-slate-800 dark:border-slate-700">
+            <SelectItem value="all" className="dark:text-slate-200">{t('clients.all_types')}</SelectItem>
             {clientTypes.map(type => (
-              <SelectItem key={type.value} value={type.value}>{type.label}</SelectItem>
+              <SelectItem key={type.value} value={type.value} className="dark:text-slate-200">{type.label}</SelectItem>
             ))}
           </SelectContent>
         </Select>
@@ -292,9 +297,9 @@ export default function Clients() {
       {clients.length === 0 && !isLoading ? (
         <EmptyState
           icon={Users}
-          title="אין לקוחות במערכת"
-          description="התחל על ידי הוספת לקוח חדש למערכת"
-          actionLabel="הוסף לקוח"
+          title={t('clients.no_clients')}
+          description={t('clients.no_clients_desc')}
+          actionLabel={t('clients.add_client')}
           onAction={openCreateDialog}
         />
       ) : (
@@ -302,35 +307,36 @@ export default function Clients() {
           columns={columns}
           data={filteredClients}
           isLoading={isLoading}
-          emptyMessage="לא נמצאו לקוחות"
+          emptyMessage={t('clients.no_results')}
         />
       )}
 
       {/* Dialog */}
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto dark:bg-slate-800 dark:border-slate-700">
           <DialogHeader>
-            <DialogTitle>{editingClient ? 'עריכת לקוח' : 'לקוח חדש'}</DialogTitle>
+            <DialogTitle className="dark:text-slate-200">{editingClient ? t('clients.edit_client') : t('clients.new_client')}</DialogTitle>
           </DialogHeader>
           <form onSubmit={handleSubmit} className="space-y-6 mt-4">
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label>שם לקוח *</Label>
+                <Label className="dark:text-slate-300">{t('clients.client_name')} *</Label>
                 <Input
                   value={formData.name}
                   onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                   required
+                  className="dark:bg-slate-900 dark:border-slate-600"
                 />
               </div>
               <div className="space-y-2">
-                <Label>סוג *</Label>
+                <Label className="dark:text-slate-300">{t('clients.type')} *</Label>
                 <Select value={formData.type} onValueChange={(v) => setFormData({ ...formData, type: v })}>
-                  <SelectTrigger>
+                  <SelectTrigger className="dark:bg-slate-900 dark:border-slate-600">
                     <SelectValue />
                   </SelectTrigger>
-                  <SelectContent>
+                  <SelectContent className="dark:bg-slate-800 dark:border-slate-700">
                     {clientTypes.map(type => (
-                      <SelectItem key={type.value} value={type.value}>{type.label}</SelectItem>
+                      <SelectItem key={type.value} value={type.value} className="dark:text-slate-200">{type.label}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
@@ -339,47 +345,51 @@ export default function Clients() {
 
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label>אימייל</Label>
+                <Label className="dark:text-slate-300">{t('clients.email')}</Label>
                 <Input
                   type="email"
                   value={formData.email}
                   onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                  className="dark:bg-slate-900 dark:border-slate-600"
                 />
               </div>
               <div className="space-y-2">
-                <Label>טלפון</Label>
+                <Label className="dark:text-slate-300">{t('clients.phone')}</Label>
                 <Input
                   value={formData.phone}
                   onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                  className="dark:bg-slate-900 dark:border-slate-600"
                 />
               </div>
             </div>
 
             <div className="space-y-2">
-              <Label>כתובת</Label>
+              <Label className="dark:text-slate-300">{t('clients.address')}</Label>
               <Input
                 value={formData.address}
                 onChange={(e) => setFormData({ ...formData, address: e.target.value })}
+                className="dark:bg-slate-900 dark:border-slate-600"
               />
             </div>
 
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label>מדינה</Label>
+                <Label className="dark:text-slate-300">{t('clients.country')}</Label>
                 <Input
                   value={formData.country}
                   onChange={(e) => setFormData({ ...formData, country: e.target.value })}
+                  className="dark:bg-slate-900 dark:border-slate-600"
                 />
               </div>
               <div className="space-y-2">
-                <Label>תנאי תשלום</Label>
+                <Label className="dark:text-slate-300">{t('clients.payment_terms')}</Label>
                 <Select value={formData.payment_terms} onValueChange={(v) => setFormData({ ...formData, payment_terms: v })}>
-                  <SelectTrigger>
+                  <SelectTrigger className="dark:bg-slate-900 dark:border-slate-600">
                     <SelectValue />
                   </SelectTrigger>
-                  <SelectContent>
+                  <SelectContent className="dark:bg-slate-800 dark:border-slate-700">
                     {paymentTerms.map(term => (
-                      <SelectItem key={term.value} value={term.value}>{term.label}</SelectItem>
+                      <SelectItem key={term.value} value={term.value} className="dark:text-slate-200">{term.label}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
@@ -388,40 +398,43 @@ export default function Clients() {
 
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label>מספר תאגיד</Label>
+                <Label className="dark:text-slate-300">{t('clients.registration_number')}</Label>
                 <Input
                   value={formData.registration_number}
                   onChange={(e) => setFormData({ ...formData, registration_number: e.target.value })}
+                  className="dark:bg-slate-900 dark:border-slate-600"
                 />
               </div>
               <div className="space-y-2">
-                <Label>מספר עוסק מורשה</Label>
+                <Label className="dark:text-slate-300">{t('clients.tax_id')}</Label>
                 <Input
                   value={formData.tax_id}
                   onChange={(e) => setFormData({ ...formData, tax_id: e.target.value })}
+                  className="dark:bg-slate-900 dark:border-slate-600"
                 />
               </div>
             </div>
 
             <div className="space-y-2">
-              <Label>הערות</Label>
+              <Label className="dark:text-slate-300">{t('clients.notes')}</Label>
               <Textarea
                 value={formData.notes}
                 onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
                 rows={3}
+                className="dark:bg-slate-900 dark:border-slate-600"
               />
             </div>
 
             <div className="flex justify-end gap-3 pt-4">
-              <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)}>
-                ביטול
+              <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)} className="dark:border-slate-600">
+                {t('clients.cancel')}
               </Button>
               <Button 
                 type="submit" 
-                className="bg-slate-800 hover:bg-slate-700"
+                className="bg-slate-800 hover:bg-slate-700 dark:bg-slate-700"
                 disabled={createMutation.isPending || updateMutation.isPending}
               >
-                {editingClient ? 'עדכון' : 'יצירה'}
+                {editingClient ? t('clients.update') : t('clients.create')}
               </Button>
             </div>
           </form>
