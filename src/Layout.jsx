@@ -20,7 +20,9 @@ import {
   Search,
   ChevronDown,
   Mail,
-  Cog
+  Cog,
+  PanelLeftClose,
+  PanelLeftOpen
 } from 'lucide-react';
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -36,6 +38,7 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 function LayoutContent({ children, currentPageName }) {
   const { t, i18n } = useTranslation();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [user, setUser] = useState(null);
   
   const isRTL = i18n.language === 'he';
@@ -86,21 +89,24 @@ function LayoutContent({ children, currentPageName }) {
 
       {/* Sidebar */}
       <aside className={`
-        fixed top-0 ${isRTL ? 'right-0' : 'left-0'} h-full w-72 
+        fixed top-0 ${isRTL ? 'right-0' : 'left-0'} h-full 
+        ${sidebarCollapsed ? 'w-20' : 'w-72'}
         bg-white dark:bg-slate-800 
         border-${isRTL ? 'l' : 'r'} border-slate-200 dark:border-slate-700 z-50
-        transform transition-transform duration-300 ease-out
+        transform transition-all duration-300 ease-out
         ${sidebarOpen ? 'translate-x-0' : (isRTL ? 'translate-x-full' : '-translate-x-full')}
         lg:translate-x-0
       `}>
         <div className="flex flex-col h-full">
           {/* Logo */}
-          <div className="flex items-center justify-between h-16 px-6 border-b border-slate-100 dark:border-slate-700">
+          <div className={`flex items-center justify-between h-16 ${sidebarCollapsed ? 'px-4' : 'px-6'} border-b border-slate-100 dark:border-slate-700`}>
             <div className="flex items-center gap-3">
-              <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-slate-800 to-slate-600 dark:from-slate-700 dark:to-slate-500 flex items-center justify-center">
+              <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-slate-800 to-slate-600 dark:from-slate-700 dark:to-slate-500 flex items-center justify-center flex-shrink-0">
                 <Briefcase className="w-5 h-5 text-white" />
               </div>
-              <span className="text-lg font-bold text-slate-800 dark:text-slate-100">{t('app_name')}</span>
+              {!sidebarCollapsed && (
+                <span className="text-lg font-bold text-slate-800 dark:text-slate-100">{t('app_name')}</span>
+              )}
             </div>
             <button 
               className="lg:hidden p-2 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg"
@@ -111,7 +117,7 @@ function LayoutContent({ children, currentPageName }) {
           </div>
 
           {/* Navigation */}
-          <nav className="flex-1 py-6 px-4 space-y-1 overflow-y-auto">
+          <nav className={`flex-1 py-6 ${sidebarCollapsed ? 'px-2' : 'px-4'} space-y-1 overflow-y-auto`}>
             {navigation.map((item) => {
               const isActive = currentPageName === item.href;
               return (
@@ -119,8 +125,9 @@ function LayoutContent({ children, currentPageName }) {
                   key={item.href}
                   to={createPageUrl(item.href)}
                   onClick={() => setSidebarOpen(false)}
+                  title={sidebarCollapsed ? item.name : ''}
                   className={`
-                    flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium
+                    flex items-center ${sidebarCollapsed ? 'justify-center' : 'gap-3'} ${sidebarCollapsed ? 'px-2' : 'px-4'} py-3 rounded-xl text-sm font-medium
                     transition-all duration-200
                     ${isActive 
                       ? 'bg-slate-800 dark:bg-slate-700 text-white shadow-sm' 
@@ -128,8 +135,8 @@ function LayoutContent({ children, currentPageName }) {
                     }
                   `}
                 >
-                  <item.icon className="w-5 h-5" />
-                  {item.name}
+                  <item.icon className="w-5 h-5 flex-shrink-0" />
+                  {!sidebarCollapsed && item.name}
                 </Link>
               );
             })}
@@ -137,20 +144,24 @@ function LayoutContent({ children, currentPageName }) {
 
           {/* User section */}
           {user && (
-            <div className="p-4 border-t border-slate-100 dark:border-slate-700">
+            <div className={`${sidebarCollapsed ? 'p-2' : 'p-4'} border-t border-slate-100 dark:border-slate-700`}>
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <button className="w-full flex items-center gap-3 p-3 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors">
+                  <button className={`w-full flex items-center ${sidebarCollapsed ? 'justify-center p-2' : 'gap-3 p-3'} rounded-xl hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors`}>
                     <Avatar className="h-10 w-10">
                       <AvatarFallback className="bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300 font-medium">
                         {getInitials(user.full_name)}
                       </AvatarFallback>
                     </Avatar>
-                    <div className={`flex-1 ${isRTL ? 'text-right' : 'text-left'}`}>
-                      <p className="text-sm font-medium text-slate-800 dark:text-slate-200">{user.full_name}</p>
-                      <p className="text-xs text-slate-500 dark:text-slate-400">{user.email}</p>
-                    </div>
-                    <ChevronDown className="w-4 h-4 text-slate-400 dark:text-slate-500" />
+                    {!sidebarCollapsed && (
+                      <>
+                        <div className={`flex-1 ${isRTL ? 'text-right' : 'text-left'}`}>
+                          <p className="text-sm font-medium text-slate-800 dark:text-slate-200">{user.full_name}</p>
+                          <p className="text-xs text-slate-500 dark:text-slate-400">{user.email}</p>
+                        </div>
+                        <ChevronDown className="w-4 h-4 text-slate-400 dark:text-slate-500" />
+                      </>
+                    )}
                   </button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end" className="w-56 dark:bg-slate-800 dark:border-slate-700">
@@ -169,11 +180,11 @@ function LayoutContent({ children, currentPageName }) {
               </DropdownMenu>
             </div>
           )}
-        </div>
-      </aside>
+          </div>
+          </aside>
 
       {/* Main content */}
-      <div className={`lg:${isRTL ? 'mr-72' : 'ml-72'}`}>
+      <div className={`lg:${isRTL ? 'mr-' : 'ml-'}${sidebarCollapsed ? '20' : '72'} transition-all duration-300`}>
         {/* Top header */}
         <header className="sticky top-0 z-30 bg-white/80 dark:bg-slate-800/80 backdrop-blur-lg border-b border-slate-200 dark:border-slate-700">
           <div className="flex items-center justify-between h-16 px-6">
@@ -183,6 +194,18 @@ function LayoutContent({ children, currentPageName }) {
                 onClick={() => setSidebarOpen(true)}
               >
                 <Menu className="w-5 h-5 text-slate-600 dark:text-slate-300" />
+              </button>
+              {/* Desktop Sidebar Toggle */}
+              <button 
+                className="hidden lg:flex p-2 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg"
+                onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
+                title={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+              >
+                {sidebarCollapsed ? (
+                  <PanelLeftOpen className="w-5 h-5 text-slate-600 dark:text-slate-300" />
+                ) : (
+                  <PanelLeftClose className="w-5 h-5 text-slate-600 dark:text-slate-300" />
+                )}
               </button>
               <div className="relative hidden md:block">
                 <Search className={`absolute ${isRTL ? 'right-3' : 'left-3'} top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400`} />
