@@ -4,7 +4,6 @@ import { base44 } from '@/api/base44Client';
 import { Link } from 'react-router-dom';
 import { createPageUrl } from '../utils';
 import { useTranslation } from 'react-i18next';
-import StatusBadge from '../components/ui/StatusBadge';
 import TaskControlPanel from '../components/workbench/TaskControlPanel';
 import MailContent from '../components/workbench/MailContent';
 import ExecutionSummary from '../components/workbench/ExecutionSummary';
@@ -112,30 +111,28 @@ export default function Workbench() {
       const errorCount = results.filter(r => r.status === 'error').length;
       
       if (errorCount > 0 && successCount > 0) {
-        toast.warning(isRTL 
-          ? `בוצעו ${successCount} פעולות בהצלחה, ${errorCount} נכשלו` 
-          : `${successCount} actions succeeded, ${errorCount} failed`);
+        toast.warning(t('workbench.actions_mixed', { success: successCount, failed: errorCount }));
       } else if (errorCount > 0) {
-        toast.error(isRTL ? `${errorCount} פעולות נכשלו` : `${errorCount} actions failed`);
+        toast.error(t('workbench.actions_failed', { count: errorCount }));
       } else {
-        toast.success(isRTL ? `${successCount} פעולות בוצעו בהצלחה` : `${successCount} actions completed successfully`);
+        toast.success(t('workbench.actions_success', { count: successCount }));
       }
     },
     onError: (error) => {
       setProcessingActionIndex(null);
-      toast.error(isRTL ? 'שגיאה בביצוע פעולות: ' + error.message : 'Error executing actions: ' + error.message);
+      toast.error(t('workbench.error_executing') + error.message);
     },
   });
 
   useEffect(() => {
     if (task?.[0]) {
-      const t = task[0];
-      const extractedData = t.extracted_data || {};
+      const taskData = task[0];
+      const extractedData = taskData.extracted_data || {};
       
       setFormData({
-        case_id: t.case_id || extractedData.inferred_case?.id || '',
-        client_id: t.client_id || extractedData.inferred_client?.id || '',
-        notes: t.notes || '',
+        case_id: taskData.case_id || extractedData.inferred_case?.id || '',
+        client_id: taskData.client_id || extractedData.inferred_client?.id || '',
+        notes: taskData.notes || '',
       });
       
       setSuggestedActions(extractedData.suggested_actions || []);
@@ -158,7 +155,6 @@ export default function Workbench() {
   };
 
   const handleSave = () => {
-    // Check if user changed case/client from original inference
     const originalCaseId = currentTask?.original_inferred_case_id || currentTask?.extracted_data?.inferred_case?.id;
     const originalClientId = currentTask?.original_inferred_client_id || currentTask?.extracted_data?.inferred_client?.id;
     const hasOverride = (formData.case_id && formData.case_id !== originalCaseId) || 
@@ -180,17 +176,15 @@ export default function Workbench() {
   const handleApproveAndExecute = () => {
     const selectedActions = suggestedActions.filter(a => a.selected);
     if (selectedActions.length === 0) {
-      alert(isRTL ? 'בחר לפחות פעולה אחת' : 'Select at least one action');
+      alert(t('workbench.select_action'));
       return;
     }
     
-    // Check if user changed case/client from original inference
     const originalCaseId = currentTask?.original_inferred_case_id || currentTask?.extracted_data?.inferred_case?.id;
     const originalClientId = currentTask?.original_inferred_client_id || currentTask?.extracted_data?.inferred_client?.id;
     const hasOverride = (formData.case_id && formData.case_id !== originalCaseId) || 
                         (formData.client_id && formData.client_id !== originalClientId);
     
-    // Update manual_override before executing
     if (hasOverride) {
       updateTaskMutation.mutate({
         id: taskId,
@@ -223,11 +217,11 @@ export default function Workbench() {
     return (
       <div className="text-center py-16">
         <p className="text-slate-500 dark:text-slate-400">
-          {isRTL ? 'משימה לא נמצאה' : 'Task not found'}
+          {t('workbench.task_not_found')}
         </p>
         <Link to={createPageUrl('MailRoom')}>
           <Button variant="link" className="mt-4">
-            {isRTL ? 'חזרה לחדר דואר' : 'Back to Mail Room'}
+            {t('workbench.back_to_mailroom')}
           </Button>
         </Link>
       </div>
@@ -241,142 +235,11 @@ export default function Workbench() {
         <div className="flex items-center gap-4 mb-4 flex-shrink-0">
           <div className="flex-1">
             <h1 className="text-xl font-bold text-slate-800 dark:text-slate-200">
-              {isRTL ? 'ביצוע הושלם' : 'Execution Complete'}
+              {t('workbench.execution_complete')}
             </h1>
           </div>
         </div>
         <div className="flex-1 flex items-start justify-center pt-8">
           <div className="w-full max-w-2xl">
             <ExecutionSummary 
-              results={executionResults} 
-              onClose={() => {
-                setShowSummary(false);
-                setExecutionResults(null);
-              }}
-            />
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  const BackArrow = isRTL ? ArrowRight : ArrowLeft;
-
-  return (
-    <div className="h-[calc(100vh-8rem)] flex flex-col">
-      {/* Header */}
-      <div className="flex items-center gap-4 mb-4 flex-shrink-0">
-        <Link to={createPageUrl('MailRoom')}>
-          <Button variant="ghost" size="icon" className="rounded-xl dark:hover:bg-slate-700">
-            <BackArrow className="w-5 h-5" />
-          </Button>
-        </Link>
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-3">
-            <h1 className="text-xl font-bold text-slate-800 dark:text-slate-200">
-              {isRTL ? 'שולחן עבודה' : 'Workbench'}
-            </h1>
-          </div>
-          <p className="text-slate-500 dark:text-slate-400 mt-1 truncate text-sm">
-            {currentTask.title}
-          </p>
-        </div>
-      </div>
-
-      {/* Split View - Stack on mobile, side-by-side on desktop */}
-      <div className="flex-1 min-h-0">
-        {isMobile ? (
-          // Mobile: Stack layout
-          <div className="h-full flex flex-col gap-4 overflow-auto">
-            <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-4">
-              <TaskControlPanel
-                task={currentTask}
-                cases={cases}
-                clients={clients}
-                formData={formData}
-                setFormData={setFormData}
-                suggestedActions={suggestedActions}
-                onActionToggle={handleActionToggle}
-                onActionUpdate={handleActionUpdate}
-                onSave={handleSave}
-                onApprove={handleApproveAndExecute}
-                onSkip={handleSkip}
-                isApproving={executeActionsMutation.isPending}
-                processingActionIndex={processingActionIndex}
-              />
-            </div>
-            <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-4 min-h-[400px]">
-              <MailContent mail={currentMail} />
-            </div>
-          </div>
-        ) : (
-          // Desktop: Resizable split view
-          <ResizablePanelGroup 
-            direction="horizontal" 
-            className="h-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800"
-          >
-            {isRTL ? (
-              <>
-                {/* RTL: Mail on Right, Controls on Left */}
-                <ResizablePanel defaultSize={65} minSize={40}>
-                  <div className="h-full p-4 overflow-hidden">
-                    <MailContent mail={currentMail} />
-                  </div>
-                </ResizablePanel>
-                <ResizableHandle withHandle className="bg-slate-200 dark:bg-slate-700" />
-                <ResizablePanel defaultSize={35} minSize={25}>
-                  <div className="h-full p-4 overflow-hidden">
-                    <TaskControlPanel
-                      task={currentTask}
-                      cases={cases}
-                      clients={clients}
-                      formData={formData}
-                      setFormData={setFormData}
-                      suggestedActions={suggestedActions}
-                      onActionToggle={handleActionToggle}
-                      onActionUpdate={handleActionUpdate}
-                      onSave={handleSave}
-                      onApprove={handleApproveAndExecute}
-                      onSkip={handleSkip}
-                      isApproving={executeActionsMutation.isPending}
-                      processingActionIndex={processingActionIndex}
-                    />
-                  </div>
-                </ResizablePanel>
-              </>
-            ) : (
-              <>
-                {/* LTR: Controls on Left, Mail on Right */}
-                <ResizablePanel defaultSize={35} minSize={25}>
-                  <div className="h-full p-4 overflow-hidden">
-                    <TaskControlPanel
-                      task={currentTask}
-                      cases={cases}
-                      clients={clients}
-                      formData={formData}
-                      setFormData={setFormData}
-                      suggestedActions={suggestedActions}
-                      onActionToggle={handleActionToggle}
-                      onActionUpdate={handleActionUpdate}
-                      onSave={handleSave}
-                      onApprove={handleApproveAndExecute}
-                      onSkip={handleSkip}
-                      isApproving={executeActionsMutation.isPending}
-                      processingActionIndex={processingActionIndex}
-                    />
-                  </div>
-                </ResizablePanel>
-                <ResizableHandle withHandle className="bg-slate-200 dark:bg-slate-700" />
-                <ResizablePanel defaultSize={65} minSize={40}>
-                  <div className="h-full p-4 overflow-hidden">
-                    <MailContent mail={currentMail} />
-                  </div>
-                </ResizablePanel>
-              </>
-            )}
-          </ResizablePanelGroup>
-        )}
-      </div>
-    </div>
-  );
-}
+              results={

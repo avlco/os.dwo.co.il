@@ -6,7 +6,6 @@ import { Link } from 'react-router-dom';
 import { createPageUrl } from '../utils';
 import { format } from 'date-fns';
 import { he } from 'date-fns/locale';
-import PageHeader from '../components/ui/PageHeader';
 import StatusBadge from '../components/ui/StatusBadge';
 import MailRulesPanel from '../components/mailroom/MailRulesPanel';
 import {
@@ -15,17 +14,15 @@ import {
   CheckCircle2,
   Clock,
   AlertTriangle,
-  Eye,
   ArrowRight,
   ArrowLeft,
-  Filter,
   Search,
   Play,
   CheckSquare,
   Square,
   Settings
 } from 'lucide-react';
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -39,7 +36,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 
 export default function MailRoom() {
-  const { i18n } = useTranslation();
+  const { t, i18n } = useTranslation();
   const isRTL = i18n.language === 'he';
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState('all');
@@ -89,11 +86,11 @@ export default function MailRoom() {
       if (result.data?.task_id) {
         window.location.href = createPageUrl(`Workbench?taskId=${result.data.task_id}`);
       } else {
-        alert(isRTL ? 'לא נמצא חוק מתאים למייל זה' : 'No matching rule found for this email');
+        alert(t('mail_room.no_rule_found'));
       }
     } catch (e) {
       console.error('Error processing mail:', e);
-      alert(isRTL ? 'שגיאה בעיבוד המייל' : 'Error processing email');
+      alert(t('mail_room.error_processing'));
     } finally {
       setProcessingMail(null);
     }
@@ -104,23 +101,18 @@ export default function MailRoom() {
     if (selectedMails.length === 0) return;
     
     setBulkProcessing(true);
-    let successCount = 0;
-    let errorCount = 0;
     
     for (const mailId of selectedMails) {
       try {
         await base44.functions.invoke('processIncomingMail', { mail_id: mailId });
-        successCount++;
       } catch (e) {
         console.error('Error processing mail:', mailId, e);
-        errorCount++;
       }
     }
     
     setBulkProcessing(false);
     setSelectedMails([]);
     
-    // Refresh data
     window.location.reload();
   };
 
@@ -156,10 +148,10 @@ export default function MailRoom() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-slate-800 dark:text-slate-200 tracking-tight">
-            {isRTL ? "חדר דואר" : "Mail Room"}
+            {t('mail_room.title')}
           </h1>
           <p className="text-slate-500 dark:text-slate-400 mt-1">
-            {isRTL ? "ניהול מיילים נכנסים ומשימות" : "Manage incoming emails and tasks"}
+            {t('mail_room.subtitle')}
           </p>
         </div>
         <Button 
@@ -168,7 +160,7 @@ export default function MailRoom() {
           className="gap-2 dark:border-slate-600 dark:hover:bg-slate-700"
         >
           <Settings className="w-4 h-4" />
-          {isRTL ? 'הגדרות חוקים' : 'Rule Settings'}
+          {t('mail_room.rule_settings')}
         </Button>
       </div>
 
@@ -178,7 +170,7 @@ export default function MailRoom() {
           <CardContent className="pt-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-slate-500 dark:text-slate-400">{isRTL ? 'סה״כ משימות' : 'Total Tasks'}</p>
+                <p className="text-sm text-slate-500 dark:text-slate-400">{t('mail_room.total_tasks')}</p>
                 <p className="text-2xl font-bold text-slate-800 dark:text-slate-200 mt-1">{totalTasks}</p>
               </div>
               <div className="w-12 h-12 rounded-xl bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center">
@@ -192,7 +184,7 @@ export default function MailRoom() {
           <CardContent className="pt-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-slate-500 dark:text-slate-400">{isRTL ? 'דחופות' : 'Urgent'}</p>
+                <p className="text-sm text-slate-500 dark:text-slate-400">{t('mail_room.urgent')}</p>
                 <p className="text-2xl font-bold text-rose-600 dark:text-rose-400 mt-1">{urgentTasks}</p>
               </div>
               <div className="w-12 h-12 rounded-xl bg-rose-100 dark:bg-rose-900/30 flex items-center justify-center">
@@ -206,7 +198,7 @@ export default function MailRoom() {
           <CardContent className="pt-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-slate-500 dark:text-slate-400">{isRTL ? 'ממתינות' : 'Pending'}</p>
+                <p className="text-sm text-slate-500 dark:text-slate-400">{t('mail_room.pending')}</p>
                 <p className="text-2xl font-bold text-amber-600 dark:text-amber-400 mt-1">{pendingTasks}</p>
               </div>
               <div className="w-12 h-12 rounded-xl bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center">
@@ -220,7 +212,7 @@ export default function MailRoom() {
           <CardContent className="pt-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-slate-500 dark:text-slate-400">{isRTL ? 'הושלמו' : 'Completed'}</p>
+                <p className="text-sm text-slate-500 dark:text-slate-400">{t('mail_room.completed')}</p>
                 <p className="text-2xl font-bold text-green-600 dark:text-green-400 mt-1">{completedTasks}</p>
               </div>
               <div className="w-12 h-12 rounded-xl bg-green-100 dark:bg-green-900/30 flex items-center justify-center">
@@ -234,7 +226,7 @@ export default function MailRoom() {
           <CardContent className="pt-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-slate-500 dark:text-slate-400">{isRTL ? 'מיילים לא מטופלים' : 'Unprocessed'}</p>
+                <p className="text-sm text-slate-500 dark:text-slate-400">{t('mail_room.unprocessed')}</p>
                 <p className="text-2xl font-bold text-purple-600 dark:text-purple-400 mt-1">{unprocessedMails}</p>
               </div>
               <div className="w-12 h-12 rounded-xl bg-purple-100 dark:bg-purple-900/30 flex items-center justify-center">
@@ -248,10 +240,10 @@ export default function MailRoom() {
       <Tabs defaultValue="tasks" className="space-y-6">
         <TabsList className="bg-white dark:bg-slate-800 border dark:border-slate-700">
           <TabsTrigger value="tasks" className="dark:text-slate-300 dark:data-[state=active]:bg-slate-700">
-            {isRTL ? 'דשבורד משימות' : 'Tasks Dashboard'}
+            {t('mail_room.tasks_tab')}
           </TabsTrigger>
           <TabsTrigger value="mailbox" className="dark:text-slate-300 dark:data-[state=active]:bg-slate-700">
-            {isRTL ? 'תיבת דואר גולמית' : 'Raw Mailbox'}
+            {t('mail_room.mailbox_tab')}
           </TabsTrigger>
         </TabsList>
 
@@ -261,7 +253,7 @@ export default function MailRoom() {
             <div className="relative flex-1 min-w-[200px] max-w-md">
               <Search className={`absolute ${isRTL ? 'right-3' : 'left-3'} top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400`} />
               <Input
-                placeholder={isRTL ? "חיפוש משימות..." : "Search tasks..."}
+                placeholder={t('mail_room.search_tasks')}
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className={`${isRTL ? 'pr-10' : 'pl-10'} bg-white dark:bg-slate-800 dark:border-slate-700`}
@@ -269,26 +261,26 @@ export default function MailRoom() {
             </div>
             <Select value={filterStatus} onValueChange={setFilterStatus}>
               <SelectTrigger className="w-40 bg-white dark:bg-slate-800 dark:border-slate-700">
-                <SelectValue placeholder={isRTL ? "סטטוס" : "Status"} />
+                <SelectValue placeholder={t('mail_room.status_filter')} />
               </SelectTrigger>
               <SelectContent className="dark:bg-slate-800 dark:border-slate-700">
-                <SelectItem value="all">{isRTL ? 'כל הסטטוסים' : 'All Statuses'}</SelectItem>
-                <SelectItem value="pending">{isRTL ? 'ממתין' : 'Pending'}</SelectItem>
-                <SelectItem value="awaiting_approval">{isRTL ? 'ממתין לאישור' : 'Awaiting Approval'}</SelectItem>
-                <SelectItem value="in_progress">{isRTL ? 'בביצוע' : 'In Progress'}</SelectItem>
-                <SelectItem value="completed">{isRTL ? 'הושלם' : 'Completed'}</SelectItem>
+                <SelectItem value="all" className="dark:text-slate-200">{t('mail_room.all_statuses')}</SelectItem>
+                <SelectItem value="pending" className="dark:text-slate-200">{t('mail_room.status_pending')}</SelectItem>
+                <SelectItem value="awaiting_approval" className="dark:text-slate-200">{t('mail_room.status_awaiting')}</SelectItem>
+                <SelectItem value="in_progress" className="dark:text-slate-200">{t('mail_room.status_in_progress')}</SelectItem>
+                <SelectItem value="completed" className="dark:text-slate-200">{t('mail_room.status_completed')}</SelectItem>
               </SelectContent>
             </Select>
             <Select value={filterPriority} onValueChange={setFilterPriority}>
               <SelectTrigger className="w-40 bg-white dark:bg-slate-800 dark:border-slate-700">
-                <SelectValue placeholder={isRTL ? "עדיפות" : "Priority"} />
+                <SelectValue placeholder={t('mail_room.priority_filter')} />
               </SelectTrigger>
               <SelectContent className="dark:bg-slate-800 dark:border-slate-700">
-                <SelectItem value="all">{isRTL ? 'כל העדיפויות' : 'All Priorities'}</SelectItem>
-                <SelectItem value="low">{isRTL ? 'נמוך' : 'Low'}</SelectItem>
-                <SelectItem value="medium">{isRTL ? 'בינוני' : 'Medium'}</SelectItem>
-                <SelectItem value="high">{isRTL ? 'גבוה' : 'High'}</SelectItem>
-                <SelectItem value="critical">{isRTL ? 'קריטי' : 'Critical'}</SelectItem>
+                <SelectItem value="all" className="dark:text-slate-200">{t('mail_room.all_priorities')}</SelectItem>
+                <SelectItem value="low" className="dark:text-slate-200">{t('mail_room.priority_low')}</SelectItem>
+                <SelectItem value="medium" className="dark:text-slate-200">{t('mail_room.priority_medium')}</SelectItem>
+                <SelectItem value="high" className="dark:text-slate-200">{t('mail_room.priority_high')}</SelectItem>
+                <SelectItem value="critical" className="dark:text-slate-200">{t('mail_room.priority_critical')}</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -299,7 +291,7 @@ export default function MailRoom() {
               <div className="divide-y divide-slate-100 dark:divide-slate-700">
                 {filteredTasks.length === 0 ? (
                   <p className="text-center text-slate-400 dark:text-slate-500 py-12">
-                    {isRTL ? 'אין משימות' : 'No tasks'}
+                    {t('mail_room.no_tasks')}
                   </p>
                 ) : (
                   filteredTasks.map((task) => (
@@ -319,7 +311,7 @@ export default function MailRoom() {
                         )}
                         {task.due_date && (
                           <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">
-                            {isRTL ? 'מועד:' : 'Due:'} {format(new Date(task.due_date), 'dd/MM/yyyy')}
+                            {t('mail_room.due_label')} {format(new Date(task.due_date), 'dd/MM/yyyy')}
                           </p>
                         )}
                       </div>
@@ -338,7 +330,7 @@ export default function MailRoom() {
             <div className="relative flex-1 min-w-[200px] max-w-md">
               <Search className={`absolute ${isRTL ? 'right-3' : 'left-3'} top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400`} />
               <Input
-                placeholder={isRTL ? "חיפוש מיילים..." : "Search emails..."}
+                placeholder={t('mail_room.search_emails')}
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className={`${isRTL ? 'pr-10' : 'pl-10'} bg-white dark:bg-slate-800 dark:border-slate-700`}
@@ -351,9 +343,7 @@ export default function MailRoom() {
                 className="bg-blue-600 hover:bg-blue-700 gap-2"
               >
                 <Play className="w-4 h-4" />
-                {isRTL 
-                  ? `עבד ${selectedMails.length} נבחרים` 
-                  : `Process ${selectedMails.length} Selected`}
+                {t('mail_room.process_selected', { count: selectedMails.length })}
               </Button>
             )}
           </div>
@@ -375,14 +365,14 @@ export default function MailRoom() {
                     )}
                   </button>
                   <span className="text-sm text-slate-500 dark:text-slate-400">
-                    {isRTL ? 'בחר הכל' : 'Select All'}
+                    {t('mail_room.select_all')}
                   </span>
                 </div>
               )}
               <div className="divide-y divide-slate-100 dark:divide-slate-700">
                 {filteredMails.length === 0 ? (
                   <p className="text-center text-slate-400 dark:text-slate-500 py-12">
-                    {isRTL ? 'אין מיילים' : 'No emails'}
+                    {t('mail_room.no_emails')}
                   </p>
                 ) : (
                   filteredMails.map((mail) => (
@@ -418,7 +408,7 @@ export default function MailRoom() {
                         </div>
                         <p className="text-sm text-slate-500 dark:text-slate-400">{mail.sender_name || mail.sender_email}</p>
                         <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">
-                          {format(new Date(mail.received_at), 'dd MMM yyyy, HH:mm', { locale: he })}
+                          {format(new Date(mail.received_at), 'dd MMM yyyy, HH:mm', { locale: isRTL ? he : undefined })}
                         </p>
                       </div>
                       <div className="flex items-center gap-2">
@@ -432,7 +422,7 @@ export default function MailRoom() {
                             className="gap-1 dark:border-slate-600 dark:hover:bg-slate-700"
                           >
                             <Play className="w-3 h-3" />
-                            {isRTL ? 'עבד' : 'Process'}
+                            {t('mail_room.process')}
                           </Button>
                         )}
                         <Link to={createPageUrl(`MailView?mailId=${mail.id}`)}>

@@ -41,7 +41,7 @@ import {
 const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#06b6d4'];
 
 export default function MailAnalytics() {
-  const { i18n } = useTranslation();
+  const { t, i18n } = useTranslation();
   const isRTL = i18n.language === 'he';
   const [dateRange, setDateRange] = useState('30');
   const [user, setUser] = useState(null);
@@ -88,10 +88,10 @@ export default function MailAnalytics() {
           <CardContent className="pt-6 text-center">
             <AlertCircle className="w-12 h-12 mx-auto text-amber-500 mb-4" />
             <h2 className="text-xl font-semibold text-slate-800 dark:text-slate-200 mb-2">
-              {isRTL ? 'גישה מוגבלת' : 'Access Restricted'}
+              {t('mail_analytics.access_restricted')}
             </h2>
             <p className="text-slate-500 dark:text-slate-400">
-              {isRTL ? 'דף זה נגיש למנהלים בלבד' : 'This page is only accessible to administrators'}
+              {t('mail_analytics.admin_only')}
             </p>
           </CardContent>
         </Card>
@@ -138,7 +138,7 @@ export default function MailAnalytics() {
   // Rule distribution
   const ruleDistribution = {};
   filteredTasks.forEach(task => {
-    const ruleName = task.extracted_data?.rule_name || (isRTL ? 'ללא חוק' : 'No Rule');
+    const ruleName = task.extracted_data?.rule_name || t('mail_analytics.no_rule');
     ruleDistribution[ruleName] = (ruleDistribution[ruleName] || 0) + 1;
   });
   const ruleDistributionData = Object.entries(ruleDistribution).map(([name, value]) => ({
@@ -156,39 +156,40 @@ export default function MailAnalytics() {
       }
     });
   });
-  const actionDistributionData = Object.entries(actionCounts).map(([name, value]) => ({
-    name: getActionLabel(name, isRTL),
-    value,
-  }));
 
-  function getActionLabel(type, isRTL) {
+  const getActionLabel = (type) => {
     const labels = {
-      log_time: isRTL ? 'רישום שעות' : 'Log Time',
-      create_deadline: isRTL ? 'יצירת מועד' : 'Create Deadline',
-      create_task: isRTL ? 'יצירת משימה' : 'Create Task',
-      upload_to_dropbox: isRTL ? 'העלאה ל-Dropbox' : 'Upload to Dropbox',
-      create_calendar_event: isRTL ? 'אירוע יומן' : 'Calendar Event',
-      send_email: isRTL ? 'שליחת מייל' : 'Send Email',
-      create_invoice_draft: isRTL ? 'טיוטת חשבונית' : 'Invoice Draft',
+      log_time: t('mail_analytics.action_log_time'),
+      create_deadline: t('mail_analytics.action_create_deadline'),
+      create_task: t('mail_analytics.action_create_task'),
+      upload_to_dropbox: t('mail_analytics.action_upload_dropbox'),
+      create_calendar_event: t('mail_analytics.action_calendar_event'),
+      send_email: t('mail_analytics.action_send_email'),
+      create_invoice_draft: t('mail_analytics.action_invoice_draft'),
     };
     return labels[type] || type;
-  }
+  };
+
+  const actionDistributionData = Object.entries(actionCounts).map(([name, value]) => ({
+    name: getActionLabel(name),
+    value,
+  }));
 
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between flex-wrap gap-4">
         <PageHeader
-          title={isRTL ? 'אנליטיקת דואר' : 'Mail Analytics'}
-          subtitle={isRTL ? 'סטטיסטיקות ביצועים ואוטומציה' : 'Performance and automation statistics'}
+          title={t('mail_analytics.title')}
+          subtitle={t('mail_analytics.subtitle')}
         />
         <Select value={dateRange} onValueChange={setDateRange}>
           <SelectTrigger className="w-40 bg-white dark:bg-slate-800 dark:border-slate-700">
             <SelectValue />
           </SelectTrigger>
           <SelectContent className="dark:bg-slate-800 dark:border-slate-700">
-            <SelectItem value="7">{isRTL ? '7 ימים' : '7 days'}</SelectItem>
-            <SelectItem value="30">{isRTL ? '30 ימים' : '30 days'}</SelectItem>
-            <SelectItem value="90">{isRTL ? '90 ימים' : '90 days'}</SelectItem>
+            <SelectItem value="7" className="dark:text-slate-200">{t('mail_analytics.days_7')}</SelectItem>
+            <SelectItem value="30" className="dark:text-slate-200">{t('mail_analytics.days_30')}</SelectItem>
+            <SelectItem value="90" className="dark:text-slate-200">{t('mail_analytics.days_90')}</SelectItem>
           </SelectContent>
         </Select>
       </div>
@@ -206,7 +207,7 @@ export default function MailAnalytics() {
                 <div className="flex items-center justify-between">
                   <div>
                     <p className="text-sm text-slate-500 dark:text-slate-400">
-                      {isRTL ? 'מיילים נכנסים' : 'Incoming Emails'}
+                      {t('mail_analytics.incoming_emails')}
                     </p>
                     <p className="text-3xl font-bold text-slate-800 dark:text-slate-200 mt-1">
                       {totalMails}
@@ -224,7 +225,7 @@ export default function MailAnalytics() {
                 <div className="flex items-center justify-between">
                   <div>
                     <p className="text-sm text-slate-500 dark:text-slate-400">
-                      {isRTL ? 'שיעור סיווג אוטומטי' : 'Auto-Triage Rate'}
+                      {t('mail_analytics.auto_triage_rate')}
                     </p>
                     <p className="text-3xl font-bold text-green-600 dark:text-green-400 mt-1">
                       {autoTriageRate}%
@@ -242,13 +243,13 @@ export default function MailAnalytics() {
                 <div className="flex items-center justify-between">
                   <div>
                     <p className="text-sm text-slate-500 dark:text-slate-400">
-                      {isRTL ? 'מדד דיוק' : 'Accuracy Rate'}
+                      {t('mail_analytics.accuracy_rate')}
                     </p>
                     <p className="text-3xl font-bold text-purple-600 dark:text-purple-400 mt-1">
                       {accuracyRate}%
                     </p>
                     <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">
-                      {isRTL ? `${tasksWithOverride.length} שינויים ידניים` : `${tasksWithOverride.length} manual overrides`}
+                      {t('mail_analytics.manual_overrides', { count: tasksWithOverride.length })}
                     </p>
                   </div>
                   <div className="w-12 h-12 rounded-xl bg-purple-100 dark:bg-purple-900/30 flex items-center justify-center">
@@ -263,13 +264,13 @@ export default function MailAnalytics() {
                 <div className="flex items-center justify-between">
                   <div>
                     <p className="text-sm text-slate-500 dark:text-slate-400">
-                      {isRTL ? 'שעות שנחסכו' : 'Hours Saved'}
+                      {t('mail_analytics.hours_saved')}
                     </p>
                     <p className="text-3xl font-bold text-amber-600 dark:text-amber-400 mt-1">
                       {hoursSaved}
                     </p>
                     <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">
-                      {isRTL ? `${totalTimeSaved} דקות` : `${totalTimeSaved} minutes`}
+                      {t('mail_analytics.minutes_saved', { count: totalTimeSaved })}
                     </p>
                   </div>
                   <div className="w-12 h-12 rounded-xl bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center">
@@ -287,7 +288,7 @@ export default function MailAnalytics() {
               <CardHeader>
                 <CardTitle className="flex items-center gap-2 dark:text-slate-200">
                   <BarChart3 className="w-5 h-5" />
-                  {isRTL ? 'נפח דואר יומי' : 'Daily Mail Volume'}
+                  {t('mail_analytics.daily_volume')}
                 </CardTitle>
               </CardHeader>
               <CardContent>
@@ -324,14 +325,14 @@ export default function MailAnalytics() {
               <CardHeader>
                 <CardTitle className="flex items-center gap-2 dark:text-slate-200">
                   <PieChartIcon className="w-5 h-5" />
-                  {isRTL ? 'התפלגות חוקים' : 'Rule Distribution'}
+                  {t('mail_analytics.rule_distribution')}
                 </CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="h-64">
                   {ruleDistributionData.length === 0 ? (
                     <div className="flex items-center justify-center h-full text-slate-400">
-                      {isRTL ? 'אין נתונים' : 'No data'}
+                      {t('mail_analytics.no_data')}
                     </div>
                   ) : (
                     <ResponsiveContainer width="100%" height="100%">
@@ -370,14 +371,14 @@ export default function MailAnalytics() {
               <CardHeader>
                 <CardTitle className="flex items-center gap-2 dark:text-slate-200">
                   <CheckCircle2 className="w-5 h-5" />
-                  {isRTL ? 'פעולות שבוצעו' : 'Actions Executed'}
+                  {t('mail_analytics.actions_executed')}
                 </CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="h-64">
                   {actionDistributionData.length === 0 ? (
                     <div className="flex items-center justify-center h-full text-slate-400">
-                      {isRTL ? 'אין נתונים' : 'No data'}
+                      {t('mail_analytics.no_data')}
                     </div>
                   ) : (
                     <ResponsiveContainer width="100%" height="100%">
