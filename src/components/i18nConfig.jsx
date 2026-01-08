@@ -425,6 +425,13 @@ const translations = {
         actions_mixed: "בוצעו {{success}} פעולות בהצלחה, {{failed}} נכשלו",
         error_executing: "שגיאה בביצוע פעולות: "
       },
+      action_card: {
+        hours: "שעות",
+        in_days: "בעוד {{count}} ימים",
+        new_status: "סטטוס חדש",
+        path: "נתיב",
+        create_invoice: "יצירת טיוטת חשבונית"
+      },
       mail_rules: {
         title: "חוקי עיבוד דואר",
         subtitle: "הגדרת חוקים לזיהוי ועיבוד אוטומטי של מיילים",
@@ -905,6 +912,13 @@ const translations = {
         actions_failed: "{{count}} actions failed",
         actions_mixed: "{{success}} actions succeeded, {{failed}} failed",
         error_executing: "Error executing actions: "
+      },
+      action_card: {
+        hours: "Hours",
+        in_days: "In {{count}} days",
+        new_status: "New status",
+        path: "Path",
+        create_invoice: "Create invoice draft"
       },
       mail_rules: {
         title: "Mail Processing Rules",

@@ -41,7 +41,7 @@ Deno.serve(async (req) => {
               const timeEntry = await base44.entities.TimeEntry.create({
                 case_id: case_id,
                 task_id: task_id,
-                description: action.action_label || `רישום שעות מעיבוד מייל`,
+                description: action.action_label || `Time logged from mail processing`,
                 hours: action.hours,
                 rate: hourlyRate,
                 is_billable: true,
@@ -60,7 +60,7 @@ Deno.serve(async (req) => {
               const deadline = await base44.entities.Deadline.create({
                 case_id: case_id,
                 deadline_type: action.deadline_type || 'custom',
-                description: action.action_label || 'מועד מעיבוד מייל',
+                description: action.action_label || 'Deadline from mail processing',
                 due_date: dueDate.toISOString().split('T')[0],
                 status: 'pending',
                 is_critical: false,
@@ -75,8 +75,8 @@ Deno.serve(async (req) => {
               case_id: case_id || null,
               client_id: client_id || null,
               task_type: action.task_type || 'custom',
-              title: action.task_title || action.action_label || 'משימה חדשה',
-              description: `נוצר מעיבוד מייל`,
+              title: action.task_title || action.action_label || 'New Task',
+              description: `Created from mail processing`,
               status: 'pending',
               priority: 'medium',
               assigned_to_email: user.email
@@ -136,8 +136,8 @@ Deno.serve(async (req) => {
               const client = clients.length > 0 ? clients[0] : null;
 
               const emailBody = action.auto_reply_template
-                .replace('{{client_name}}', client?.name || mail.sender_name || 'לקוח')
-                .replace('{{mail_subject}}', mail?.subject || 'פנייתך');
+                .replace('{{client_name}}', client?.name || mail.sender_name || 'Client')
+                .replace('{{mail_subject}}', mail?.subject || 'Your inquiry');
               
               await base44.integrations.Core.SendEmail({
                 to: mail.sender_email,
@@ -178,12 +178,12 @@ Deno.serve(async (req) => {
                 paid_amount: 0,
                 line_items: case_id ? [{
                   case_id: case_id,
-                  description: action.invoice_description || `שירותים משפטיים - ${mail?.subject || 'כללי'}`,
+                  description: action.invoice_description || `Legal services - ${mail?.subject || 'General'}`,
                   quantity: 1,
                   unit_price: extractedAmount,
                   amount: extractedAmount
                 }] : [],
-                notes: `נוצר אוטומטית מעיבוד מייל: ${mail?.subject || ''}`
+                notes: `Auto-generated from mail processing: ${mail?.subject || ''}`
               });
               executedActions.push({ 
                 type: 'create_invoice_draft', 

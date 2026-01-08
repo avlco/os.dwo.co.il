@@ -140,7 +140,7 @@ export default function Docketing() {
     .filter(d => d.status !== 'completed' && isBefore(new Date(d.due_date), today))
     .sort((a, b) => new Date(a.due_date) - new Date(b.due_date));
 
-  const weekDays = t('docketing.week_days', { returnObjects: true });
+  const weekDays = t('docketing.week_days', { returnObjects: true }) || ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
   return (
     <div className="space-y-6">

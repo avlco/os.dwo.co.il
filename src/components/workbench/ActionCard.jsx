@@ -30,8 +30,7 @@ const actionColors = {
 };
 
 export default function ActionCard({ action, selected, onToggle, onUpdate, isProcessing }) {
-  const { i18n } = useTranslation();
-  const isRTL = i18n.language === 'he';
+  const { t } = useTranslation();
   const Icon = actionIcons[action.action_type] || FileText;
   const colorClass = actionColors[action.action_type] || 'bg-slate-100 text-slate-600';
 
@@ -55,7 +54,7 @@ export default function ActionCard({ action, selected, onToggle, onUpdate, isPro
             {action.action_type === 'log_time' && (
               <div className="flex items-center gap-2 mt-2">
                 <span className="text-xs text-slate-500 dark:text-slate-400">
-                  {isRTL ? 'שעות:' : 'Hours:'}
+                  {t('action_card.hours')}:
                 </span>
                 <Input
                   type="number"
@@ -72,7 +71,7 @@ export default function ActionCard({ action, selected, onToggle, onUpdate, isPro
             {action.action_type === 'create_deadline' && action.days_offset !== undefined && (
               <div className="flex items-center gap-2 mt-2">
                 <span className="text-xs text-slate-500 dark:text-slate-400">
-                  {isRTL ? 'בעוד' : 'In'} {action.days_offset} {isRTL ? 'ימים' : 'days'}
+                  {t('action_card.in_days', { count: action.days_offset })}
                 </span>
               </div>
             )}
@@ -85,13 +84,13 @@ export default function ActionCard({ action, selected, onToggle, onUpdate, isPro
 
             {action.action_type === 'update_case_status' && action.new_status && (
               <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                {isRTL ? 'סטטוס חדש:' : 'New status:'} {action.new_status}
+                {t('action_card.new_status')}: {action.new_status}
               </p>
             )}
             
             {action.action_type === 'upload_to_dropbox' && action.dropbox_folder_path && (
               <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 truncate">
-                {isRTL ? 'נתיב:' : 'Path:'} {action.dropbox_folder_path}
+                {t('action_card.path')}: {action.dropbox_folder_path}
               </p>
             )}
 
@@ -109,7 +108,7 @@ export default function ActionCard({ action, selected, onToggle, onUpdate, isPro
 
             {action.action_type === 'create_invoice_draft' && (
               <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                {isRTL ? 'יצירת טיוטת חשבונית' : 'Create invoice draft'}
+                {t('action_card.create_invoice')}
               </p>
             )}
           </div>
