@@ -1,7 +1,6 @@
 import CaseView from './pages/CaseView';
 import Cases from './pages/Cases';
 import Clients from './pages/Clients';
-import Dashboard from './pages/Dashboard';
 import Docketing from './pages/Docketing';
 import Financials from './pages/Financials';
 import MailAnalytics from './pages/MailAnalytics';
@@ -17,7 +16,6 @@ export const PAGES = {
     "CaseView": CaseView,
     "Cases": Cases,
     "Clients": Clients,
-    "Dashboard": Dashboard,
     "Docketing": Docketing,
     "Financials": Financials,
     "MailAnalytics": MailAnalytics,
@@ -29,7 +27,7 @@ export const PAGES = {
 }
 
 export const pagesConfig = {
-    mainPage: "Dashboard",
+    mainPage: "CaseView",
     Pages: PAGES,
     Layout: __Layout,
 };
