@@ -145,7 +145,7 @@ export default function MailRulesPanel({ onClose }) {
       is_active: rule.is_active ?? true,
       catch_config: {
         sender_pattern: rule.catch_config?.sender_pattern || '',
-        subject_contains: rule.catch_config?.subject_contains || rule.catch_config?.subject_regex || '',
+        subject_contains: rule.catch_config?.subject_contains || '',
         body_keywords: rule.catch_config?.body_keywords || [],
       },
       despatch_config: rule.despatch_config || [],
@@ -321,9 +321,9 @@ export default function MailRulesPanel({ onClose }) {
                               <span className="font-medium">{t('mail_rules.sender_label')}</span> {rule.catch_config.sender_pattern}
                             </p>
                           )}
-                          {(rule.catch_config?.subject_contains || rule.catch_config?.subject_regex) && (
+                          {rule.catch_config?.subject_contains && (
                             <p className="text-slate-600 dark:text-slate-400">
-                              <span className="font-medium">{t('mail_rules.subject_label')}</span> {rule.catch_config.subject_contains || rule.catch_config.subject_regex}
+                              <span className="font-medium">{t('mail_rules.subject_label')}</span> {rule.catch_config.subject_contains}
                             </p>
                           )}
                           {rule.catch_config?.body_keywords?.length > 0 && (
