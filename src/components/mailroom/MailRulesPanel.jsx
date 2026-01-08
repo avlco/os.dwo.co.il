@@ -18,8 +18,7 @@ import {
   Calendar,
   FileText,
   ArrowRight,
-  ArrowLeft,
-  X
+  ArrowLeft
 } from 'lucide-react';
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -48,30 +47,8 @@ import {
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
 
-const actionTypes = [
-  { value: 'log_time', label: 'רישום שעות', labelEn: 'Log Time', icon: Clock },
-  { value: 'create_deadline', label: 'יצירת מועד', labelEn: 'Create Deadline', icon: Calendar },
-  { value: 'create_task', label: 'יצירת משימה', labelEn: 'Create Task', icon: FileText },
-  { value: 'send_email', label: 'שליחת מייל', labelEn: 'Send Email', icon: Mail },
-  { value: 'create_calendar_event', label: 'יצירת אירוע יומן', labelEn: 'Calendar Event', icon: Calendar },
-  { value: 'upload_to_dropbox', label: 'העלאה ל-Dropbox', labelEn: 'Upload to Dropbox', icon: FileText },
-  { value: 'create_invoice_draft', label: 'יצירת טיוטת חשבונית', labelEn: 'Create Invoice Draft', icon: FileText },
-];
-
-const reminderUnits = [
-  { value: 'days', label: 'ימים', labelEn: 'Days' },
-  { value: 'weeks', label: 'שבועות', labelEn: 'Weeks' },
-  { value: 'months', label: 'חודשים', labelEn: 'Months' },
-];
-
-const reminderReferences = [
-  { value: 'before_extracted', label: 'לפני מועד שחולץ', labelEn: 'Before Extracted Date' },
-  { value: 'after_extracted', label: 'אחרי מועד שחולץ', labelEn: 'After Extracted Date' },
-  { value: 'from_today', label: 'מהיום', labelEn: 'From Today' },
-];
-
 export default function MailRulesPanel({ onClose }) {
-  const { i18n } = useTranslation();
+  const { t, i18n } = useTranslation();
   const isRTL = i18n.language === 'he';
   const queryClient = useQueryClient();
   
@@ -91,6 +68,28 @@ export default function MailRulesPanel({ onClose }) {
     despatch_config: [],
     approval_required: true,
   });
+
+  const actionTypes = [
+    { value: 'log_time', label: t('mail_rules.action_log_time'), icon: Clock },
+    { value: 'create_deadline', label: t('mail_rules.action_create_deadline'), icon: Calendar },
+    { value: 'create_task', label: t('mail_rules.action_create_task'), icon: FileText },
+    { value: 'send_email', label: t('mail_rules.action_send_email'), icon: Mail },
+    { value: 'create_calendar_event', label: t('mail_rules.action_calendar_event'), icon: Calendar },
+    { value: 'upload_to_dropbox', label: t('mail_rules.action_upload_dropbox'), icon: FileText },
+    { value: 'create_invoice_draft', label: t('mail_rules.action_invoice_draft'), icon: FileText },
+  ];
+
+  const reminderUnits = [
+    { value: 'days', label: t('mail_rules.reminder_unit_days') },
+    { value: 'weeks', label: t('mail_rules.reminder_unit_weeks') },
+    { value: 'months', label: t('mail_rules.reminder_unit_months') },
+  ];
+
+  const reminderReferences = [
+    { value: 'before_extracted', label: t('mail_rules.reminder_ref_before') },
+    { value: 'after_extracted', label: t('mail_rules.reminder_ref_after') },
+    { value: 'from_today', label: t('mail_rules.reminder_ref_today') },
+  ];
 
   const { data: rules = [], isLoading } = useQuery({
     queryKey: ['mailRules'],
@@ -207,16 +206,16 @@ export default function MailRulesPanel({ onClose }) {
           </Button>
           <div>
             <h1 className="text-2xl font-bold text-slate-800 dark:text-slate-200">
-              {isRTL ? 'חוקי עיבוד דואר' : 'Mail Processing Rules'}
+              {t('mail_rules.title')}
             </h1>
             <p className="text-slate-500 dark:text-slate-400">
-              {isRTL ? 'הגדרת חוקים לזיהוי ועיבוד אוטומטי של מיילים' : 'Define rules for automatic email detection and processing'}
+              {t('mail_rules.subtitle')}
             </p>
           </div>
         </div>
         <Button onClick={() => { resetForm(); setDialogOpen(true); }} className="gap-2 bg-slate-800 hover:bg-slate-700 dark:bg-slate-700">
           <Plus className="w-4 h-4" />
-          {isRTL ? 'חוק חדש' : 'New Rule'}
+          {t('mail_rules.new_rule')}
         </Button>
       </div>
 
@@ -228,7 +227,7 @@ export default function MailRulesPanel({ onClose }) {
       />
 
       {isLoading ? (
-        <div className="text-center py-12 text-slate-500">{isRTL ? 'טוען...' : 'Loading...'}</div>
+        <div className="text-center py-12 text-slate-500 dark:text-slate-400">{t('mail_rules.loading')}</div>
       ) : rules.length === 0 ? (
         showWizard ? (
           <RuleOnboardingWizard 
@@ -240,15 +239,15 @@ export default function MailRulesPanel({ onClose }) {
             <CardContent className="py-12 text-center">
               <Settings className="w-12 h-12 mx-auto text-slate-300 dark:text-slate-600 mb-4" />
               <p className="text-slate-500 dark:text-slate-400">
-                {isRTL ? 'לא הוגדרו חוקים עדיין' : 'No rules defined yet'}
+                {t('mail_rules.no_rules')}
               </p>
               <div className="flex flex-col sm:flex-row gap-3 justify-center mt-4">
                 <Button onClick={() => setShowWizard(true)} className="gap-2 bg-blue-600 hover:bg-blue-700">
-                  {isRTL ? 'התחל עם האשף' : 'Start with Wizard'}
+                  {t('mail_rules.start_wizard')}
                 </Button>
                 <Button variant="outline" onClick={() => { resetForm(); setDialogOpen(true); }} className="gap-2 dark:border-slate-600">
                   <Plus className="w-4 h-4" />
-                  {isRTL ? 'צור ידנית' : 'Create Manually'}
+                  {t('mail_rules.create_manual')}
                 </Button>
               </div>
             </CardContent>
@@ -314,29 +313,29 @@ export default function MailRulesPanel({ onClose }) {
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-4">
                       <div>
                         <h4 className="font-medium text-slate-800 dark:text-slate-200 mb-2">
-                          {isRTL ? 'תנאי זיהוי' : 'Detection Conditions'}
+                          {t('mail_rules.detection_conditions')}
                         </h4>
                         <div className="space-y-2 text-sm">
                           {rule.catch_config?.sender_pattern && (
                             <p className="text-slate-600 dark:text-slate-400">
-                              <span className="font-medium">{isRTL ? 'שולח:' : 'Sender:'}</span> {rule.catch_config.sender_pattern}
+                              <span className="font-medium">{t('mail_rules.sender_label')}</span> {rule.catch_config.sender_pattern}
                             </p>
                           )}
                           {(rule.catch_config?.subject_contains || rule.catch_config?.subject_regex) && (
                             <p className="text-slate-600 dark:text-slate-400">
-                              <span className="font-medium">{isRTL ? 'נושא מכיל:' : 'Subject Contains:'}</span> {rule.catch_config.subject_contains || rule.catch_config.subject_regex}
+                              <span className="font-medium">{t('mail_rules.subject_label')}</span> {rule.catch_config.subject_contains || rule.catch_config.subject_regex}
                             </p>
                           )}
                           {rule.catch_config?.body_keywords?.length > 0 && (
                             <p className="text-slate-600 dark:text-slate-400">
-                              <span className="font-medium">{isRTL ? 'מילות מפתח:' : 'Keywords:'}</span> {rule.catch_config.body_keywords.join(', ')}
+                              <span className="font-medium">{t('mail_rules.keywords_label')}</span> {rule.catch_config.body_keywords.join(', ')}
                             </p>
                           )}
                         </div>
                       </div>
                       <div>
                         <h4 className="font-medium text-slate-800 dark:text-slate-200 mb-2">
-                          {isRTL ? 'פעולות' : 'Actions'}
+                          {t('mail_rules.actions')}
                         </h4>
                         <div className="space-y-2">
                           {rule.despatch_config?.map((action, idx) => (
@@ -365,7 +364,7 @@ export default function MailRulesPanel({ onClose }) {
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto dark:bg-slate-800 dark:border-slate-700">
           <DialogHeader>
             <DialogTitle className="dark:text-slate-200">
-              {editingRule ? (isRTL ? 'עריכת חוק' : 'Edit Rule') : (isRTL ? 'חוק חדש' : 'New Rule')}
+              {editingRule ? t('mail_rules.dialog_edit') : t('mail_rules.dialog_new')}
             </DialogTitle>
           </DialogHeader>
 
@@ -373,7 +372,7 @@ export default function MailRulesPanel({ onClose }) {
             {/* Basic Info */}
             <div className="space-y-4">
               <div className="space-y-2">
-                <Label className="dark:text-slate-300">{isRTL ? 'שם החוק' : 'Rule Name'}</Label>
+                <Label className="dark:text-slate-300">{t('mail_rules.name_field')}</Label>
                 <Input
                   value={formData.name}
                   onChange={(e) => setFormData({ ...formData, name: e.target.value })}
@@ -381,7 +380,7 @@ export default function MailRulesPanel({ onClose }) {
                 />
               </div>
               <div className="space-y-2">
-                <Label className="dark:text-slate-300">{isRTL ? 'תיאור' : 'Description'}</Label>
+                <Label className="dark:text-slate-300">{t('mail_rules.description_field')}</Label>
                 <Textarea
                   value={formData.description}
                   onChange={(e) => setFormData({ ...formData, description: e.target.value })}
@@ -391,13 +390,13 @@ export default function MailRulesPanel({ onClose }) {
               </div>
             </div>
 
-            {/* Catch Config - Simplified */}
+            {/* Catch Config */}
             <div className="space-y-4">
               <h4 className="font-medium text-slate-800 dark:text-slate-200">
-                {isRTL ? 'תנאי זיהוי' : 'Detection Conditions'}
+                {t('mail_rules.detection_conditions')}
               </h4>
               <div className="space-y-2">
-                <Label className="dark:text-slate-300">{isRTL ? 'כתובת מייל שולח' : 'Sender Email Address'}</Label>
+                <Label className="dark:text-slate-300">{t('mail_rules.sender_field')}</Label>
                 <Input
                   value={formData.catch_config.sender_pattern}
                   onChange={(e) => setFormData({
@@ -408,11 +407,11 @@ export default function MailRulesPanel({ onClose }) {
                   className="dark:bg-slate-900 dark:border-slate-600"
                 />
                 <p className="text-xs text-slate-500 dark:text-slate-400">
-                  {isRTL ? 'הכנס כתובת מייל מלאה או חלקית' : 'Enter full or partial email address'}
+                  {t('mail_rules.sender_hint')}
                 </p>
               </div>
               <div className="space-y-2">
-                <Label className="dark:text-slate-300">{isRTL ? 'נושא מכיל' : 'Subject Contains'}</Label>
+                <Label className="dark:text-slate-300">{t('mail_rules.subject_field')}</Label>
                 <Input
                   value={formData.catch_config.subject_contains}
                   onChange={(e) => setFormData({
@@ -423,11 +422,11 @@ export default function MailRulesPanel({ onClose }) {
                   className="dark:bg-slate-900 dark:border-slate-600"
                 />
                 <p className="text-xs text-slate-500 dark:text-slate-400">
-                  {isRTL ? 'טקסט שחייב להופיע בנושא המייל' : 'Text that must appear in the email subject'}
+                  {t('mail_rules.subject_hint')}
                 </p>
               </div>
               <div className="space-y-2">
-                <Label className="dark:text-slate-300">{isRTL ? 'מילות מפתח בגוף (מופרדות בפסיק)' : 'Body Keywords (comma separated)'}</Label>
+                <Label className="dark:text-slate-300">{t('mail_rules.keywords_field')}</Label>
                 <Input
                   value={(formData.catch_config.body_keywords || []).join(', ')}
                   onChange={(e) => setFormData({
@@ -447,11 +446,11 @@ export default function MailRulesPanel({ onClose }) {
             <div className="space-y-4">
               <div className="flex items-center justify-between">
                 <h4 className="font-medium text-slate-800 dark:text-slate-200">
-                  {isRTL ? 'פעולות מוצעות' : 'Suggested Actions'}
+                  {t('mail_rules.suggested_actions')}
                 </h4>
                 <Button variant="outline" size="sm" onClick={addAction} className="dark:border-slate-600">
                   <Plus className="w-4 h-4 mr-1" />
-                  {isRTL ? 'הוסף פעולה' : 'Add Action'}
+                  {t('mail_rules.add_action')}
                 </Button>
               </div>
               
@@ -460,7 +459,7 @@ export default function MailRulesPanel({ onClose }) {
                   <CardContent className="p-4">
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div className="space-y-2">
-                        <Label className="dark:text-slate-300">{isRTL ? 'סוג פעולה' : 'Action Type'}</Label>
+                        <Label className="dark:text-slate-300">{t('mail_rules.action_type')}</Label>
                         <Select
                           value={action.action_type}
                           onValueChange={(v) => updateAction(index, 'action_type', v)}
@@ -471,14 +470,14 @@ export default function MailRulesPanel({ onClose }) {
                           <SelectContent className="dark:bg-slate-800 dark:border-slate-700">
                             {actionTypes.map((type) => (
                               <SelectItem key={type.value} value={type.value} className="dark:text-slate-200">
-                                {isRTL ? type.label : type.labelEn}
+                                {type.label}
                               </SelectItem>
                             ))}
                           </SelectContent>
                         </Select>
                       </div>
                       <div className="space-y-2">
-                        <Label className="dark:text-slate-300">{isRTL ? 'תווית' : 'Label'}</Label>
+                        <Label className="dark:text-slate-300">{t('mail_rules.action_label')}</Label>
                         <Input
                           value={action.action_label || ''}
                           onChange={(e) => updateAction(index, 'action_label', e.target.value)}
@@ -489,7 +488,7 @@ export default function MailRulesPanel({ onClose }) {
                     
                     {action.action_type === 'log_time' && (
                       <div className="mt-4 space-y-2">
-                        <Label className="dark:text-slate-300">{isRTL ? 'שעות' : 'Hours'}</Label>
+                        <Label className="dark:text-slate-300">{t('mail_rules.hours_field')}</Label>
                         <Input
                           type="number"
                           step="0.25"
@@ -504,7 +503,7 @@ export default function MailRulesPanel({ onClose }) {
                       <div className="mt-4 space-y-4">
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                           <div className="space-y-2">
-                            <Label className="dark:text-slate-300">{isRTL ? 'כמות' : 'Amount'}</Label>
+                            <Label className="dark:text-slate-300">{t('mail_rules.amount_field')}</Label>
                             <Input
                               type="number"
                               value={action.reminder_value || action.days_offset || 30}
@@ -513,7 +512,7 @@ export default function MailRulesPanel({ onClose }) {
                             />
                           </div>
                           <div className="space-y-2">
-                            <Label className="dark:text-slate-300">{isRTL ? 'יחידה' : 'Unit'}</Label>
+                            <Label className="dark:text-slate-300">{t('mail_rules.unit_field')}</Label>
                             <Select
                               value={action.reminder_unit || 'days'}
                               onValueChange={(v) => updateAction(index, 'reminder_unit', v)}
@@ -524,14 +523,14 @@ export default function MailRulesPanel({ onClose }) {
                               <SelectContent className="dark:bg-slate-800 dark:border-slate-700">
                                 {reminderUnits.map((unit) => (
                                   <SelectItem key={unit.value} value={unit.value} className="dark:text-slate-200">
-                                    {isRTL ? unit.label : unit.labelEn}
+                                    {unit.label}
                                   </SelectItem>
                                 ))}
                               </SelectContent>
                             </Select>
                           </div>
                           <div className="space-y-2">
-                            <Label className="dark:text-slate-300">{isRTL ? 'ביחס ל' : 'Relative To'}</Label>
+                            <Label className="dark:text-slate-300">{t('mail_rules.relative_to')}</Label>
                             <Select
                               value={action.reminder_reference || 'from_today'}
                               onValueChange={(v) => updateAction(index, 'reminder_reference', v)}
@@ -542,7 +541,7 @@ export default function MailRulesPanel({ onClose }) {
                               <SelectContent className="dark:bg-slate-800 dark:border-slate-700">
                                 {reminderReferences.map((ref) => (
                                   <SelectItem key={ref.value} value={ref.value} className="dark:text-slate-200">
-                                    {isRTL ? ref.label : ref.labelEn}
+                                    {ref.label}
                                   </SelectItem>
                                 ))}
                               </SelectContent>
@@ -554,7 +553,7 @@ export default function MailRulesPanel({ onClose }) {
                     
                     {action.action_type === 'upload_to_dropbox' && (
                       <div className="mt-4 space-y-2">
-                        <Label className="dark:text-slate-300">{isRTL ? 'נתיב יעד ב-Dropbox' : 'Dropbox Destination Path'}</Label>
+                        <Label className="dark:text-slate-300">{t('mail_rules.dropbox_path')}</Label>
                         <Input
                           value={action.dropbox_folder_path || ''}
                           onChange={(e) => updateAction(index, 'dropbox_folder_path', e.target.value)}
@@ -567,7 +566,7 @@ export default function MailRulesPanel({ onClose }) {
                     {action.action_type === 'create_calendar_event' && (
                       <div className="mt-4 space-y-3">
                         <div className="space-y-2">
-                          <Label className="dark:text-slate-300">{isRTL ? 'תבנית כותרת' : 'Title Template'}</Label>
+                          <Label className="dark:text-slate-300">{t('mail_rules.title_template')}</Label>
                           <Input
                             value={action.calendar_event_template?.title_template || ''}
                             onChange={(e) => updateAction(index, 'calendar_event_template', { ...action.calendar_event_template, title_template: e.target.value })}
@@ -576,7 +575,7 @@ export default function MailRulesPanel({ onClose }) {
                           />
                         </div>
                         <div className="space-y-2">
-                          <Label className="dark:text-slate-300">{isRTL ? 'תבנית תיאור' : 'Description Template'}</Label>
+                          <Label className="dark:text-slate-300">{t('mail_rules.desc_template')}</Label>
                           <Textarea
                             value={action.calendar_event_template?.description_template || ''}
                             onChange={(e) => updateAction(index, 'calendar_event_template', { ...action.calendar_event_template, description_template: e.target.value })}
@@ -590,7 +589,7 @@ export default function MailRulesPanel({ onClose }) {
 
                     {action.action_type === 'send_email' && (
                       <div className="mt-4 space-y-2">
-                        <Label className="dark:text-slate-300">{isRTL ? 'תבנית תשובה אוטומטית' : 'Auto Reply Template'}</Label>
+                        <Label className="dark:text-slate-300">{t('mail_rules.reply_template')}</Label>
                         <Textarea
                           value={action.auto_reply_template || ''}
                           onChange={(e) => updateAction(index, 'auto_reply_template', e.target.value)}
@@ -603,7 +602,7 @@ export default function MailRulesPanel({ onClose }) {
 
                     {action.action_type === 'create_invoice_draft' && (
                       <div className="mt-4 space-y-2">
-                        <Label className="dark:text-slate-300">{isRTL ? 'תיאור חשבונית' : 'Invoice Description'}</Label>
+                        <Label className="dark:text-slate-300">{t('mail_rules.invoice_desc')}</Label>
                         <Input
                           value={action.invoice_description || ''}
                           onChange={(e) => updateAction(index, 'invoice_description', e.target.value)}
@@ -620,7 +619,7 @@ export default function MailRulesPanel({ onClose }) {
                       className="mt-4 text-red-600 hover:text-red-700 dark:hover:bg-slate-700"
                     >
                       <Trash2 className="w-4 h-4 mr-1" />
-                      {isRTL ? 'הסר' : 'Remove'}
+                      {t('mail_rules.remove')}
                     </Button>
                   </CardContent>
                 </Card>
@@ -632,10 +631,10 @@ export default function MailRulesPanel({ onClose }) {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="font-medium text-slate-800 dark:text-slate-200">
-                    {isRTL ? 'דורש אישור' : 'Requires Approval'}
+                    {t('mail_rules.requires_approval')}
                   </p>
                   <p className="text-sm text-slate-500 dark:text-slate-400">
-                    {isRTL ? 'הפעולות יחכו לאישור המשתמש' : 'Actions will wait for user approval'}
+                    {t('mail_rules.approval_desc')}
                   </p>
                 </div>
                 <Switch
@@ -646,7 +645,7 @@ export default function MailRulesPanel({ onClose }) {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="font-medium text-slate-800 dark:text-slate-200">
-                    {isRTL ? 'חוק פעיל' : 'Rule Active'}
+                    {t('mail_rules.rule_active')}
                   </p>
                 </div>
                 <Switch
@@ -659,10 +658,10 @@ export default function MailRulesPanel({ onClose }) {
 
           <DialogFooter>
             <Button variant="outline" onClick={() => setDialogOpen(false)} className="dark:border-slate-600">
-              {isRTL ? 'ביטול' : 'Cancel'}
+              {t('mail_rules.cancel')}
             </Button>
             <Button onClick={handleSubmit} className="bg-slate-800 hover:bg-slate-700 dark:bg-slate-700">
-              {editingRule ? (isRTL ? 'שמור שינויים' : 'Save Changes') : (isRTL ? 'צור חוק' : 'Create Rule')}
+              {editingRule ? t('mail_rules.save_changes') : t('mail_rules.create_rule')}
             </Button>
           </DialogFooter>
         </DialogContent>
