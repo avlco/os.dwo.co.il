@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { base44 } from '@/api/base44Client';
+import { useTranslation } from 'react-i18next';
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameMonth, isSameDay, addMonths, subMonths, isToday, isBefore } from 'date-fns';
 import { he } from 'date-fns/locale';
 import PageHeader from '../components/ui/PageHeader';
@@ -9,7 +10,6 @@ import {
   Calendar,
   ChevronRight,
   ChevronLeft,
-  Plus,
   Clock,
   AlertTriangle
 } from 'lucide-react';
@@ -33,17 +33,9 @@ import {
 import { Checkbox } from "@/components/ui/checkbox";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
-const deadlineTypes = [
-  { value: 'office_action_response', label: 'תגובה לדו״ח בחינה' },
-  { value: 'renewal', label: 'חידוש' },
-  { value: 'opposition_response', label: 'תגובה להתנגדות' },
-  { value: 'appeal', label: 'ערעור' },
-  { value: 'payment', label: 'תשלום' },
-  { value: 'filing', label: 'הגשה' },
-  { value: 'custom', label: 'אחר' },
-];
-
 export default function Docketing() {
+  const { t, i18n } = useTranslation();
+  const isRTL = i18n.language === 'he';
   const queryClient = useQueryClient();
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [selectedDate, setSelectedDate] = useState(null);
@@ -58,6 +50,16 @@ export default function Docketing() {
     is_critical: false,
     status: 'pending',
   });
+
+  const deadlineTypes = [
+    { value: 'office_action_response', label: t('docketing.type_office_action') },
+    { value: 'renewal', label: t('docketing.type_renewal') },
+    { value: 'opposition_response', label: t('docketing.type_opposition') },
+    { value: 'appeal', label: t('docketing.type_appeal') },
+    { value: 'payment', label: t('docketing.type_payment') },
+    { value: 'filing', label: t('docketing.type_filing') },
+    { value: 'custom', label: t('docketing.type_custom') },
+  ];
 
   const { data: deadlines = [], isLoading } = useQuery({
     queryKey: ['deadlines'],
@@ -121,9 +123,7 @@ export default function Docketing() {
   const monthEnd = endOfMonth(currentMonth);
   const daysInMonth = eachDayOfInterval({ start: monthStart, end: monthEnd });
 
-  // Get day of week for first day (0 = Sunday, 6 = Saturday)
   const startDay = monthStart.getDay();
-  // In Hebrew calendar, week starts on Sunday
   const paddingDays = startDay;
 
   const getDeadlinesForDate = (date) => {
@@ -140,59 +140,55 @@ export default function Docketing() {
     .filter(d => d.status !== 'completed' && isBefore(new Date(d.due_date), today))
     .sort((a, b) => new Date(a.due_date) - new Date(b.due_date));
 
-  const weekDays = ['א׳', 'ב׳', 'ג׳', 'ד׳', 'ה׳', 'ו׳', 'ש׳'];
+  const weekDays = t('docketing.week_days', { returnObjects: true });
 
   return (
     <div className="space-y-6">
       <PageHeader
-        title="יומן מועדים"
-        subtitle="ניהול מועדים ותזכורות"
+        title={t('docketing.title')}
+        subtitle={t('docketing.subtitle')}
         action={() => openCreateDialog()}
-        actionLabel="מועד חדש"
+        actionLabel={t('docketing.new_deadline')}
       />
 
       <Tabs defaultValue="calendar" className="space-y-6">
-        <TabsList className="bg-white border">
-          <TabsTrigger value="calendar">לוח שנה</TabsTrigger>
-          <TabsTrigger value="list">רשימה</TabsTrigger>
+        <TabsList className="bg-white dark:bg-slate-800 border dark:border-slate-700">
+          <TabsTrigger value="calendar" className="dark:text-slate-300 dark:data-[state=active]:bg-slate-700">{t('docketing.calendar_tab')}</TabsTrigger>
+          <TabsTrigger value="list" className="dark:text-slate-300 dark:data-[state=active]:bg-slate-700">{t('docketing.list_tab')}</TabsTrigger>
         </TabsList>
 
         <TabsContent value="calendar">
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             {/* Calendar */}
             <div className="lg:col-span-2">
-              <Card>
+              <Card className="dark:bg-slate-800 dark:border-slate-700">
                 <CardHeader className="flex flex-row items-center justify-between pb-2">
-                  <CardTitle className="text-lg font-semibold">
-                    {format(currentMonth, 'MMMM yyyy', { locale: he })}
+                  <CardTitle className="text-lg font-semibold dark:text-slate-200">
+                    {format(currentMonth, 'MMMM yyyy', { locale: isRTL ? he : undefined })}
                   </CardTitle>
                   <div className="flex gap-2">
-                    <Button variant="ghost" size="icon" onClick={() => setCurrentMonth(subMonths(currentMonth, 1))}>
+                    <Button variant="ghost" size="icon" onClick={() => setCurrentMonth(subMonths(currentMonth, 1))} className="dark:hover:bg-slate-700">
                       <ChevronRight className="w-4 h-4" />
                     </Button>
-                    <Button variant="ghost" size="icon" onClick={() => setCurrentMonth(addMonths(currentMonth, 1))}>
+                    <Button variant="ghost" size="icon" onClick={() => setCurrentMonth(addMonths(currentMonth, 1))} className="dark:hover:bg-slate-700">
                       <ChevronLeft className="w-4 h-4" />
                     </Button>
                   </div>
                 </CardHeader>
                 <CardContent>
-                  {/* Week days header */}
                   <div className="grid grid-cols-7 gap-1 mb-2">
-                    {weekDays.map(day => (
-                      <div key={day} className="text-center text-sm font-medium text-slate-500 py-2">
+                    {weekDays.map((day, idx) => (
+                      <div key={idx} className="text-center text-sm font-medium text-slate-500 dark:text-slate-400 py-2">
                         {day}
                       </div>
                     ))}
                   </div>
                   
-                  {/* Calendar grid */}
                   <div className="grid grid-cols-7 gap-1">
-                    {/* Padding days */}
                     {[...Array(paddingDays)].map((_, i) => (
                       <div key={`padding-${i}`} className="aspect-square p-1" />
                     ))}
                     
-                    {/* Actual days */}
                     {daysInMonth.map((day) => {
                       const dayDeadlines = getDeadlinesForDate(day);
                       const hasDeadlines = dayDeadlines.length > 0;
@@ -210,8 +206,8 @@ export default function Docketing() {
                           }}
                           className={`
                             aspect-square p-1 rounded-lg text-sm transition-colors relative
-                            ${isToday(day) ? 'bg-slate-800 text-white' : 'hover:bg-slate-100'}
-                            ${!isSameMonth(day, currentMonth) ? 'text-slate-300' : ''}
+                            ${isToday(day) ? 'bg-slate-800 dark:bg-slate-600 text-white' : 'hover:bg-slate-100 dark:hover:bg-slate-700'}
+                            ${!isSameMonth(day, currentMonth) ? 'text-slate-300 dark:text-slate-600' : 'dark:text-slate-200'}
                           `}
                         >
                           <span className="block">{format(day, 'd')}</span>
@@ -234,23 +230,23 @@ export default function Docketing() {
               </Card>
             </div>
 
-            {/* Sidebar - Selected date or upcoming */}
+            {/* Sidebar */}
             <div className="space-y-6">
               {selectedDate && getDeadlinesForDate(selectedDate).length > 0 ? (
-                <Card>
+                <Card className="dark:bg-slate-800 dark:border-slate-700">
                   <CardHeader>
-                    <CardTitle className="text-lg flex items-center gap-2">
+                    <CardTitle className="text-lg flex items-center gap-2 dark:text-slate-200">
                       <Calendar className="w-5 h-5 text-blue-500" />
-                      {format(selectedDate, 'dd MMMM yyyy', { locale: he })}
+                      {format(selectedDate, 'dd MMMM yyyy', { locale: isRTL ? he : undefined })}
                     </CardTitle>
                   </CardHeader>
                   <CardContent className="space-y-3">
                     {getDeadlinesForDate(selectedDate).map(deadline => (
-                      <div key={deadline.id} className="p-3 bg-slate-50 rounded-xl">
+                      <div key={deadline.id} className="p-3 bg-slate-50 dark:bg-slate-700/50 rounded-xl">
                         <div className="flex items-start justify-between">
                           <div>
-                            <p className="font-medium text-slate-800">{deadline.description}</p>
-                            <p className="text-sm text-slate-500 mt-1">{getCaseNumber(deadline.case_id)}</p>
+                            <p className="font-medium text-slate-800 dark:text-slate-200">{deadline.description}</p>
+                            <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">{getCaseNumber(deadline.case_id)}</p>
                           </div>
                           <StatusBadge status={deadline.is_critical ? 'critical' : deadline.status} />
                         </div>
@@ -258,10 +254,10 @@ export default function Docketing() {
                           <Button 
                             size="sm" 
                             variant="outline" 
-                            className="mt-3 w-full"
+                            className="mt-3 w-full dark:border-slate-600"
                             onClick={() => updateStatusMutation.mutate({ id: deadline.id, status: 'completed' })}
                           >
-                            סמן כהושלם
+                            {t('docketing.mark_completed')}
                           </Button>
                         )}
                       </div>
@@ -269,26 +265,26 @@ export default function Docketing() {
                   </CardContent>
                 </Card>
               ) : (
-                <Card>
+                <Card className="dark:bg-slate-800 dark:border-slate-700">
                   <CardHeader>
-                    <CardTitle className="text-lg flex items-center gap-2">
+                    <CardTitle className="text-lg flex items-center gap-2 dark:text-slate-200">
                       <Clock className="w-5 h-5 text-amber-500" />
-                      מועדים קרובים
+                      {t('docketing.upcoming_deadlines')}
                     </CardTitle>
                   </CardHeader>
                   <CardContent className="space-y-3">
                     {upcomingDeadlines.length === 0 ? (
-                      <p className="text-center text-slate-400 py-4">אין מועדים קרובים</p>
+                      <p className="text-center text-slate-400 dark:text-slate-500 py-4">{t('docketing.no_upcoming')}</p>
                     ) : (
                       upcomingDeadlines.map(deadline => (
-                        <div key={deadline.id} className="flex items-center gap-3 p-3 bg-slate-50 rounded-xl">
-                          <div className="w-10 h-10 rounded-lg bg-amber-100 flex flex-col items-center justify-center text-xs">
-                            <span className="font-bold text-amber-700">{format(new Date(deadline.due_date), 'd')}</span>
-                            <span className="text-amber-600">{format(new Date(deadline.due_date), 'MMM', { locale: he })}</span>
+                        <div key={deadline.id} className="flex items-center gap-3 p-3 bg-slate-50 dark:bg-slate-700/50 rounded-xl">
+                          <div className="w-10 h-10 rounded-lg bg-amber-100 dark:bg-amber-900/30 flex flex-col items-center justify-center text-xs">
+                            <span className="font-bold text-amber-700 dark:text-amber-400">{format(new Date(deadline.due_date), 'd')}</span>
+                            <span className="text-amber-600 dark:text-amber-500">{format(new Date(deadline.due_date), 'MMM', { locale: isRTL ? he : undefined })}</span>
                           </div>
                           <div className="flex-1 min-w-0">
-                            <p className="font-medium text-slate-800 truncate">{deadline.description}</p>
-                            <p className="text-xs text-slate-500">{getCaseNumber(deadline.case_id)}</p>
+                            <p className="font-medium text-slate-800 dark:text-slate-200 truncate">{deadline.description}</p>
+                            <p className="text-xs text-slate-500 dark:text-slate-400">{getCaseNumber(deadline.case_id)}</p>
                           </div>
                         </div>
                       ))
@@ -298,27 +294,27 @@ export default function Docketing() {
               )}
 
               {overdueDeadlines.length > 0 && (
-                <Card className="border-rose-200">
+                <Card className="border-rose-200 dark:border-rose-800 dark:bg-slate-800">
                   <CardHeader>
-                    <CardTitle className="text-lg flex items-center gap-2 text-rose-600">
+                    <CardTitle className="text-lg flex items-center gap-2 text-rose-600 dark:text-rose-400">
                       <AlertTriangle className="w-5 h-5" />
-                      באיחור ({overdueDeadlines.length})
+                      {t('docketing.overdue_count', { count: overdueDeadlines.length })}
                     </CardTitle>
                   </CardHeader>
                   <CardContent className="space-y-3">
                     {overdueDeadlines.slice(0, 5).map(deadline => (
-                      <div key={deadline.id} className="p-3 bg-rose-50 rounded-xl border border-rose-100">
-                        <p className="font-medium text-slate-800">{deadline.description}</p>
-                        <p className="text-sm text-rose-600 mt-1">
+                      <div key={deadline.id} className="p-3 bg-rose-50 dark:bg-rose-900/20 rounded-xl border border-rose-100 dark:border-rose-800">
+                        <p className="font-medium text-slate-800 dark:text-slate-200">{deadline.description}</p>
+                        <p className="text-sm text-rose-600 dark:text-rose-400 mt-1">
                           {format(new Date(deadline.due_date), 'dd/MM/yyyy')}
                         </p>
                         <Button 
                           size="sm" 
                           variant="outline" 
-                          className="mt-2 w-full border-rose-200 hover:bg-rose-100"
+                          className="mt-2 w-full border-rose-200 dark:border-rose-700 hover:bg-rose-100 dark:hover:bg-rose-900/30"
                           onClick={() => updateStatusMutation.mutate({ id: deadline.id, status: 'completed' })}
                         >
-                          סמן כהושלם
+                          {t('docketing.mark_completed')}
                         </Button>
                       </div>
                     ))}
@@ -330,30 +326,30 @@ export default function Docketing() {
         </TabsContent>
 
         <TabsContent value="list">
-          <Card>
+          <Card className="dark:bg-slate-800 dark:border-slate-700">
             <CardContent className="p-0">
-              <div className="divide-y divide-slate-100">
+              <div className="divide-y divide-slate-100 dark:divide-slate-700">
                 {deadlines.length === 0 ? (
-                  <p className="text-center text-slate-400 py-12">אין מועדים</p>
+                  <p className="text-center text-slate-400 dark:text-slate-500 py-12">{t('docketing.no_deadlines')}</p>
                 ) : (
                   deadlines.map(deadline => {
                     const isOverdue = deadline.status !== 'completed' && isBefore(new Date(deadline.due_date), today);
                     return (
                       <div 
                         key={deadline.id} 
-                        className={`flex items-center gap-4 p-4 ${isOverdue ? 'bg-rose-50' : ''}`}
+                        className={`flex items-center gap-4 p-4 ${isOverdue ? 'bg-rose-50 dark:bg-rose-900/20' : ''}`}
                       >
-                        <div className="w-14 h-14 rounded-xl bg-slate-100 flex flex-col items-center justify-center">
-                          <span className="text-lg font-bold text-slate-700">
+                        <div className="w-14 h-14 rounded-xl bg-slate-100 dark:bg-slate-700 flex flex-col items-center justify-center">
+                          <span className="text-lg font-bold text-slate-700 dark:text-slate-200">
                             {format(new Date(deadline.due_date), 'd')}
                           </span>
-                          <span className="text-xs text-slate-500">
-                            {format(new Date(deadline.due_date), 'MMM', { locale: he })}
+                          <span className="text-xs text-slate-500 dark:text-slate-400">
+                            {format(new Date(deadline.due_date), 'MMM', { locale: isRTL ? he : undefined })}
                           </span>
                         </div>
                         <div className="flex-1 min-w-0">
-                          <p className="font-medium text-slate-800">{deadline.description}</p>
-                          <p className="text-sm text-slate-500">
+                          <p className="font-medium text-slate-800 dark:text-slate-200">{deadline.description}</p>
+                          <p className="text-sm text-slate-500 dark:text-slate-400">
                             {getCaseNumber(deadline.case_id)} • {deadlineTypes.find(t => t.value === deadline.deadline_type)?.label}
                           </p>
                         </div>
@@ -362,9 +358,10 @@ export default function Docketing() {
                           <Button 
                             size="sm" 
                             variant="outline"
+                            className="dark:border-slate-600"
                             onClick={() => updateStatusMutation.mutate({ id: deadline.id, status: 'completed' })}
                           >
-                            הושלם
+                            {t('docketing.completed')}
                           </Button>
                         )}
                       </div>
@@ -379,73 +376,77 @@ export default function Docketing() {
 
       {/* Dialog */}
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-        <DialogContent className="max-w-lg">
+        <DialogContent className="max-w-lg dark:bg-slate-800 dark:border-slate-700">
           <DialogHeader>
-            <DialogTitle>מועד חדש</DialogTitle>
+            <DialogTitle className="dark:text-slate-200">{t('docketing.dialog_title')}</DialogTitle>
           </DialogHeader>
           <form onSubmit={handleSubmit} className="space-y-4 mt-4">
             <div className="space-y-2">
-              <Label>תיק</Label>
+              <Label className="dark:text-slate-300">{t('docketing.case_field')}</Label>
               <Select value={formData.case_id} onValueChange={(v) => setFormData({ ...formData, case_id: v })}>
-                <SelectTrigger>
-                  <SelectValue placeholder="בחר תיק" />
+                <SelectTrigger className="dark:bg-slate-900 dark:border-slate-600">
+                  <SelectValue placeholder={t('docketing.select_case')} />
                 </SelectTrigger>
-                <SelectContent>
+                <SelectContent className="dark:bg-slate-800 dark:border-slate-700">
                   {cases.map(c => (
-                    <SelectItem key={c.id} value={c.id}>{c.case_number} - {c.title}</SelectItem>
+                    <SelectItem key={c.id} value={c.id} className="dark:text-slate-200">{c.case_number} - {c.title}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             </div>
 
             <div className="space-y-2">
-              <Label>סוג מועד</Label>
+              <Label className="dark:text-slate-300">{t('docketing.type_field')}</Label>
               <Select value={formData.deadline_type} onValueChange={(v) => setFormData({ ...formData, deadline_type: v })}>
-                <SelectTrigger>
+                <SelectTrigger className="dark:bg-slate-900 dark:border-slate-600">
                   <SelectValue />
                 </SelectTrigger>
-                <SelectContent>
+                <SelectContent className="dark:bg-slate-800 dark:border-slate-700">
                   {deadlineTypes.map(type => (
-                    <SelectItem key={type.value} value={type.value}>{type.label}</SelectItem>
+                    <SelectItem key={type.value} value={type.value} className="dark:text-slate-200">{type.label}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             </div>
 
             <div className="space-y-2">
-              <Label>תיאור *</Label>
+              <Label className="dark:text-slate-300">{t('docketing.description_field')}</Label>
               <Input
                 value={formData.description}
                 onChange={(e) => setFormData({ ...formData, description: e.target.value })}
                 required
+                className="dark:bg-slate-900 dark:border-slate-600"
               />
             </div>
 
             <div className="space-y-2">
-              <Label>תאריך יעד *</Label>
+              <Label className="dark:text-slate-300">{t('docketing.due_date_field')}</Label>
               <Input
                 type="date"
                 value={formData.due_date}
                 onChange={(e) => setFormData({ ...formData, due_date: e.target.value })}
                 required
+                className="dark:bg-slate-900 dark:border-slate-600"
               />
             </div>
 
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label>תזכורת ראשונה</Label>
+                <Label className="dark:text-slate-300">{t('docketing.reminder_1')}</Label>
                 <Input
                   type="date"
                   value={formData.reminder_date_1}
                   onChange={(e) => setFormData({ ...formData, reminder_date_1: e.target.value })}
+                  className="dark:bg-slate-900 dark:border-slate-600"
                 />
               </div>
               <div className="space-y-2">
-                <Label>תזכורת שנייה</Label>
+                <Label className="dark:text-slate-300">{t('docketing.reminder_2')}</Label>
                 <Input
                   type="date"
                   value={formData.reminder_date_2}
                   onChange={(e) => setFormData({ ...formData, reminder_date_2: e.target.value })}
+                  className="dark:bg-slate-900 dark:border-slate-600"
                 />
               </div>
             </div>
@@ -456,19 +457,19 @@ export default function Docketing() {
                 checked={formData.is_critical}
                 onCheckedChange={(checked) => setFormData({ ...formData, is_critical: checked })}
               />
-              <Label htmlFor="is_critical" className="cursor-pointer">מועד קריטי</Label>
+              <Label htmlFor="is_critical" className="cursor-pointer dark:text-slate-300">{t('docketing.critical')}</Label>
             </div>
 
             <div className="flex justify-end gap-3 pt-4">
-              <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)}>
-                ביטול
+              <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)} className="dark:border-slate-600">
+                {t('docketing.cancel')}
               </Button>
               <Button 
                 type="submit" 
-                className="bg-slate-800 hover:bg-slate-700"
+                className="bg-slate-800 hover:bg-slate-700 dark:bg-slate-700"
                 disabled={createMutation.isPending}
               >
-                יצירה
+                {t('docketing.create')}
               </Button>
             </div>
           </form>

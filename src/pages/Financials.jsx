@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { base44 } from '@/api/base44Client';
+import { useTranslation } from 'react-i18next';
 import { format, startOfMonth, endOfMonth, isAfter, isBefore } from 'date-fns';
 import PageHeader from '../components/ui/PageHeader';
 import DataTable from '../components/ui/DataTable';
@@ -13,15 +14,13 @@ import {
   TrendingUp,
   CreditCard,
   Plus,
-  Eye,
   Trash2,
   MoreHorizontal,
-  FileText,
-  DollarSign
+  FileText
 } from 'lucide-react';
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Select,
@@ -45,23 +44,8 @@ import {
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 
-const invoiceStatuses = [
-  { value: 'draft', label: 'טיוטה' },
-  { value: 'sent', label: 'נשלח' },
-  { value: 'viewed', label: 'נצפה' },
-  { value: 'partially_paid', label: 'שולם חלקית' },
-  { value: 'paid', label: 'שולם' },
-  { value: 'overdue', label: 'באיחור' },
-  { value: 'cancelled', label: 'בוטל' },
-];
-
-const currencies = [
-  { value: 'ILS', label: '₪ שקל' },
-  { value: 'USD', label: '$ דולר' },
-  { value: 'EUR', label: '€ יורו' },
-];
-
 export default function Financials() {
+  const { t } = useTranslation();
   const queryClient = useQueryClient();
   const today = new Date();
   const monthStart = startOfMonth(today);
@@ -187,9 +171,6 @@ export default function Financials() {
     })
     .reduce((sum, i) => sum + (i.total || 0), 0);
 
-  const paidInvoices = invoices.filter(i => i.status === 'paid');
-  const totalPaid = paidInvoices.reduce((sum, i) => sum + (i.total || 0), 0);
-
   const pendingInvoices = invoices.filter(i => ['sent', 'viewed', 'partially_paid'].includes(i.status));
   const totalPending = pendingInvoices.reduce((sum, i) => sum + ((i.total || 0) - (i.paid_amount || 0)), 0);
 
@@ -200,32 +181,32 @@ export default function Financials() {
 
   const invoiceColumns = [
     {
-      header: 'מספר',
+      header: t('financials.invoice_number'),
       accessor: 'invoice_number',
-      render: (row) => <span className="font-medium text-slate-800">{row.invoice_number}</span>,
+      render: (row) => <span className="font-medium text-slate-800 dark:text-slate-200">{row.invoice_number}</span>,
     },
     {
-      header: 'לקוח',
+      header: t('financials.client'),
       accessor: 'client_id',
-      render: (row) => getClientName(row.client_id),
+      render: (row) => <span className="dark:text-slate-300">{getClientName(row.client_id)}</span>,
     },
     {
-      header: 'תאריך',
+      header: t('financials.date'),
       accessor: 'issued_date',
-      render: (row) => row.issued_date ? format(new Date(row.issued_date), 'dd/MM/yyyy') : '-',
+      render: (row) => <span className="dark:text-slate-300">{row.issued_date ? format(new Date(row.issued_date), 'dd/MM/yyyy') : '-'}</span>,
     },
     {
-      header: 'סכום',
+      header: t('financials.amount'),
       accessor: 'total',
       render: (row) => (
-        <span className="font-semibold">
+        <span className="font-semibold dark:text-slate-200">
           {row.currency === 'USD' ? '$' : row.currency === 'EUR' ? '€' : '₪'}
           {(row.total || 0).toLocaleString()}
         </span>
       ),
     },
     {
-      header: 'סטטוס',
+      header: t('financials.status'),
       accessor: 'status',
       render: (row) => <StatusBadge status={row.status} />,
     },
@@ -234,26 +215,26 @@ export default function Financials() {
       render: (row) => (
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="ghost" size="icon" className="h-8 w-8">
+            <Button variant="ghost" size="icon" className="h-8 w-8 dark:hover:bg-slate-700">
               <MoreHorizontal className="w-4 h-4" />
             </Button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
+          <DropdownMenuContent align="end" className="dark:bg-slate-800 dark:border-slate-700">
             {row.status !== 'paid' && row.status !== 'cancelled' && (
               <DropdownMenuItem 
                 onClick={() => updateInvoiceStatusMutation.mutate({ id: row.id, status: 'paid' })}
-                className="flex items-center gap-2"
+                className="flex items-center gap-2 dark:text-slate-200 dark:hover:bg-slate-700"
               >
                 <CreditCard className="w-4 h-4" />
-                סמן כשולם
+                {t('financials.mark_as_paid')}
               </DropdownMenuItem>
             )}
             <DropdownMenuItem 
               onClick={() => deleteInvoiceMutation.mutate(row.id)}
-              className="flex items-center gap-2 text-rose-600"
+              className="flex items-center gap-2 text-rose-600 dark:text-rose-400 dark:hover:bg-slate-700"
             >
               <Trash2 className="w-4 h-4" />
-              מחיקה
+              {t('financials.delete')}
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
@@ -264,32 +245,32 @@ export default function Financials() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="כספים"
-        subtitle="ניהול חשבוניות ורישום שעות"
+        title={t('financials.title')}
+        subtitle={t('financials.subtitle')}
       />
 
       {/* Stats */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
         <StatsCard
-          title="הכנסות החודש"
+          title={t('financials.monthly_revenue')}
           value={`₪${monthlyRevenue.toLocaleString()}`}
           icon={TrendingUp}
           color="green"
         />
         <StatsCard
-          title="ממתין לתשלום"
+          title={t('financials.pending_payment')}
           value={`₪${totalPending.toLocaleString()}`}
           icon={Clock}
           color="amber"
         />
         <StatsCard
-          title="שעות שטרם חויבו"
+          title={t('financials.unbilled_hours')}
           value={`₪${unbilledAmount.toLocaleString()}`}
           icon={Receipt}
           color="purple"
         />
         <StatsCard
-          title="סה״כ שעות"
+          title={t('financials.total_hours')}
           value={totalHours.toFixed(1)}
           icon={FileText}
           color="blue"
@@ -297,25 +278,25 @@ export default function Financials() {
       </div>
 
       <Tabs defaultValue="invoices" className="space-y-6">
-        <TabsList className="bg-white border">
-          <TabsTrigger value="invoices">חשבוניות</TabsTrigger>
-          <TabsTrigger value="time">רישום שעות</TabsTrigger>
+        <TabsList className="bg-white dark:bg-slate-800 border dark:border-slate-700">
+          <TabsTrigger value="invoices" className="dark:text-slate-300 dark:data-[state=active]:bg-slate-700">{t('financials.invoices_tab')}</TabsTrigger>
+          <TabsTrigger value="time" className="dark:text-slate-300 dark:data-[state=active]:bg-slate-700">{t('financials.time_entries_tab')}</TabsTrigger>
         </TabsList>
 
         <TabsContent value="invoices" className="space-y-4">
           <div className="flex justify-end">
-            <Button onClick={() => setIsInvoiceDialogOpen(true)} className="bg-slate-800 gap-2">
+            <Button onClick={() => setIsInvoiceDialogOpen(true)} className="bg-slate-800 gap-2 dark:bg-slate-700">
               <Plus className="w-4 h-4" />
-              חשבונית חדשה
+              {t('financials.new_invoice')}
             </Button>
           </div>
 
           {invoices.length === 0 && !invoicesLoading ? (
             <EmptyState
               icon={Receipt}
-              title="אין חשבוניות"
-              description="צור את החשבונית הראשונה"
-              actionLabel="חשבונית חדשה"
+              title={t('financials.no_invoices')}
+              description={t('financials.create_first_invoice')}
+              actionLabel={t('financials.new_invoice')}
               onAction={() => setIsInvoiceDialogOpen(true)}
             />
           ) : (
@@ -323,55 +304,55 @@ export default function Financials() {
               columns={invoiceColumns}
               data={invoices}
               isLoading={invoicesLoading}
-              emptyMessage="לא נמצאו חשבוניות"
+              emptyMessage={t('financials.no_invoice_results')}
             />
           )}
         </TabsContent>
 
         <TabsContent value="time" className="space-y-4">
           <div className="flex justify-end">
-            <Button onClick={() => setIsTimeEntryDialogOpen(true)} className="bg-slate-800 gap-2">
+            <Button onClick={() => setIsTimeEntryDialogOpen(true)} className="bg-slate-800 gap-2 dark:bg-slate-700">
               <Plus className="w-4 h-4" />
-              רישום שעות
+              {t('financials.new_time_entry')}
             </Button>
           </div>
 
           {timeEntries.length === 0 && !timeEntriesLoading ? (
             <EmptyState
               icon={Clock}
-              title="אין רישומי שעות"
-              description="התחל לרשום את הזמן שהשקעת"
-              actionLabel="רישום שעות"
+              title={t('financials.no_time_entries')}
+              description={t('financials.start_logging_time')}
+              actionLabel={t('financials.new_time_entry')}
               onAction={() => setIsTimeEntryDialogOpen(true)}
             />
           ) : (
-            <Card>
+            <Card className="dark:bg-slate-800 dark:border-slate-700">
               <CardContent className="p-0">
-                <div className="divide-y divide-slate-100">
+                <div className="divide-y divide-slate-100 dark:divide-slate-700">
                   {timeEntries.map(entry => (
                     <div key={entry.id} className="flex items-center gap-4 p-4">
                       <div className="flex-1 min-w-0">
-                        <p className="font-medium text-slate-800">{entry.description}</p>
-                        <div className="flex gap-3 text-sm text-slate-500 mt-1">
+                        <p className="font-medium text-slate-800 dark:text-slate-200">{entry.description}</p>
+                        <div className="flex gap-3 text-sm text-slate-500 dark:text-slate-400 mt-1">
                           <span>{getCaseNumber(entry.case_id)}</span>
                           <span>•</span>
                           <span>{format(new Date(entry.date_worked), 'dd/MM/yyyy')}</span>
                         </div>
                       </div>
                       <div className="text-left">
-                        <p className="font-semibold">{entry.hours} שעות</p>
+                        <p className="font-semibold dark:text-slate-200">{entry.hours} {t('financials.hours_label')}</p>
                         {entry.is_billable && (
-                          <p className="text-sm text-emerald-600">
+                          <p className="text-sm text-emerald-600 dark:text-emerald-400">
                             ₪{((entry.hours || 0) * (entry.rate || 0)).toLocaleString()}
                           </p>
                         )}
                       </div>
                       {entry.billed ? (
-                        <span className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded">חויב</span>
+                        <span className="text-xs bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 px-2 py-1 rounded">{t('financials.billed')}</span>
                       ) : entry.is_billable ? (
-                        <span className="text-xs bg-amber-100 text-amber-700 px-2 py-1 rounded">לחיוב</span>
+                        <span className="text-xs bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 px-2 py-1 rounded">{t('financials.to_be_billed')}</span>
                       ) : (
-                        <span className="text-xs bg-slate-100 text-slate-600 px-2 py-1 rounded">לא לחיוב</span>
+                        <span className="text-xs bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-400 px-2 py-1 rounded">{t('financials.not_billable')}</span>
                       )}
                     </div>
                   ))}
@@ -384,29 +365,30 @@ export default function Financials() {
 
       {/* Invoice Dialog */}
       <Dialog open={isInvoiceDialogOpen} onOpenChange={setIsInvoiceDialogOpen}>
-        <DialogContent className="max-w-lg">
+        <DialogContent className="max-w-lg dark:bg-slate-800 dark:border-slate-700">
           <DialogHeader>
-            <DialogTitle>חשבונית חדשה</DialogTitle>
+            <DialogTitle className="dark:text-slate-200">{t('financials.invoice_dialog_title')}</DialogTitle>
           </DialogHeader>
           <form onSubmit={(e) => { e.preventDefault(); createInvoiceMutation.mutate(invoiceForm); }} className="space-y-4 mt-4">
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label>מספר חשבונית *</Label>
+                <Label className="dark:text-slate-300">{t('financials.invoice_number_field')}</Label>
                 <Input
                   value={invoiceForm.invoice_number}
                   onChange={(e) => setInvoiceForm({ ...invoiceForm, invoice_number: e.target.value })}
                   required
+                  className="dark:bg-slate-900 dark:border-slate-600"
                 />
               </div>
               <div className="space-y-2">
-                <Label>לקוח *</Label>
+                <Label className="dark:text-slate-300">{t('financials.client_field')}</Label>
                 <Select value={invoiceForm.client_id} onValueChange={(v) => setInvoiceForm({ ...invoiceForm, client_id: v })}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="בחר לקוח" />
+                  <SelectTrigger className="dark:bg-slate-900 dark:border-slate-600">
+                    <SelectValue placeholder={t('financials.select_client')} />
                   </SelectTrigger>
-                  <SelectContent>
+                  <SelectContent className="dark:bg-slate-800 dark:border-slate-700">
                     {clients.map(c => (
-                      <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                      <SelectItem key={c.id} value={c.id} className="dark:text-slate-200">{c.name}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
@@ -415,82 +397,87 @@ export default function Financials() {
 
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label>תאריך הנפקה</Label>
+                <Label className="dark:text-slate-300">{t('financials.issued_date')}</Label>
                 <Input
                   type="date"
                   value={invoiceForm.issued_date}
                   onChange={(e) => setInvoiceForm({ ...invoiceForm, issued_date: e.target.value })}
+                  className="dark:bg-slate-900 dark:border-slate-600"
                 />
               </div>
               <div className="space-y-2">
-                <Label>תאריך לתשלום</Label>
+                <Label className="dark:text-slate-300">{t('financials.due_date')}</Label>
                 <Input
                   type="date"
                   value={invoiceForm.due_date}
                   onChange={(e) => setInvoiceForm({ ...invoiceForm, due_date: e.target.value })}
+                  className="dark:bg-slate-900 dark:border-slate-600"
                 />
               </div>
             </div>
 
             <div className="grid grid-cols-3 gap-4">
               <div className="space-y-2">
-                <Label>מטבע</Label>
+                <Label className="dark:text-slate-300">{t('financials.currency')}</Label>
                 <Select value={invoiceForm.currency} onValueChange={(v) => setInvoiceForm({ ...invoiceForm, currency: v })}>
-                  <SelectTrigger>
+                  <SelectTrigger className="dark:bg-slate-900 dark:border-slate-600">
                     <SelectValue />
                   </SelectTrigger>
-                  <SelectContent>
-                    {currencies.map(c => (
-                      <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>
-                    ))}
+                  <SelectContent className="dark:bg-slate-800 dark:border-slate-700">
+                    <SelectItem value="ILS" className="dark:text-slate-200">{t('financials.currency_ils')}</SelectItem>
+                    <SelectItem value="USD" className="dark:text-slate-200">{t('financials.currency_usd')}</SelectItem>
+                    <SelectItem value="EUR" className="dark:text-slate-200">{t('financials.currency_eur')}</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
               <div className="space-y-2">
-                <Label>סכום לפני מע״מ</Label>
+                <Label className="dark:text-slate-300">{t('financials.subtotal')}</Label>
                 <Input
                   type="number"
                   value={invoiceForm.subtotal}
                   onChange={(e) => setInvoiceForm({ ...invoiceForm, subtotal: parseFloat(e.target.value) || 0 })}
+                  className="dark:bg-slate-900 dark:border-slate-600"
                 />
               </div>
               <div className="space-y-2">
-                <Label>מע״מ %</Label>
+                <Label className="dark:text-slate-300">{t('financials.tax_rate')}</Label>
                 <Input
                   type="number"
                   value={invoiceForm.tax_rate}
                   onChange={(e) => setInvoiceForm({ ...invoiceForm, tax_rate: parseFloat(e.target.value) || 0 })}
+                  className="dark:bg-slate-900 dark:border-slate-600"
                 />
               </div>
             </div>
 
-            <div className="p-4 bg-slate-50 rounded-xl">
+            <div className="p-4 bg-slate-50 dark:bg-slate-900 rounded-xl">
               <div className="flex justify-between text-sm">
-                <span className="text-slate-500">סכום לפני מע״מ:</span>
-                <span>₪{invoiceForm.subtotal.toLocaleString()}</span>
+                <span className="text-slate-500 dark:text-slate-400">{t('financials.subtotal_label')}</span>
+                <span className="dark:text-slate-200">₪{invoiceForm.subtotal.toLocaleString()}</span>
               </div>
               <div className="flex justify-between text-sm mt-2">
-                <span className="text-slate-500">מע״מ ({invoiceForm.tax_rate}%):</span>
-                <span>₪{((invoiceForm.subtotal * invoiceForm.tax_rate) / 100).toLocaleString()}</span>
+                <span className="text-slate-500 dark:text-slate-400">{t('financials.tax_label', { rate: invoiceForm.tax_rate })}</span>
+                <span className="dark:text-slate-200">₪{((invoiceForm.subtotal * invoiceForm.tax_rate) / 100).toLocaleString()}</span>
               </div>
-              <div className="flex justify-between font-bold mt-2 pt-2 border-t">
-                <span>סה״כ:</span>
-                <span>₪{(invoiceForm.subtotal + (invoiceForm.subtotal * invoiceForm.tax_rate) / 100).toLocaleString()}</span>
+              <div className="flex justify-between font-bold mt-2 pt-2 border-t dark:border-slate-700">
+                <span className="dark:text-slate-200">{t('financials.total_label')}</span>
+                <span className="dark:text-slate-200">₪{(invoiceForm.subtotal + (invoiceForm.subtotal * invoiceForm.tax_rate) / 100).toLocaleString()}</span>
               </div>
             </div>
 
             <div className="space-y-2">
-              <Label>הערות</Label>
+              <Label className="dark:text-slate-300">{t('financials.notes')}</Label>
               <Textarea
                 value={invoiceForm.notes}
                 onChange={(e) => setInvoiceForm({ ...invoiceForm, notes: e.target.value })}
                 rows={2}
+                className="dark:bg-slate-900 dark:border-slate-600"
               />
             </div>
 
             <div className="flex justify-end gap-3 pt-4">
-              <Button type="button" variant="outline" onClick={() => setIsInvoiceDialogOpen(false)}>ביטול</Button>
-              <Button type="submit" className="bg-slate-800">יצירה</Button>
+              <Button type="button" variant="outline" onClick={() => setIsInvoiceDialogOpen(false)} className="dark:border-slate-600">{t('financials.cancel')}</Button>
+              <Button type="submit" className="bg-slate-800 dark:bg-slate-700">{t('financials.create')}</Button>
             </div>
           </form>
         </DialogContent>
@@ -498,66 +485,70 @@ export default function Financials() {
 
       {/* Time Entry Dialog */}
       <Dialog open={isTimeEntryDialogOpen} onOpenChange={setIsTimeEntryDialogOpen}>
-        <DialogContent className="max-w-lg">
+        <DialogContent className="max-w-lg dark:bg-slate-800 dark:border-slate-700">
           <DialogHeader>
-            <DialogTitle>רישום שעות</DialogTitle>
+            <DialogTitle className="dark:text-slate-200">{t('financials.time_entry_dialog_title')}</DialogTitle>
           </DialogHeader>
           <form onSubmit={(e) => { e.preventDefault(); createTimeEntryMutation.mutate(timeEntryForm); }} className="space-y-4 mt-4">
             <div className="space-y-2">
-              <Label>תיק *</Label>
+              <Label className="dark:text-slate-300">{t('financials.case_field')}</Label>
               <Select value={timeEntryForm.case_id} onValueChange={(v) => setTimeEntryForm({ ...timeEntryForm, case_id: v })}>
-                <SelectTrigger>
-                  <SelectValue placeholder="בחר תיק" />
+                <SelectTrigger className="dark:bg-slate-900 dark:border-slate-600">
+                  <SelectValue placeholder={t('financials.select_case')} />
                 </SelectTrigger>
-                <SelectContent>
+                <SelectContent className="dark:bg-slate-800 dark:border-slate-700">
                   {cases.map(c => (
-                    <SelectItem key={c.id} value={c.id}>{c.case_number}</SelectItem>
+                    <SelectItem key={c.id} value={c.id} className="dark:text-slate-200">{c.case_number}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             </div>
 
             <div className="space-y-2">
-              <Label>תיאור פעילות *</Label>
+              <Label className="dark:text-slate-300">{t('financials.activity_description')}</Label>
               <Textarea
                 value={timeEntryForm.description}
                 onChange={(e) => setTimeEntryForm({ ...timeEntryForm, description: e.target.value })}
                 required
+                className="dark:bg-slate-900 dark:border-slate-600"
               />
             </div>
 
             <div className="grid grid-cols-3 gap-4">
               <div className="space-y-2">
-                <Label>שעות *</Label>
+                <Label className="dark:text-slate-300">{t('financials.hours_field')}</Label>
                 <Input
                   type="number"
                   step="0.25"
                   value={timeEntryForm.hours}
                   onChange={(e) => setTimeEntryForm({ ...timeEntryForm, hours: e.target.value })}
                   required
+                  className="dark:bg-slate-900 dark:border-slate-600"
                 />
               </div>
               <div className="space-y-2">
-                <Label>תעריף</Label>
+                <Label className="dark:text-slate-300">{t('financials.rate_field')}</Label>
                 <Input
                   type="number"
                   value={timeEntryForm.rate}
                   onChange={(e) => setTimeEntryForm({ ...timeEntryForm, rate: parseFloat(e.target.value) })}
+                  className="dark:bg-slate-900 dark:border-slate-600"
                 />
               </div>
               <div className="space-y-2">
-                <Label>תאריך</Label>
+                <Label className="dark:text-slate-300">{t('financials.date_field')}</Label>
                 <Input
                   type="date"
                   value={timeEntryForm.date_worked}
                   onChange={(e) => setTimeEntryForm({ ...timeEntryForm, date_worked: e.target.value })}
+                  className="dark:bg-slate-900 dark:border-slate-600"
                 />
               </div>
             </div>
 
             <div className="flex justify-end gap-3 pt-4">
-              <Button type="button" variant="outline" onClick={() => setIsTimeEntryDialogOpen(false)}>ביטול</Button>
-              <Button type="submit" className="bg-slate-800">רישום</Button>
+              <Button type="button" variant="outline" onClick={() => setIsTimeEntryDialogOpen(false)} className="dark:border-slate-600">{t('financials.cancel')}</Button>
+              <Button type="submit" className="bg-slate-800 dark:bg-slate-700">{t('financials.log')}</Button>
             </div>
           </form>
         </DialogContent>
