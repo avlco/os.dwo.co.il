@@ -41,17 +41,24 @@ Deno.serve(async (req) => {
       const catchConfig = rule.catch_config || {};
       let matches = true;
 
-      // Check sender pattern - simple contains check (case insensitive)
+      // Check sender pattern - exact match or contains check (case insensitive)
       if (catchConfig.sender_pattern) {
-        const senderPattern = catchConfig.sender_pattern.toLowerCase();
-        const senderEmail = (mail.sender_email || '').toLowerCase();
-        if (!senderEmail.includes(senderPattern)) {
-          matches = false;
+        const senderPattern = catchConfig.sender_pattern.toLowerCase().trim();
+        const senderEmail = (mail.sender_email || '').toLowerCase().trim();
+        // Match if sender contains the pattern OR if pattern contains @, do exact match
+        if (senderPattern.includes('@')) {
+          if (senderEmail !== senderPattern) {
+            matches = false;
+          }
+        } else {
+          if (!senderEmail.includes(senderPattern)) {
+            matches = false;
+          }
         }
       }
 
-      // Check subject - simple contains check (supports both subject_contains and legacy subject_regex)
-      const subjectPattern = catchConfig.subject_contains || catchConfig.subject_regex;
+      // Check subject - simple contains check
+      const subjectPattern = catchConfig.subject_contains;
       if (matches && subjectPattern) {
         const subject = (mail.subject || '').toLowerCase();
         const pattern = subjectPattern.toLowerCase();
@@ -59,17 +66,19 @@ Deno.serve(async (req) => {
         // Simple contains check
         if (!subject.includes(pattern)) {
           matches = false;
-        } else {
-          // Try to extract case number using regex if it looks like a regex pattern
-          try {
-            const caseNumberRegex = /(?:case|תיק|מס[\'׳]?|no\.?)\s*[:#]?\s*(\d{4,})/i;
-            const caseMatch = (mail.subject || '').match(caseNumberRegex);
-            if (caseMatch) {
-              extractedCaseNumber = caseMatch[1];
-            }
-          } catch (e) {
-            // Ignore regex errors
+        }
+      }
+      
+      // Try to extract case number from subject (always attempt)
+      if (matches) {
+        try {
+          const caseNumberRegex = /(?:case|תיק|מס[\'׳]?|no\.?)\s*[:#]?\s*(\d{4,})/i;
+          const caseMatch = (mail.subject || '').match(caseNumberRegex);
+          if (caseMatch) {
+            extractedCaseNumber = caseMatch[1];
           }
+        } catch (e) {
+          // Ignore regex errors
         }
       }
 
