@@ -6,7 +6,6 @@ import Docketing from './pages/Docketing';
 import Financials from './pages/Financials';
 import MailAnalytics from './pages/MailAnalytics';
 import MailRoom from './pages/MailRoom';
-import MailRules from './pages/MailRules';
 import MailView from './pages/MailView';
 import Settings from './pages/Settings';
 import Tasks from './pages/Tasks';
@@ -23,7 +22,6 @@ export const PAGES = {
     "Financials": Financials,
     "MailAnalytics": MailAnalytics,
     "MailRoom": MailRoom,
-    "MailRules": MailRules,
     "MailView": MailView,
     "Settings": Settings,
     "Tasks": Tasks,
