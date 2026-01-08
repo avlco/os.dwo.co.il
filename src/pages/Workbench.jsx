@@ -242,4 +242,135 @@ export default function Workbench() {
         <div className="flex-1 flex items-start justify-center pt-8">
           <div className="w-full max-w-2xl">
             <ExecutionSummary 
-              results={
+              results={executionResults} 
+              onClose={() => {
+                setShowSummary(false);
+                setExecutionResults(null);
+              }}
+            />
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  const BackArrow = isRTL ? ArrowRight : ArrowLeft;
+
+  return (
+    <div className="h-[calc(100vh-8rem)] flex flex-col">
+      {/* Header */}
+      <div className="flex items-center gap-4 mb-4 flex-shrink-0">
+        <Link to={createPageUrl('MailRoom')}>
+          <Button variant="ghost" size="icon" className="rounded-xl dark:hover:bg-slate-700">
+            <BackArrow className="w-5 h-5" />
+          </Button>
+        </Link>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-3">
+            <h1 className="text-xl font-bold text-slate-800 dark:text-slate-200">
+              {t('workbench.title')}
+            </h1>
+          </div>
+          <p className="text-slate-500 dark:text-slate-400 mt-1 truncate text-sm">
+            {currentTask.title}
+          </p>
+        </div>
+      </div>
+
+      {/* Split View - Stack on mobile, side-by-side on desktop */}
+      <div className="flex-1 min-h-0">
+        {isMobile ? (
+          // Mobile: Stack layout
+          <div className="h-full flex flex-col gap-4 overflow-auto">
+            <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-4">
+              <TaskControlPanel
+                task={currentTask}
+                cases={cases}
+                clients={clients}
+                formData={formData}
+                setFormData={setFormData}
+                suggestedActions={suggestedActions}
+                onActionToggle={handleActionToggle}
+                onActionUpdate={handleActionUpdate}
+                onSave={handleSave}
+                onApprove={handleApproveAndExecute}
+                onSkip={handleSkip}
+                isApproving={executeActionsMutation.isPending}
+                processingActionIndex={processingActionIndex}
+              />
+            </div>
+            <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-4 min-h-[400px]">
+              <MailContent mail={currentMail} />
+            </div>
+          </div>
+        ) : (
+          // Desktop: Resizable split view
+          <ResizablePanelGroup 
+            direction="horizontal" 
+            className="h-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800"
+          >
+            {isRTL ? (
+              <>
+                {/* RTL: Mail on Right, Controls on Left */}
+                <ResizablePanel defaultSize={65} minSize={40}>
+                  <div className="h-full p-4 overflow-hidden">
+                    <MailContent mail={currentMail} />
+                  </div>
+                </ResizablePanel>
+                <ResizableHandle withHandle className="bg-slate-200 dark:bg-slate-700" />
+                <ResizablePanel defaultSize={35} minSize={25}>
+                  <div className="h-full p-4 overflow-hidden">
+                    <TaskControlPanel
+                      task={currentTask}
+                      cases={cases}
+                      clients={clients}
+                      formData={formData}
+                      setFormData={setFormData}
+                      suggestedActions={suggestedActions}
+                      onActionToggle={handleActionToggle}
+                      onActionUpdate={handleActionUpdate}
+                      onSave={handleSave}
+                      onApprove={handleApproveAndExecute}
+                      onSkip={handleSkip}
+                      isApproving={executeActionsMutation.isPending}
+                      processingActionIndex={processingActionIndex}
+                    />
+                  </div>
+                </ResizablePanel>
+              </>
+            ) : (
+              <>
+                {/* LTR: Controls on Left, Mail on Right */}
+                <ResizablePanel defaultSize={35} minSize={25}>
+                  <div className="h-full p-4 overflow-hidden">
+                    <TaskControlPanel
+                      task={currentTask}
+                      cases={cases}
+                      clients={clients}
+                      formData={formData}
+                      setFormData={setFormData}
+                      suggestedActions={suggestedActions}
+                      onActionToggle={handleActionToggle}
+                      onActionUpdate={handleActionUpdate}
+                      onSave={handleSave}
+                      onApprove={handleApproveAndExecute}
+                      onSkip={handleSkip}
+                      isApproving={executeActionsMutation.isPending}
+                      processingActionIndex={processingActionIndex}
+                    />
+                  </div>
+                </ResizablePanel>
+                <ResizableHandle withHandle className="bg-slate-200 dark:bg-slate-700" />
+                <ResizablePanel defaultSize={65} minSize={40}>
+                  <div className="h-full p-4 overflow-hidden">
+                    <MailContent mail={currentMail} />
+                  </div>
+                </ResizablePanel>
+              </>
+            )}
+          </ResizablePanelGroup>
+        )}
+      </div>
+    </div>
+  );
+}
