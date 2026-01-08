@@ -30,44 +30,46 @@ Deno.serve(async (req) => {
     // Update mail status to processing
     await base44.entities.Mail.update(mail_id, { processing_status: 'processing' });
 
-    // Fetch active mail rules sorted by priority
+    // Fetch active mail rules (process in order of arrival/creation)
     const rules = await base44.entities.MailRule.filter({ is_active: true });
-    const sortedRules = rules.sort((a, b) => (a.priority || 10) - (b.priority || 10));
 
     let matchedRule = null;
     let extractedCaseNumber = null;
 
     // Try to match rules
-    for (const rule of sortedRules) {
+    for (const rule of rules) {
       const catchConfig = rule.catch_config || {};
       let matches = true;
 
-      // Check sender pattern
+      // Check sender pattern - simple contains check (case insensitive)
       if (catchConfig.sender_pattern) {
-        try {
-          const senderRegex = new RegExp(catchConfig.sender_pattern, 'i');
-          if (!senderRegex.test(mail.sender_email || '')) {
-            matches = false;
-          }
-        } catch (e) {
-          console.log('Invalid sender regex:', catchConfig.sender_pattern);
+        const senderPattern = catchConfig.sender_pattern.toLowerCase();
+        const senderEmail = (mail.sender_email || '').toLowerCase();
+        if (!senderEmail.includes(senderPattern)) {
           matches = false;
         }
       }
 
-      // Check subject regex and extract case number
-      if (matches && catchConfig.subject_regex) {
-        try {
-          const subjectRegex = new RegExp(catchConfig.subject_regex, 'i');
-          const match = (mail.subject || '').match(subjectRegex);
-          if (match) {
-            extractedCaseNumber = match[1] || match[0];
-          } else {
-            matches = false;
-          }
-        } catch (e) {
-          console.log('Invalid subject regex:', catchConfig.subject_regex);
+      // Check subject - simple contains check (supports both subject_contains and legacy subject_regex)
+      const subjectPattern = catchConfig.subject_contains || catchConfig.subject_regex;
+      if (matches && subjectPattern) {
+        const subject = (mail.subject || '').toLowerCase();
+        const pattern = subjectPattern.toLowerCase();
+        
+        // Simple contains check
+        if (!subject.includes(pattern)) {
           matches = false;
+        } else {
+          // Try to extract case number using regex if it looks like a regex pattern
+          try {
+            const caseNumberRegex = /(?:case|תיק|מס[\'׳]?|no\.?)\s*[:#]?\s*(\d{4,})/i;
+            const caseMatch = (mail.subject || '').match(caseNumberRegex);
+            if (caseMatch) {
+              extractedCaseNumber = caseMatch[1];
+            }
+          } catch (e) {
+            // Ignore regex errors
+          }
         }
       }
 
@@ -105,11 +107,11 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Try to find related case
+    // Try to find related case based on extracted case number
     let relatedCase = null;
     let relatedClient = null;
 
-    if (extractedCaseNumber && matchedRule.auto_link_case) {
+    if (extractedCaseNumber) {
       const cases = await base44.entities.Case.filter({ case_number: extractedCaseNumber });
       if (cases && cases.length > 0) {
         relatedCase = cases[0];

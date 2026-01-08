@@ -8,6 +8,7 @@ import { format } from 'date-fns';
 import { he } from 'date-fns/locale';
 import PageHeader from '../components/ui/PageHeader';
 import StatusBadge from '../components/ui/StatusBadge';
+import MailRulesPanel from '../components/mailroom/MailRulesPanel';
 import {
   Mail,
   Inbox,
@@ -21,7 +22,8 @@ import {
   Search,
   Play,
   CheckSquare,
-  Square
+  Square,
+  Settings
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -45,6 +47,7 @@ export default function MailRoom() {
   const [processingMail, setProcessingMail] = useState(null);
   const [selectedMails, setSelectedMails] = useState([]);
   const [bulkProcessing, setBulkProcessing] = useState(false);
+  const [showRules, setShowRules] = useState(false);
 
   const { data: mails = [], isLoading: mailsLoading } = useQuery({
     queryKey: ['mails'],
@@ -143,12 +146,31 @@ export default function MailRoom() {
 
   const ArrowIcon = isRTL ? ArrowLeft : ArrowRight;
 
+  // Show Rules Panel when showRules is true
+  if (showRules) {
+    return <MailRulesPanel onClose={() => setShowRules(false)} />;
+  }
+
   return (
     <div className="space-y-6">
-      <PageHeader
-        title={isRTL ? "חדר דואר" : "Mail Room"}
-        subtitle={isRTL ? "ניהול מיילים נכנסים ומשימות" : "Manage incoming emails and tasks"}
-      />
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-slate-800 dark:text-slate-200 tracking-tight">
+            {isRTL ? "חדר דואר" : "Mail Room"}
+          </h1>
+          <p className="text-slate-500 dark:text-slate-400 mt-1">
+            {isRTL ? "ניהול מיילים נכנסים ומשימות" : "Manage incoming emails and tasks"}
+          </p>
+        </div>
+        <Button 
+          variant="outline" 
+          onClick={() => setShowRules(true)}
+          className="gap-2 dark:border-slate-600 dark:hover:bg-slate-700"
+        >
+          <Settings className="w-4 h-4" />
+          {isRTL ? 'הגדרות חוקים' : 'Rule Settings'}
+        </Button>
+      </div>
 
       {/* Stats Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">

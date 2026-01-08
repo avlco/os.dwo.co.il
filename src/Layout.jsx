@@ -41,17 +41,16 @@ function LayoutContent({ children, currentPageName }) {
   const isRTL = i18n.language === 'he';
 
   const navigation = [
-    { name: t('nav.dashboard'), href: 'Dashboard', icon: LayoutDashboard },
-    { name: t('nav.mail_room'), href: 'MailRoom', icon: Mail },
-    { name: t('nav.cases'), href: 'Cases', icon: Briefcase },
-    { name: t('nav.clients'), href: 'Clients', icon: Users },
-    { name: t('nav.docketing'), href: 'Docketing', icon: Calendar },
-    { name: t('nav.tasks'), href: 'Tasks', icon: FileText },
-    { name: t('nav.financials'), href: 'Financials', icon: Receipt },
-    { name: t('nav.mail_rules'), href: 'MailRules', icon: Cog },
-    { name: i18n.language === 'he' ? 'אנליטיקה' : 'Analytics', href: 'MailAnalytics', icon: Bell },
-    { name: t('nav.settings'), href: 'Settings', icon: Settings },
-  ];
+        { name: t('nav.dashboard'), href: 'Dashboard', icon: LayoutDashboard },
+        { name: t('nav.mail_room'), href: 'MailRoom', icon: Mail },
+        { name: t('nav.cases'), href: 'Cases', icon: Briefcase },
+        { name: t('nav.clients'), href: 'Clients', icon: Users },
+        { name: t('nav.docketing'), href: 'Docketing', icon: Calendar },
+        { name: t('nav.tasks'), href: 'Tasks', icon: FileText },
+        { name: t('nav.financials'), href: 'Financials', icon: Receipt },
+        { name: i18n.language === 'he' ? 'אנליטיקה' : 'Analytics', href: 'MailAnalytics', icon: Bell },
+        { name: t('nav.settings'), href: 'Settings', icon: Settings },
+      ];
 
   useEffect(() => {
     loadUser();

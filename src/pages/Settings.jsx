@@ -116,6 +116,7 @@ export default function Settings() {
         </TabsList>
 
         <TabsContent value="profile">
+          <div className="max-w-4xl mx-auto">
           <Card className="dark:bg-slate-800 dark:border-slate-700">
             <CardHeader>
               <CardTitle className="dark:text-slate-100">{t('settings.personal_details')}</CardTitle>
@@ -178,9 +179,11 @@ export default function Settings() {
               </div>
             </CardContent>
           </Card>
+          </div>
         </TabsContent>
 
         <TabsContent value="notifications">
+          <div className="max-w-4xl mx-auto">
           <Card className="dark:bg-slate-800 dark:border-slate-700">
             <CardHeader>
               <CardTitle className="dark:text-slate-100">{t('settings.notification_preferences')}</CardTitle>
@@ -239,9 +242,11 @@ export default function Settings() {
               </div>
             </CardContent>
           </Card>
+          </div>
         </TabsContent>
 
         <TabsContent value="security">
+          <div className="max-w-4xl mx-auto">
           <Card className="dark:bg-slate-800 dark:border-slate-700">
             <CardHeader>
               <CardTitle className="dark:text-slate-100">{t('settings.security_password')}</CardTitle>
@@ -270,9 +275,11 @@ export default function Settings() {
               </div>
             </CardContent>
           </Card>
+          </div>
         </TabsContent>
 
         <TabsContent value="preferences">
+          <div className="max-w-4xl mx-auto">
           <Card className="dark:bg-slate-800 dark:border-slate-700">
             <CardHeader>
               <CardTitle className="dark:text-slate-100">{t('settings.system_preferences')}</CardTitle>
@@ -312,10 +319,13 @@ export default function Settings() {
               </div>
             </CardContent>
           </Card>
+          </div>
         </TabsContent>
 
         <TabsContent value="users">
-          <UserManagement currentUser={user} />
+          <div className="max-w-4xl mx-auto">
+            <UserManagement currentUser={user} />
+          </div>
         </TabsContent>
       </Tabs>
     </div>
