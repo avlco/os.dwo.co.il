@@ -7,7 +7,8 @@ import { createPageUrl } from '../utils';
 import { format } from 'date-fns';
 import { he } from 'date-fns/locale';
 import StatusBadge from '../components/ui/StatusBadge';
-import MailRulesPanel from '../components/mailroom/MailRulesPanel';
+import AutomationRulesManager from '../components/settings/AutomationRulesManager';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
   Mail,
   Inbox,
@@ -44,7 +45,7 @@ export default function MailRoom() {
   const [processingMail, setProcessingMail] = useState(null);
   const [selectedMails, setSelectedMails] = useState([]);
   const [bulkProcessing, setBulkProcessing] = useState(false);
-  const [showRules, setShowRules] = useState(false);
+  const [isAutomationManagerOpen, setIsAutomationManagerOpen] = useState(false);
 
   const { data: mails = [], isLoading: mailsLoading } = useQuery({
     queryKey: ['mails'],
@@ -138,11 +139,6 @@ export default function MailRoom() {
 
   const ArrowIcon = isRTL ? ArrowLeft : ArrowRight;
 
-  // Show Rules Panel when showRules is true
-  if (showRules) {
-    return <MailRulesPanel onClose={() => setShowRules(false)} />;
-  }
-
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -156,11 +152,11 @@ export default function MailRoom() {
         </div>
         <Button 
           variant="outline" 
-          onClick={() => setShowRules(true)}
+          onClick={() => setIsAutomationManagerOpen(true)}
           className="gap-2 dark:border-slate-600 dark:hover:bg-slate-700"
         >
           <Settings className="w-4 h-4" />
-          {t('mail_room.rule_settings')}
+          {t('settings.automation_rules')}
         </Button>
       </div>
 
@@ -439,6 +435,17 @@ export default function MailRoom() {
           </Card>
         </TabsContent>
       </Tabs>
+
+      <Dialog open={isAutomationManagerOpen} onOpenChange={setIsAutomationManagerOpen}>
+        <DialogContent className="sm:max-w-[700px] lg:max-w-[900px] max-h-[90vh] overflow-y-auto dark:bg-slate-800 dark:border-slate-700">
+          <DialogHeader>
+            <DialogTitle className="dark:text-slate-100">
+              {t('settings.automation_rules')}
+            </DialogTitle>
+          </DialogHeader>
+          <AutomationRulesManager />
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
