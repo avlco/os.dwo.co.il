@@ -5,6 +5,7 @@ import { useTranslation } from 'react-i18next';
 import { useTheme } from '../components/ThemeProvider';
 import PageHeader from '../components/ui/PageHeader';
 import UserManagement from '../components/settings/UserManagement';
+import AutomationRulesManager from '../components/settings/AutomationRulesManager';
 import {
   User,
   Bell,
@@ -111,6 +112,12 @@ export default function Settings() {
             <TabsTrigger value="users" className="gap-2 dark:text-slate-300 dark:data-[state=active]:bg-slate-700">
               <Users className="w-4 h-4" />
               {t('settings.user_management')}
+            </TabsTrigger>
+          )}
+          {user?.role === 'admin' && (
+            <TabsTrigger value="automation" className="gap-2 dark:text-slate-300 dark:data-[state=active]:bg-slate-700">
+              <SettingsIcon className="w-4 h-4" />
+              {t('settings.automation_rules')}
             </TabsTrigger>
           )}
         </TabsList>
@@ -325,6 +332,12 @@ export default function Settings() {
         <TabsContent value="users">
           <div className="max-w-4xl mx-auto">
             <UserManagement currentUser={user} />
+          </div>
+        </TabsContent>
+
+        <TabsContent value="automation">
+          <div className="max-w-4xl mx-auto">
+            <AutomationRulesManager />
           </div>
         </TabsContent>
       </Tabs>
