@@ -2,17 +2,12 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.6';
 import pdf from 'npm:pdf-parse@1.1.1';
 
 /**
- * Parse PDF content from URL and extract text
- * @param {string} fileUrl - URL of the PDF file
- * @returns {Promise<string>} - Extracted text content
+ * Extract text from PDF file
  */
 async function extractTextFromPdf(fileUrl) {
   try {
     const response = await fetch(fileUrl);
-    if (!response.ok) {
-      console.error('Failed to fetch PDF:', response.status);
-      return '';
-    }
+    if (!response.ok) return '';
     const arrayBuffer = await response.arrayBuffer();
     const buffer = new Uint8Array(arrayBuffer);
     const data = await pdf(buffer);
@@ -24,152 +19,120 @@ async function extractTextFromPdf(fileUrl) {
 }
 
 /**
- * Extract identifier from text using anchor text pattern
- * @param {string} text - The text to search in
- * @param {string} anchorText - The anchor pattern (can include {VALUE} placeholder)
- * @returns {string|null} - Extracted value or null
+ * Extract value using anchor text (Anchor-based extraction)
+ * Looks for the anchor text and extracts what comes after it
  */
-function extractIdentifier(text, anchorText) {
+function extractByAnchor(text, anchorText) {
   if (!text || !anchorText) return null;
   
   try {
-    // If anchor contains {VALUE}, use it as a template
-    if (anchorText.includes('{VALUE}')) {
-      // Escape special regex chars except {VALUE}
-      const escaped = anchorText.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      const pattern = escaped.replace('\\{VALUE\\}', '([\\w\\d\\-\\/]+)');
-      const regex = new RegExp(pattern, 'i');
-      const match = text.match(regex);
-      return match ? match[1].trim() : null;
-    }
-    
-    // Otherwise, look for number after anchor text
+    // Escape special regex characters in anchor
     const escapedAnchor = anchorText.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    const regex = new RegExp(escapedAnchor + '\\s*[:#]?\\s*([\\w\\d\\-\\/]+)', 'i');
+    
+    // Pattern: anchor followed by optional separators, then capture alphanumeric value
+    const regex = new RegExp(escapedAnchor + '\\s*[:#\\-]?\\s*([\\w\\d\\-\\/\\.]+)', 'i');
     const match = text.match(regex);
+    
     return match ? match[1].trim() : null;
   } catch (e) {
-    console.error('Error extracting identifier:', e);
+    console.error('Error in extractByAnchor:', e);
     return null;
   }
 }
 
 /**
- * Find case by external identifier
- * @param {object} base44 - SDK client
- * @param {string} identifierType - Type of identifier (e.g., "IL_Official_No")
- * @param {string} identifierValue - The value to search for
- * @returns {object|null} - Found case or null
+ * Replace tokens in template with actual values
+ * Tokens: {Case_No}, {Client_Name}, {Case_Type}, {Official_No}, {Mail_Subject}, {Mail_Date}, {Identifier_Found}
  */
-async function findCaseByExternalIdentifier(base44, identifierType, identifierValue) {
+function replaceTokens(template, context) {
+  if (!template) return '';
+  
+  const { caseData, clientData, mailData, extractedIdentifier } = context;
+  
+  return template
+    .replace(/\{Case_No\}/g, caseData?.case_number || '')
+    .replace(/\{Client_Name\}/g, clientData?.name || '')
+    .replace(/\{Case_Type\}/g, caseData?.case_type || '')
+    .replace(/\{Official_No\}/g, caseData?.application_number || '')
+    .replace(/\{Mail_Subject\}/g, mailData?.subject || '')
+    .replace(/\{Mail_Date\}/g, mailData?.received_at ? new Date(mailData.received_at).toLocaleDateString('he-IL') : '')
+    .replace(/\{Identifier_Found\}/g, extractedIdentifier || '');
+}
+
+/**
+ * Calculate date with offset from base date
+ */
+function calculateOffsetDate(baseDate, daysOffset) {
+  const date = new Date(baseDate);
+  date.setDate(date.getDate() + daysOffset);
+  return date.toISOString().split('T')[0];
+}
+
+/**
+ * Find case by identifier value
+ */
+async function findCaseByIdentifier(base44, targetField, identifierValue) {
   if (!identifierValue) return null;
   
   try {
-    // Fetch all cases (in production, you'd want server-side filtering)
     const cases = await base44.entities.Case.list('-created_date', 500);
     
     for (const caseItem of cases) {
+      // Check by target field type
+      if (targetField === 'case_no' && caseItem.case_number === identifierValue) {
+        return caseItem;
+      }
+      if (targetField === 'official_no' && caseItem.application_number === identifierValue) {
+        return caseItem;
+      }
+      
+      // Check external_identifiers
       const identifiers = caseItem.external_identifiers || [];
       for (const id of identifiers) {
-        // Match by type if specified, or just by value
-        if (identifierType) {
-          if (id.type === identifierType && id.value === identifierValue) {
-            return caseItem;
-          }
-        } else if (id.value === identifierValue) {
+        if (id.value === identifierValue) {
           return caseItem;
         }
       }
       
-      // Also check case_number and application_number as fallback
-      if (caseItem.case_number === identifierValue || 
-          caseItem.application_number === identifierValue) {
+      // Fallback: check case_number and application_number
+      if (caseItem.case_number === identifierValue || caseItem.application_number === identifierValue) {
         return caseItem;
       }
     }
     
     return null;
   } catch (e) {
-    console.error('Error finding case by identifier:', e);
+    console.error('Error finding case:', e);
     return null;
   }
 }
 
 /**
- * Check if mail matches AutomationRule catch_config
+ * Check if mail matches catch_config
  */
 function matchesCatchConfig(mail, catchConfig) {
   if (!catchConfig) return false;
   
-  // Check senders array
+  // Check senders
   if (catchConfig.senders && catchConfig.senders.length > 0) {
-    const senderEmail = (mail.sender_email || '').toLowerCase().trim();
+    const senderEmail = (mail.sender_email || '').toLowerCase();
     const matchesSender = catchConfig.senders.some(sender => {
       const pattern = sender.toLowerCase().trim();
-      return senderEmail.includes(pattern) || senderEmail === pattern;
+      return senderEmail.includes(pattern);
     });
     if (!matchesSender) return false;
-  }
-  
-  // Check subject_match
-  if (catchConfig.subject_match) {
-    const subject = (mail.subject || '').toLowerCase();
-    const pattern = catchConfig.subject_match.toLowerCase();
-    if (!subject.includes(pattern)) return false;
-  }
-  
-  // Check attachment_text_match (simplified - checks attachment filenames)
-  if (catchConfig.attachment_text_match) {
-    const attachments = mail.attachments || [];
-    const pattern = catchConfig.attachment_text_match.toLowerCase();
-    const matchesAttachment = attachments.some(att => 
-      (att.filename || '').toLowerCase().includes(pattern)
-    );
-    if (!matchesAttachment && attachments.length > 0) {
-      // If has attachments but none match, fail
-      // (could be enhanced to check actual attachment content)
-    }
-  }
-  
-  return true;
-}
-
-/**
- * Check if mail matches legacy MailRule catch_config
- */
-function matchesLegacyCatchConfig(mail, catchConfig) {
-  if (!catchConfig) return false;
-  
-  // Check sender pattern
-  if (catchConfig.sender_pattern) {
-    const senderPattern = catchConfig.sender_pattern.toLowerCase().trim();
-    const senderEmail = (mail.sender_email || '').toLowerCase().trim();
-    if (senderPattern.includes('@')) {
-      if (senderEmail !== senderPattern) return false;
-    } else {
-      if (!senderEmail.includes(senderPattern)) return false;
-    }
   }
   
   // Check subject_contains
   if (catchConfig.subject_contains) {
     const subject = (mail.subject || '').toLowerCase();
-    const pattern = catchConfig.subject_contains.toLowerCase();
-    if (!subject.includes(pattern)) return false;
+    if (!subject.includes(catchConfig.subject_contains.toLowerCase())) return false;
   }
   
-  // Check body keywords
-  if (catchConfig.body_keywords && catchConfig.body_keywords.length > 0) {
-    const bodyText = (mail.body_plain || mail.body_html || '').toLowerCase();
-    const hasKeyword = catchConfig.body_keywords.some(keyword => 
-      bodyText.includes(keyword.toLowerCase())
-    );
-    if (!hasKeyword) return false;
-  }
-  
-  // Check attachments requirement
-  if (catchConfig.has_attachments) {
-    if (!mail.attachments || mail.attachments.length === 0) return false;
+  // Check body_contains
+  if (catchConfig.body_contains) {
+    const body = (mail.body_plain || mail.body_html || '').toLowerCase();
+    if (!body.includes(catchConfig.body_contains.toLowerCase())) return false;
   }
   
   return true;
@@ -190,7 +153,7 @@ Deno.serve(async (req) => {
       return Response.json({ error: 'mail_id is required' }, { status: 400 });
     }
 
-    // Fetch the mail
+    // Fetch mail
     const mails = await base44.entities.Mail.filter({ id: mail_id });
     if (!mails || mails.length === 0) {
       return Response.json({ error: 'Mail not found' }, { status: 404 });
@@ -202,241 +165,157 @@ Deno.serve(async (req) => {
       return Response.json({ message: 'Mail already processed', mail_id });
     }
 
-    // Update mail status to processing
     await base44.entities.Mail.update(mail_id, { processing_status: 'processing' });
 
-    // === PHASE 1: CATCH - Load and match rules ===
-    
-    // Load new AutomationRules (sorted by priority)
+    // === PHASE 1: CATCH ===
     let automationRules = [];
     try {
-      const allAutomationRules = await base44.entities.AutomationRule.filter({ is_active: true });
-      automationRules = allAutomationRules.sort((a, b) => (a.priority || 10) - (b.priority || 10));
+      automationRules = await base44.entities.AutomationRule.filter({ is_active: true });
     } catch (e) {
-      console.log('AutomationRule entity not available, using legacy rules only');
-    }
-    
-    // Load legacy MailRules as fallback
-    let legacyRules = [];
-    try {
-      legacyRules = await base44.entities.MailRule.filter({ is_active: true });
-    } catch (e) {
-      console.log('MailRule entity not available');
+      console.log('No AutomationRule entity');
     }
 
     let matchedRule = null;
-    let ruleType = null; // 'automation' or 'legacy'
-    let extractedIdentifier = null;
-    let identifierType = null;
-
-    // Try matching AutomationRules first (by priority)
     for (const rule of automationRules) {
       if (matchesCatchConfig(mail, rule.catch_config)) {
         matchedRule = rule;
-        ruleType = 'automation';
         break;
       }
     }
 
-    // Fallback to legacy MailRules
-    if (!matchedRule) {
-      for (const rule of legacyRules) {
-        if (matchesLegacyCatchConfig(mail, rule.catch_config)) {
-          matchedRule = rule;
-          ruleType = 'legacy';
-          break;
-        }
-      }
-    }
-
-    // If no rule matched, mark as pending and exit
     if (!matchedRule) {
       await base44.entities.Mail.update(mail_id, { processing_status: 'pending' });
-      return Response.json({ 
-        message: 'No matching rule found', 
-        mail_id,
-        status: 'pending'
-      });
+      return Response.json({ message: 'No matching rule', mail_id, status: 'pending' });
     }
 
-    // === PHASE 2: MAP - Extract identifier and find case ===
-    
+    // === PHASE 2: MAP (Anchor-based extraction) ===
+    let extractedIdentifier = null;
+    let extractedTargetField = null;
     let relatedCase = null;
     let relatedClient = null;
 
-    if (ruleType === 'automation' && matchedRule.map_config) {
-      const mapConfig = matchedRule.map_config;
-      
-      // Determine source text
-      let sourceText = '';
-      switch (mapConfig.source) {
-        case 'subject':
-          sourceText = mail.subject || '';
-          break;
-        case 'body':
-          sourceText = mail.body_plain || mail.body_html || '';
-          break;
-        case 'attachment':
-          // Parse PDF attachments to extract text
-          const attachments = mail.attachments || [];
-          const pdfAttachments = attachments.filter(a => 
-            (a.filename || '').toLowerCase().endsWith('.pdf') && a.url
-          );
-          
-          for (const att of pdfAttachments) {
-            const pdfText = await extractTextFromPdf(att.url);
-            if (pdfText) {
-              sourceText += ' ' + pdfText;
-            }
-          }
-          
-          // Fallback to filenames if no PDF content
-          if (!sourceText.trim()) {
-            sourceText = attachments.map(a => a.filename).join(' ');
-          }
-          break;
-        default:
-          sourceText = mail.subject || '';
-      }
-      
-      // Extract identifier using anchor text
-      if (mapConfig.anchor_text) {
-        extractedIdentifier = extractIdentifier(sourceText, mapConfig.anchor_text);
-        identifierType = mapConfig.identifier_type;
-      }
-      
-      // Find case by external identifier
-      if (extractedIdentifier) {
-        relatedCase = await findCaseByExternalIdentifier(base44, identifierType, extractedIdentifier);
-      }
-    } else {
-      // Legacy extraction - simple case number regex
-      const caseNumberRegex = /(?:case|תיק|מס[\'׳]?|no\.?)\s*[:#]?\s*(\d{4,})/i;
-      const caseMatch = (mail.subject || '').match(caseNumberRegex);
-      if (caseMatch) {
-        extractedIdentifier = caseMatch[1];
-        // Try to find case by case_number
-        const cases = await base44.entities.Case.filter({ case_number: extractedIdentifier });
-        if (cases && cases.length > 0) {
-          relatedCase = cases[0];
+    const mapConfigs = matchedRule.map_config || [];
+    
+    // Prepare text sources
+    const textSources = {
+      subject: mail.subject || '',
+      body: mail.body_plain || mail.body_html || '',
+      attachment: ''
+    };
+
+    // Extract PDF text if needed
+    const needsAttachment = mapConfigs.some(m => m.source === 'attachment');
+    if (needsAttachment && mail.attachments?.length > 0) {
+      for (const att of mail.attachments) {
+        if (att.filename?.toLowerCase().endsWith('.pdf') && att.url) {
+          const pdfText = await extractTextFromPdf(att.url);
+          textSources.attachment += ' ' + pdfText;
         }
       }
     }
 
-    // Fetch related client if case found
-    if (relatedCase && relatedCase.client_id) {
+    // Run extraction rules
+    for (const mapRow of mapConfigs) {
+      const sourceText = textSources[mapRow.source] || '';
+      const value = extractByAnchor(sourceText, mapRow.anchor_text);
+      
+      if (value) {
+        extractedIdentifier = value;
+        extractedTargetField = mapRow.target_field;
+        
+        // Find case
+        relatedCase = await findCaseByIdentifier(base44, mapRow.target_field, value);
+        if (relatedCase) break;
+      }
+    }
+
+    // Fetch client
+    if (relatedCase?.client_id) {
       const clients = await base44.entities.Client.filter({ id: relatedCase.client_id });
-      if (clients && clients.length > 0) {
-        relatedClient = clients[0];
+      if (clients?.length > 0) relatedClient = clients[0];
+    }
+
+    // === PHASE 3: ACTIONS (Token-based) ===
+    const actionBundle = matchedRule.action_bundle || {};
+    const tokenContext = {
+      caseData: relatedCase,
+      clientData: relatedClient,
+      mailData: mail,
+      extractedIdentifier
+    };
+
+    const executionResults = [];
+    const mailDate = mail.received_at || new Date().toISOString();
+
+    // Billing
+    if (actionBundle.billing?.enabled) {
+      try {
+        const description = replaceTokens(actionBundle.billing.description_template, tokenContext) || `עיבוד מייל: ${mail.subject}`;
+        await base44.entities.TimeEntry.create({
+          case_id: relatedCase?.id || '',
+          description,
+          hours: actionBundle.billing.hours || 0.25,
+          date_worked: new Date().toISOString().split('T')[0],
+          is_billable: true
+        });
+        executionResults.push({ action: 'billing', status: 'success' });
+      } catch (e) {
+        executionResults.push({ action: 'billing', status: 'error', error: e.message });
       }
     }
 
-    // === PHASE 3: DESPATCH - Prepare actions ===
-    
-    let suggestedActions = [];
-    let requiresApproval = true;
-
-    if (ruleType === 'automation' && matchedRule.action_bundle) {
-      const bundle = matchedRule.action_bundle;
-      let actionIndex = 0;
-      
-      if (bundle.create_task) {
-        suggestedActions.push({
-          id: `action_${actionIndex++}`,
-          action_type: 'create_task',
-          action_label: 'יצירת משימה',
-          selected: true
+    // Create Alert / Deadline
+    if (actionBundle.create_alert?.enabled) {
+      try {
+        const message = replaceTokens(actionBundle.create_alert.message_template, tokenContext);
+        const dueDate = calculateOffsetDate(mailDate, actionBundle.create_alert.days_offset || 7);
+        
+        await base44.entities.Deadline.create({
+          case_id: relatedCase?.id || '',
+          deadline_type: actionBundle.create_alert.alert_type === 'deadline' ? 'custom' : 'office_action_response',
+          description: message,
+          due_date: dueDate,
+          status: 'pending',
+          is_critical: actionBundle.create_alert.alert_type === 'urgent'
         });
+        executionResults.push({ action: 'create_alert', status: 'success' });
+      } catch (e) {
+        executionResults.push({ action: 'create_alert', status: 'error', error: e.message });
       }
-      
-      if (bundle.log_time) {
-        suggestedActions.push({
-          id: `action_${actionIndex++}`,
-          action_type: 'log_time',
-          action_label: 'רישום שעות',
-          hours: 0.25,
-          selected: true
-        });
-      }
-      
-      if (bundle.dropbox_path) {
-        suggestedActions.push({
-          id: `action_${actionIndex++}`,
-          action_type: 'upload_to_dropbox',
-          action_label: 'העלאה ל-Dropbox',
-          dropbox_folder_path: bundle.dropbox_path,
-          selected: true
-        });
-      }
-      
-      if (bundle.email_template_id) {
-        suggestedActions.push({
-          id: `action_${actionIndex++}`,
-          action_type: 'send_email',
-          action_label: 'שליחת מייל',
-          email_template_id: bundle.email_template_id,
-          selected: true
-        });
-      }
-    } else if (ruleType === 'legacy') {
-      // Use legacy despatch_config
-      suggestedActions = (matchedRule.despatch_config || []).map((action, index) => ({
-        id: `action_${index}`,
-        ...action,
-        selected: true
-      }));
-      requiresApproval = matchedRule.approval_required !== false;
     }
 
-    // Calculate estimated time saved
-    const timeSavedMinutes = suggestedActions.length * 5;
-
-    // Create task
+    // Create Task for review
     const taskData = {
-      mail_id: mail_id,
+      mail_id,
       case_id: relatedCase?.id || null,
       client_id: relatedClient?.id || null,
       task_type: 'review_document',
-      title: `Mail Processing: ${mail.subject || 'No Subject'}`,
-      description: `Email from: ${mail.sender_name || mail.sender_email}\nSubject: ${mail.subject}\n\nMatched rule: ${matchedRule.name}`,
-      status: requiresApproval ? 'awaiting_approval' : 'pending',
+      title: `עיבוד מייל: ${mail.subject || 'ללא נושא'}`,
+      description: `שולח: ${mail.sender_name || mail.sender_email}\nחוק תואם: ${matchedRule.name}\nמזהה שנמצא: ${extractedIdentifier || 'לא נמצא'}`,
+      status: 'awaiting_approval',
       priority: mail.priority || 'medium',
       assigned_to_email: user.email,
-      manual_override: false,
-      time_saved_minutes: timeSavedMinutes,
-      original_inferred_case_id: relatedCase?.id || null,
-      original_inferred_client_id: relatedClient?.id || null,
       extracted_data: {
         rule_id: matchedRule.id,
         rule_name: matchedRule.name,
-        rule_type: ruleType,
         extracted_identifier: extractedIdentifier,
-        identifier_type: identifierType,
-        suggested_actions: suggestedActions,
-        inferred_case: relatedCase ? {
-          id: relatedCase.id,
-          case_number: relatedCase.case_number,
-          title: relatedCase.title
-        } : null,
-        inferred_client: relatedClient ? {
-          id: relatedClient.id,
-          name: relatedClient.name
-        } : null
+        target_field: extractedTargetField,
+        execution_results: executionResults,
+        inferred_case: relatedCase ? { id: relatedCase.id, case_number: relatedCase.case_number, title: relatedCase.title } : null,
+        inferred_client: relatedClient ? { id: relatedClient.id, name: relatedClient.name } : null
       }
     };
 
     const createdTask = await base44.entities.Task.create(taskData);
 
-    // Update mail with task reference and status
+    // Update mail
     await base44.entities.Mail.update(mail_id, {
       processing_status: 'triaged',
       task_id: createdTask.id,
       related_case_id: relatedCase?.id || null,
       related_client_id: relatedClient?.id || null,
-      inferred_case_id: relatedCase?.id || null,
-      inferred_confidence: relatedCase ? 0.9 : 0,
-      auto_triaged: true,
-      matched_rule_id: matchedRule.id
+      matched_rule_id: matchedRule.id,
+      auto_triaged: true
     });
 
     return Response.json({
@@ -444,11 +323,9 @@ Deno.serve(async (req) => {
       mail_id,
       task_id: createdTask.id,
       matched_rule: matchedRule.name,
-      rule_type: ruleType,
       extracted_identifier: extractedIdentifier,
-      identifier_type: identifierType,
       related_case: relatedCase?.case_number || null,
-      suggested_actions_count: suggestedActions.length
+      actions_executed: executionResults.length
     });
 
   } catch (error) {
