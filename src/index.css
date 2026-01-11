@@ -50,13 +50,10 @@
 }
  
 @layer base {
-  * {
-    @apply border-border;
-  }
   body {
     @apply bg-background text-foreground;
   }
-  /* Fix: Apply border only to specific form elements, not everything */
+  
   input, textarea, select, button {
     @apply border-border outline-ring/50;
   }
