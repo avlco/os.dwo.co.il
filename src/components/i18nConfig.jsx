@@ -15,12 +15,18 @@ const translations = {
         financials: "כספים",
         settings: "הגדרות",
         mail_rules: "חוקי דואר",
-        logout: "התנתק"
+        logout: "התנתק",
+        analytics: "אנליטיקה"
       },
       common: {
         search: "חיפוש תיקים, לקוחות...",
         loading: "טוען...",
-        save_changes: "שמור שינויים"
+        save_changes: "שמור שינויים",
+        close_sidebar: "סגור תפריט",
+        open_sidebar: "פתח תפריט",
+        expand_sidebar: "הרחב תפריט",
+        collapse_sidebar: "צמצם תפריט",
+        notifications: "התראות"
       },
       settings: {
         title: "הגדרות",
@@ -503,12 +509,18 @@ const translations = {
         financials: "Financials",
         settings: "Settings",
         mail_rules: "Mail Rules",
-        logout: "Logout"
+        logout: "Logout",
+        analytics: "Analytics"
       },
       common: {
         search: "Search cases, clients...",
         loading: "Loading...",
-        save_changes: "Save Changes"
+        save_changes: "Save Changes",
+        close_sidebar: "Close sidebar",
+        open_sidebar: "Open sidebar",
+        expand_sidebar: "Expand sidebar",
+        collapse_sidebar: "Collapse sidebar",
+        notifications: "Notifications"
       },
       settings: {
         title: "Settings",
