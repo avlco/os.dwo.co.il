@@ -20,19 +20,13 @@ async function extractTextFromPdf(fileUrl) {
 
 /**
  * Extract value using anchor text (Anchor-based extraction)
- * Looks for the anchor text and extracts what comes after it
  */
 function extractByAnchor(text, anchorText) {
   if (!text || !anchorText) return null;
-  
   try {
-    // Escape special regex characters in anchor
     const escapedAnchor = anchorText.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    
-    // Pattern: anchor followed by optional separators, then capture alphanumeric value
     const regex = new RegExp(escapedAnchor + '\\s*[:#\\-]?\\s*([\\w\\d\\-\\/\\.]+)', 'i');
     const match = text.match(regex);
-    
     return match ? match[1].trim() : null;
   } catch (e) {
     console.error('Error in extractByAnchor:', e);
@@ -42,13 +36,10 @@ function extractByAnchor(text, anchorText) {
 
 /**
  * Replace tokens in template with actual values
- * Tokens: {Case_No}, {Client_Name}, {Case_Type}, {Official_No}, {Mail_Subject}, {Mail_Date}, {Identifier_Found}
  */
 function replaceTokens(template, context) {
   if (!template) return '';
-  
   const { caseData, clientData, mailData, extractedIdentifier } = context;
-  
   return template
     .replace(/\{Case_No\}/g, caseData?.case_number || '')
     .replace(/\{Client_Name\}/g, clientData?.name || '')
@@ -61,10 +52,14 @@ function replaceTokens(template, context) {
 
 /**
  * Calculate date with offset from base date
+ * Supports direction: 'before' subtracts, 'after' adds
+ * Supports unit: 'days' or 'weeks'
  */
-function calculateOffsetDate(baseDate, daysOffset) {
+function calculateOffsetDate(baseDate, offset, direction = 'after', unit = 'days') {
   const date = new Date(baseDate);
-  date.setDate(date.getDate() + daysOffset);
+  const multiplier = direction === 'before' ? -1 : 1;
+  const days = unit === 'weeks' ? offset * 7 : offset;
+  date.setDate(date.getDate() + (days * multiplier));
   return date.toISOString().split('T')[0];
 }
 
@@ -73,33 +68,17 @@ function calculateOffsetDate(baseDate, daysOffset) {
  */
 async function findCaseByIdentifier(base44, targetField, identifierValue) {
   if (!identifierValue) return null;
-  
   try {
     const cases = await base44.entities.Case.list('-created_date', 500);
-    
     for (const caseItem of cases) {
-      // Check by target field type
-      if (targetField === 'case_no' && caseItem.case_number === identifierValue) {
-        return caseItem;
-      }
-      if (targetField === 'official_no' && caseItem.application_number === identifierValue) {
-        return caseItem;
-      }
-      
-      // Check external_identifiers
+      if (targetField === 'case_no' && caseItem.case_number === identifierValue) return caseItem;
+      if (targetField === 'official_no' && caseItem.application_number === identifierValue) return caseItem;
       const identifiers = caseItem.external_identifiers || [];
       for (const id of identifiers) {
-        if (id.value === identifierValue) {
-          return caseItem;
-        }
+        if (id.value === identifierValue) return caseItem;
       }
-      
-      // Fallback: check case_number and application_number
-      if (caseItem.case_number === identifierValue || caseItem.application_number === identifierValue) {
-        return caseItem;
-      }
+      if (caseItem.case_number === identifierValue || caseItem.application_number === identifierValue) return caseItem;
     }
-    
     return null;
   } catch (e) {
     console.error('Error finding case:', e);
@@ -112,29 +91,19 @@ async function findCaseByIdentifier(base44, targetField, identifierValue) {
  */
 function matchesCatchConfig(mail, catchConfig) {
   if (!catchConfig) return false;
-  
-  // Check senders
   if (catchConfig.senders && catchConfig.senders.length > 0) {
     const senderEmail = (mail.sender_email || '').toLowerCase();
-    const matchesSender = catchConfig.senders.some(sender => {
-      const pattern = sender.toLowerCase().trim();
-      return senderEmail.includes(pattern);
-    });
+    const matchesSender = catchConfig.senders.some(sender => senderEmail.includes(sender.toLowerCase().trim()));
     if (!matchesSender) return false;
   }
-  
-  // Check subject_contains
   if (catchConfig.subject_contains) {
     const subject = (mail.subject || '').toLowerCase();
     if (!subject.includes(catchConfig.subject_contains.toLowerCase())) return false;
   }
-  
-  // Check body_contains
   if (catchConfig.body_contains) {
     const body = (mail.body_plain || mail.body_html || '').toLowerCase();
     if (!body.includes(catchConfig.body_contains.toLowerCase())) return false;
   }
-  
   return true;
 }
 
@@ -142,22 +111,14 @@ Deno.serve(async (req) => {
   try {
     const base44 = createClientFromRequest(req);
     const user = await base44.auth.me();
-    
-    if (!user) {
-      return Response.json({ error: 'Unauthorized' }, { status: 401 });
-    }
+    if (!user) return Response.json({ error: 'Unauthorized' }, { status: 401 });
 
     const { mail_id } = await req.json();
-    
-    if (!mail_id) {
-      return Response.json({ error: 'mail_id is required' }, { status: 400 });
-    }
+    if (!mail_id) return Response.json({ error: 'mail_id is required' }, { status: 400 });
 
     // Fetch mail
     const mails = await base44.entities.Mail.filter({ id: mail_id });
-    if (!mails || mails.length === 0) {
-      return Response.json({ error: 'Mail not found' }, { status: 404 });
-    }
+    if (!mails || mails.length === 0) return Response.json({ error: 'Mail not found' }, { status: 404 });
     const mail = mails[0];
 
     // Skip if already processed
@@ -188,22 +149,19 @@ Deno.serve(async (req) => {
       return Response.json({ message: 'No matching rule', mail_id, status: 'pending' });
     }
 
-    // === PHASE 2: MAP (Anchor-based extraction) ===
+    // === PHASE 2: MAP ===
     let extractedIdentifier = null;
     let extractedTargetField = null;
     let relatedCase = null;
     let relatedClient = null;
 
     const mapConfigs = matchedRule.map_config || [];
-    
-    // Prepare text sources
     const textSources = {
       subject: mail.subject || '',
       body: mail.body_plain || mail.body_html || '',
       attachment: ''
     };
 
-    // Extract PDF text if needed
     const needsAttachment = mapConfigs.some(m => m.source === 'attachment');
     if (needsAttachment && mail.attachments?.length > 0) {
       for (const att of mail.attachments) {
@@ -214,93 +172,121 @@ Deno.serve(async (req) => {
       }
     }
 
-    // Run extraction rules
     for (const mapRow of mapConfigs) {
       const sourceText = textSources[mapRow.source] || '';
       const value = extractByAnchor(sourceText, mapRow.anchor_text);
-      
       if (value) {
         extractedIdentifier = value;
         extractedTargetField = mapRow.target_field;
-        
-        // Find case
         relatedCase = await findCaseByIdentifier(base44, mapRow.target_field, value);
         if (relatedCase) break;
       }
     }
 
-    // Fetch client
     if (relatedCase?.client_id) {
       const clients = await base44.entities.Client.filter({ id: relatedCase.client_id });
       if (clients?.length > 0) relatedClient = clients[0];
     }
 
-    // === PHASE 3: ACTIONS (Token-based) ===
+    // === PHASE 3: PREPARE ACTIONS ===
     const actionBundle = matchedRule.action_bundle || {};
-    const tokenContext = {
-      caseData: relatedCase,
-      clientData: relatedClient,
-      mailData: mail,
-      extractedIdentifier
-    };
-
-    const executionResults = [];
+    const tokenContext = { caseData: relatedCase, clientData: relatedClient, mailData: mail, extractedIdentifier };
     const mailDate = mail.received_at || new Date().toISOString();
 
-    // Billing
+    // Build pending actions list for approval or immediate execution
+    const pendingActions = [];
+
     if (actionBundle.billing?.enabled) {
-      try {
-        const description = replaceTokens(actionBundle.billing.description_template, tokenContext) || `עיבוד מייל: ${mail.subject}`;
-        await base44.entities.TimeEntry.create({
+      pendingActions.push({
+        type: 'billing',
+        params: {
           case_id: relatedCase?.id || '',
-          description,
+          description: replaceTokens(actionBundle.billing.description_template, tokenContext) || `עיבוד מייל: ${mail.subject}`,
           hours: actionBundle.billing.hours || 0.25,
-          date_worked: new Date().toISOString().split('T')[0],
-          is_billable: true
-        });
-        executionResults.push({ action: 'billing', status: 'success' });
-      } catch (e) {
-        executionResults.push({ action: 'billing', status: 'error', error: e.message });
-      }
+          rate: actionBundle.billing.hourly_rate || 0,
+          date_worked: new Date().toISOString().split('T')[0]
+        }
+      });
     }
 
-    // Create Alert / Deadline
     if (actionBundle.create_alert?.enabled) {
-      try {
-        const message = replaceTokens(actionBundle.create_alert.message_template, tokenContext);
-        const dueDate = calculateOffsetDate(mailDate, actionBundle.create_alert.days_offset || 7);
-        
-        await base44.entities.Deadline.create({
+      const alertConfig = actionBundle.create_alert;
+      pendingActions.push({
+        type: 'create_alert',
+        params: {
           case_id: relatedCase?.id || '',
-          deadline_type: actionBundle.create_alert.alert_type === 'deadline' ? 'custom' : 'office_action_response',
-          description: message,
-          due_date: dueDate,
-          status: 'pending',
-          is_critical: actionBundle.create_alert.alert_type === 'urgent'
-        });
-        executionResults.push({ action: 'create_alert', status: 'success' });
-      } catch (e) {
-        executionResults.push({ action: 'create_alert', status: 'error', error: e.message });
-      }
+          message: replaceTokens(alertConfig.message_template, tokenContext),
+          due_date: calculateOffsetDate(mailDate, alertConfig.timing_offset || 7, alertConfig.timing_direction || 'after', alertConfig.timing_unit || 'days'),
+          alert_type: alertConfig.alert_type,
+          recipients: alertConfig.recipients || []
+        }
+      });
     }
 
-    // Create Task for review
+    if (actionBundle.calendar_event?.enabled) {
+      const calConfig = actionBundle.calendar_event;
+      pendingActions.push({
+        type: 'calendar_event',
+        params: {
+          title: replaceTokens(calConfig.title_template, tokenContext),
+          date: calculateOffsetDate(mailDate, calConfig.timing_offset || 7, calConfig.timing_direction || 'after', calConfig.timing_unit || 'days'),
+          attendees: calConfig.attendees || [],
+          create_meet_link: calConfig.create_meet_link || false
+        }
+      });
+    }
+
+    if (actionBundle.send_email?.enabled) {
+      const emailConfig = actionBundle.send_email;
+      pendingActions.push({
+        type: 'send_email',
+        params: {
+          recipients: emailConfig.recipients || [],
+          subject: replaceTokens(emailConfig.subject_template, tokenContext),
+          body: replaceTokens(emailConfig.body_template, tokenContext)
+        }
+      });
+    }
+
+    if (actionBundle.save_file?.enabled) {
+      pendingActions.push({
+        type: 'save_file',
+        params: {
+          path: replaceTokens(actionBundle.save_file.path_template, tokenContext),
+          attachments: mail.attachments || []
+        }
+      });
+    }
+
+    // === PHASE 4: APPROVAL FLOW ===
+    const requiresApproval = matchedRule.require_approval !== false;
+    const approverEmail = matchedRule.approver_email || user.email;
+
+    // Determine task type based on approval requirement
+    const taskType = requiresApproval ? 'automation_review' : 'review_document';
+    const taskStatus = requiresApproval ? 'awaiting_approval' : 'pending';
+
+    // Create task
     const taskData = {
       mail_id,
       case_id: relatedCase?.id || null,
       client_id: relatedClient?.id || null,
-      task_type: 'review_document',
-      title: `עיבוד מייל: ${mail.subject || 'ללא נושא'}`,
-      description: `שולח: ${mail.sender_name || mail.sender_email}\nחוק תואם: ${matchedRule.name}\nמזהה שנמצא: ${extractedIdentifier || 'לא נמצא'}`,
-      status: 'awaiting_approval',
+      task_type: taskType,
+      title: requiresApproval 
+        ? `אישור אוטומציה: ${mail.subject || 'ללא נושא'}`
+        : `עיבוד מייל: ${mail.subject || 'ללא נושא'}`,
+      description: `שולח: ${mail.sender_name || mail.sender_email}\nחוק תואם: ${matchedRule.name}\nמזהה שנמצא: ${extractedIdentifier || 'לא נמצא'}\n\n${requiresApproval ? 'ממתין לאישור לפני ביצוע הפעולות.' : ''}`,
+      status: taskStatus,
       priority: mail.priority || 'medium',
-      assigned_to_email: user.email,
+      assigned_to_email: approverEmail,
+      approver_email: requiresApproval ? approverEmail : null,
       extracted_data: {
         rule_id: matchedRule.id,
         rule_name: matchedRule.name,
         extracted_identifier: extractedIdentifier,
         target_field: extractedTargetField,
-        execution_results: executionResults,
+        pending_actions: pendingActions,
+        requires_approval: requiresApproval,
         inferred_case: relatedCase ? { id: relatedCase.id, case_number: relatedCase.case_number, title: relatedCase.title } : null,
         inferred_client: relatedClient ? { id: relatedClient.id, name: relatedClient.name } : null
       }
@@ -308,9 +294,43 @@ Deno.serve(async (req) => {
 
     const createdTask = await base44.entities.Task.create(taskData);
 
+    // If no approval needed, execute actions immediately
+    let executionResults = [];
+    if (!requiresApproval) {
+      for (const action of pendingActions) {
+        try {
+          if (action.type === 'billing') {
+            await base44.entities.TimeEntry.create({
+              case_id: action.params.case_id,
+              description: action.params.description,
+              hours: action.params.hours,
+              rate: action.params.rate,
+              date_worked: action.params.date_worked,
+              is_billable: true
+            });
+            executionResults.push({ action: 'billing', status: 'success' });
+          }
+          if (action.type === 'create_alert') {
+            await base44.entities.Deadline.create({
+              case_id: action.params.case_id,
+              deadline_type: action.params.alert_type === 'deadline' ? 'custom' : 'office_action_response',
+              description: action.params.message,
+              due_date: action.params.due_date,
+              status: 'pending',
+              is_critical: action.params.alert_type === 'urgent'
+            });
+            executionResults.push({ action: 'create_alert', status: 'success' });
+          }
+          // Calendar and Email would need external integrations
+        } catch (e) {
+          executionResults.push({ action: action.type, status: 'error', error: e.message });
+        }
+      }
+    }
+
     // Update mail
     await base44.entities.Mail.update(mail_id, {
-      processing_status: 'triaged',
+      processing_status: requiresApproval ? 'triaged' : 'processed',
       task_id: createdTask.id,
       related_case_id: relatedCase?.id || null,
       related_client_id: relatedClient?.id || null,
@@ -325,7 +345,9 @@ Deno.serve(async (req) => {
       matched_rule: matchedRule.name,
       extracted_identifier: extractedIdentifier,
       related_case: relatedCase?.case_number || null,
-      actions_executed: executionResults.length
+      requires_approval: requiresApproval,
+      pending_actions_count: pendingActions.length,
+      executed_actions: executionResults.length
     });
 
   } catch (error) {

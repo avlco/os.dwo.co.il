@@ -10,10 +10,11 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
+import { Badge } from "@/components/ui/badge";
 import { base44 } from '@/api/base44Client';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from "sonner";
-import { Plus, Edit, Trash2, X, Braces } from 'lucide-react';
+import { Plus, Edit, Trash2, X, Braces, ShieldCheck } from 'lucide-react';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -31,21 +32,36 @@ const AVAILABLE_TOKENS = [
   { key: '{Identifier_Found}', label: 'מזהה שנמצא' },
 ];
 
+const TARGET_FIELD_OPTIONS = [
+  { value: 'case_no', label: '{Case_Number}', description: 'מספר תיק פנימי' },
+  { value: 'official_no', label: '{Official_Number}', description: 'מספר בקשה רשמי' },
+  { value: 'client_ref', label: '{Client_Reference}', description: 'סימוכין לקוח' },
+];
+
+const RECIPIENT_OPTIONS = [
+  { value: 'client', label: 'לקוח' },
+  { value: 'lawyer', label: 'עו"ד אחראי' },
+];
+
+const defaultMapRow = { source: 'subject', anchor_text: '', target_field: 'case_no' };
+
 const defaultRule = {
   name: '',
   is_active: true,
+  require_approval: true,
+  approver_email: '',
   catch_config: { senders: [], subject_contains: '', body_contains: '' },
-  map_config: [],
+  map_config: [{ ...defaultMapRow }],
   action_bundle: {
-    send_email: { enabled: false, recipient_type: 'client', custom_email: '', subject_template: '', body_template: '' },
+    send_email: { enabled: false, recipients: [], subject_template: '', body_template: '' },
     save_file: { enabled: false, path_template: '' },
-    calendar_event: { enabled: false, title_template: '', days_offset: 7, create_meet_link: false },
-    create_alert: { enabled: false, alert_type: 'reminder', message_template: '', days_offset: 7 },
-    billing: { enabled: false, hours: 0.25, description_template: '' }
+    calendar_event: { enabled: false, title_template: '', timing_direction: 'after', timing_offset: 7, timing_unit: 'days', attendees: [], create_meet_link: false },
+    create_alert: { enabled: false, alert_type: 'reminder', message_template: '', timing_direction: 'after', timing_offset: 7, timing_unit: 'days', recipients: [] },
+    billing: { enabled: false, hours: 0.25, hourly_rate: 0, description_template: '' }
   }
 };
 
-// Token insertion button component
+// Token insertion button
 function TokenButton({ onInsert }) {
   return (
     <DropdownMenu>
@@ -73,27 +89,15 @@ function TokenButton({ onInsert }) {
 // Input with token support
 function TokenInput({ value, onChange, placeholder, className }) {
   const inputRef = React.useRef(null);
-  
   const handleInsertToken = (token) => {
     const input = inputRef.current;
-    if (input) {
-      const start = input.selectionStart || value.length;
-      const newValue = value.slice(0, start) + token + value.slice(start);
-      onChange(newValue);
-    } else {
-      onChange(value + token);
-    }
+    const start = input?.selectionStart || value.length;
+    const newValue = value.slice(0, start) + token + value.slice(start);
+    onChange(newValue);
   };
-
   return (
     <div className="flex items-center gap-1">
-      <Input 
-        ref={inputRef}
-        value={value} 
-        onChange={e => onChange(e.target.value)} 
-        placeholder={placeholder}
-        className={className}
-      />
+      <Input ref={inputRef} value={value} onChange={e => onChange(e.target.value)} placeholder={placeholder} className={className} />
       <TokenButton onInsert={handleInsertToken} />
     </div>
   );
@@ -102,30 +106,65 @@ function TokenInput({ value, onChange, placeholder, className }) {
 // Textarea with token support
 function TokenTextarea({ value, onChange, placeholder, className }) {
   const textareaRef = React.useRef(null);
-  
   const handleInsertToken = (token) => {
     const textarea = textareaRef.current;
-    if (textarea) {
-      const start = textarea.selectionStart || value.length;
-      const newValue = value.slice(0, start) + token + value.slice(start);
-      onChange(newValue);
-    } else {
-      onChange(value + token);
-    }
+    const start = textarea?.selectionStart || value.length;
+    const newValue = value.slice(0, start) + token + value.slice(start);
+    onChange(newValue);
   };
-
   return (
     <div className="space-y-1">
-      <div className="flex justify-end">
-        <TokenButton onInsert={handleInsertToken} />
-      </div>
-      <Textarea 
-        ref={textareaRef}
-        value={value} 
-        onChange={e => onChange(e.target.value)} 
-        placeholder={placeholder}
-        className={className}
-      />
+      <div className="flex justify-end"><TokenButton onInsert={handleInsertToken} /></div>
+      <Textarea ref={textareaRef} value={value} onChange={e => onChange(e.target.value)} placeholder={placeholder} className={`min-h-[150px] ${className}`} />
+    </div>
+  );
+}
+
+// Multi-select recipients component
+function RecipientsSelect({ value = [], onChange }) {
+  const toggleRecipient = (recipient) => {
+    if (value.includes(recipient)) {
+      onChange(value.filter(r => r !== recipient));
+    } else {
+      onChange([...value, recipient]);
+    }
+  };
+  return (
+    <div className="flex flex-wrap gap-2">
+      {RECIPIENT_OPTIONS.map(opt => (
+        <Badge 
+          key={opt.value}
+          variant={value.includes(opt.value) ? "default" : "outline"}
+          className="cursor-pointer"
+          onClick={() => toggleRecipient(opt.value)}
+        >
+          {opt.label}
+        </Badge>
+      ))}
+    </div>
+  );
+}
+
+// Timing selector component
+function TimingSelector({ direction, offset, unit, onDirectionChange, onOffsetChange, onUnitChange }) {
+  return (
+    <div className="flex items-center gap-2 flex-wrap">
+      <Select value={direction} onValueChange={onDirectionChange}>
+        <SelectTrigger className="w-24"><SelectValue /></SelectTrigger>
+        <SelectContent>
+          <SelectItem value="before">לפני</SelectItem>
+          <SelectItem value="after">אחרי</SelectItem>
+        </SelectContent>
+      </Select>
+      <Input type="number" value={offset} onChange={e => onOffsetChange(parseInt(e.target.value) || 0)} className="w-20" />
+      <Select value={unit} onValueChange={onUnitChange}>
+        <SelectTrigger className="w-24"><SelectValue /></SelectTrigger>
+        <SelectContent>
+          <SelectItem value="days">ימים</SelectItem>
+          <SelectItem value="weeks">שבועות</SelectItem>
+        </SelectContent>
+      </Select>
+      <span className="text-sm text-slate-500">מתאריך המייל</span>
     </div>
   );
 }
@@ -141,6 +180,11 @@ export default function AutomationRulesManager() {
   const { data: rules = [], isLoading } = useQuery({
     queryKey: ['automationRules'],
     queryFn: () => base44.entities.AutomationRule.list('-created_date'),
+  });
+
+  const { data: users = [] } = useQuery({
+    queryKey: ['users'],
+    queryFn: () => base44.entities.User.list(),
   });
 
   const createMutation = useMutation({
@@ -177,11 +221,12 @@ export default function AutomationRulesManager() {
   };
 
   const openEdit = (rule) => {
+    const mapConfig = rule.map_config?.length > 0 ? rule.map_config : [{ ...defaultMapRow }];
     const mergedRule = {
       ...defaultRule,
       ...rule,
       catch_config: { ...defaultRule.catch_config, ...rule.catch_config },
-      map_config: rule.map_config || [],
+      map_config: mapConfig,
       action_bundle: {
         send_email: { ...defaultRule.action_bundle.send_email, ...rule.action_bundle?.send_email },
         save_file: { ...defaultRule.action_bundle.save_file, ...rule.action_bundle?.save_file },
@@ -219,7 +264,7 @@ export default function AutomationRulesManager() {
   const addMapRow = () => {
     setCurrentRule({
       ...currentRule,
-      map_config: [...currentRule.map_config, { source: 'subject', anchor_text: '', target_field: 'case_no' }]
+      map_config: [...currentRule.map_config, { ...defaultMapRow }]
     });
   };
 
@@ -230,9 +275,10 @@ export default function AutomationRulesManager() {
   };
 
   const removeMapRow = (index) => {
+    const newMap = currentRule.map_config.filter((_, i) => i !== index);
     setCurrentRule({
       ...currentRule,
-      map_config: currentRule.map_config.filter((_, i) => i !== index)
+      map_config: newMap.length > 0 ? newMap : [{ ...defaultMapRow }]
     });
   };
 
@@ -262,7 +308,14 @@ export default function AutomationRulesManager() {
           ) : rules.map(rule => (
             <div key={rule.id} className="flex items-center gap-4 py-3">
               <div className="flex-1">
-                <p className="font-medium dark:text-slate-200">{rule.name}</p>
+                <div className="flex items-center gap-2">
+                  <p className="font-medium dark:text-slate-200">{rule.name}</p>
+                  {rule.require_approval && (
+                    <Badge variant="outline" className="text-xs gap-1">
+                      <ShieldCheck className="w-3 h-3" /> דורש אישור
+                    </Badge>
+                  )}
+                </div>
                 <p className="text-sm text-slate-500">
                   {rule.map_config?.length || 0} כללי חילוץ • 
                   {Object.values(rule.action_bundle || {}).filter(a => a?.enabled).length} פעולות
@@ -281,94 +334,90 @@ export default function AutomationRulesManager() {
           <DialogHeader>
             <DialogTitle>{currentRule.id ? t('settings.edit_rule') : t('settings.new_rule')}</DialogTitle>
           </DialogHeader>
+
+          {/* Approval Header */}
+          <div className="flex items-center justify-between p-3 bg-slate-50 dark:bg-slate-900 rounded-lg mb-4">
+            <div className="flex items-center gap-2">
+              <ShieldCheck className="w-5 h-5 text-blue-600" />
+              <span className="font-medium">דרוש אישור לפני ביצוע</span>
+            </div>
+            <Switch 
+              checked={currentRule.require_approval} 
+              onCheckedChange={c => setCurrentRule({...currentRule, require_approval: c})} 
+            />
+          </div>
+          {currentRule.require_approval && (
+            <div className="mb-4">
+              <Label>מאשר</Label>
+              <Select value={currentRule.approver_email} onValueChange={v => setCurrentRule({...currentRule, approver_email: v})}>
+                <SelectTrigger><SelectValue placeholder="בחר עו״ד מאשר" /></SelectTrigger>
+                <SelectContent>
+                  {users.map(user => (
+                    <SelectItem key={user.id} value={user.email}>{user.full_name} ({user.email})</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+
           <Tabs value={activeTab} onValueChange={setActiveTab}>
             <TabsList className="grid grid-cols-3">
-              <TabsTrigger value="catch">1. מסננת (Catch)</TabsTrigger>
-              <TabsTrigger value="map">2. מפענח (Map)</TabsTrigger>
-              <TabsTrigger value="actions">3. פעולות (Actions)</TabsTrigger>
+              <TabsTrigger value="catch">1. מסננת</TabsTrigger>
+              <TabsTrigger value="map">2. מפענח</TabsTrigger>
+              <TabsTrigger value="actions">3. פעולות</TabsTrigger>
             </TabsList>
 
             {/* Tab 1: Catch */}
             <TabsContent value="catch" className="space-y-4 pt-4">
               <div>
                 <Label>שם החוק</Label>
-                <Input 
-                  value={currentRule.name} 
-                  onChange={e => setCurrentRule({...currentRule, name: e.target.value})} 
-                  placeholder="למשל: הודעות רשמיות - סימני מסחר"
-                />
+                <Input value={currentRule.name} onChange={e => setCurrentRule({...currentRule, name: e.target.value})} placeholder="למשל: הודעות רשמיות - סימני מסחר" />
               </div>
               <div>
                 <Label>שולח (From)</Label>
-                <Input 
-                  value={sendersInput} 
-                  onChange={e => setSendersInput(e.target.value)} 
-                  placeholder="כתובות מייל מופרדות בפסיקים, למשל: @justice.gov.il"
-                />
+                <Input value={sendersInput} onChange={e => setSendersInput(e.target.value)} placeholder="כתובות מייל מופרדות בפסיקים" />
               </div>
               <div>
                 <Label>טקסט בנושא</Label>
-                <Input 
-                  value={currentRule.catch_config.subject_contains} 
-                  onChange={e => setCurrentRule({...currentRule, catch_config: {...currentRule.catch_config, subject_contains: e.target.value}})}
-                  placeholder="למשל: הודעה על קיבול"
-                />
+                <Input value={currentRule.catch_config.subject_contains} onChange={e => setCurrentRule({...currentRule, catch_config: {...currentRule.catch_config, subject_contains: e.target.value}})} placeholder="למשל: הודעה על קיבול" />
               </div>
               <div>
                 <Label>טקסט בגוף המייל</Label>
-                <Input 
-                  value={currentRule.catch_config.body_contains} 
-                  onChange={e => setCurrentRule({...currentRule, catch_config: {...currentRule.catch_config, body_contains: e.target.value}})}
-                  placeholder="מילות מפתח בגוף ההודעה"
-                />
+                <Input value={currentRule.catch_config.body_contains} onChange={e => setCurrentRule({...currentRule, catch_config: {...currentRule.catch_config, body_contains: e.target.value}})} placeholder="מילות מפתח בגוף ההודעה" />
               </div>
             </TabsContent>
 
             {/* Tab 2: Map */}
             <TabsContent value="map" className="space-y-4 pt-4">
-              <p className="text-sm text-slate-500 dark:text-slate-400">
-                הגדר כללי חילוץ: חפש טקסט עוגן וקח את מה שאחריו
-              </p>
+              <p className="text-sm text-slate-500 dark:text-slate-400">הגדר כללי חילוץ: חפש טקסט עוגן וקח את מה שאחריו</p>
               
               <div className="space-y-3">
                 {currentRule.map_config.map((row, index) => (
                   <div key={index} className="flex items-center gap-2 p-3 bg-slate-50 dark:bg-slate-900 rounded-lg">
                     <Select value={row.source} onValueChange={v => updateMapRow(index, 'source', v)}>
-                      <SelectTrigger className="w-28">
-                        <SelectValue />
-                      </SelectTrigger>
+                      <SelectTrigger className="w-28"><SelectValue /></SelectTrigger>
                       <SelectContent>
                         <SelectItem value="subject">נושא</SelectItem>
                         <SelectItem value="body">גוף</SelectItem>
                         <SelectItem value="attachment">קבצים</SelectItem>
                       </SelectContent>
                     </Select>
-                    <Input 
-                      value={row.anchor_text}
-                      onChange={e => updateMapRow(index, 'anchor_text', e.target.value)}
-                      placeholder="טקסט עוגן (למשל: תיק מס':)"
-                      className="flex-1"
-                    />
+                    <Input value={row.anchor_text} onChange={e => updateMapRow(index, 'anchor_text', e.target.value)} placeholder="טקסט עוגן (למשל: תיק מס':)" className="flex-1" />
                     <Select value={row.target_field} onValueChange={v => updateMapRow(index, 'target_field', v)}>
-                      <SelectTrigger className="w-36">
-                        <SelectValue />
-                      </SelectTrigger>
+                      <SelectTrigger className="w-44"><SelectValue /></SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="case_no">מספר תיק פנימי</SelectItem>
-                        <SelectItem value="official_no">מספר בקשה רשמי</SelectItem>
-                        <SelectItem value="client_ref">סימוכין לקוח</SelectItem>
+                        {TARGET_FIELD_OPTIONS.map(opt => (
+                          <SelectItem key={opt.value} value={opt.value}>
+                            <code className="text-xs">{opt.label}</code>
+                          </SelectItem>
+                        ))}
                       </SelectContent>
                     </Select>
-                    <Button variant="ghost" size="icon" onClick={() => removeMapRow(index)} className="text-red-500">
-                      <X className="w-4 h-4" />
-                    </Button>
+                    <Button variant="ghost" size="icon" onClick={() => removeMapRow(index)} className="text-red-500"><X className="w-4 h-4" /></Button>
                   </div>
                 ))}
               </div>
-
-              <Button variant="outline" onClick={addMapRow} className="w-full gap-2">
-                <Plus className="w-4 h-4" /> הוסף כלל חילוץ
-              </Button>
+              <Button variant="outline" onClick={addMapRow} className="w-full gap-2"><Plus className="w-4 h-4" /> הוסף כלל חילוץ</Button>
             </TabsContent>
 
             {/* Tab 3: Actions */}
@@ -377,30 +426,22 @@ export default function AutomationRulesManager() {
               {/* Billing */}
               <div className="p-4 border dark:border-slate-700 rounded-lg space-y-3">
                 <div className="flex items-center gap-2">
-                  <Checkbox 
-                    checked={currentRule.action_bundle.billing.enabled} 
-                    onCheckedChange={c => updateAction('billing', 'enabled', c)} 
-                  />
+                  <Checkbox checked={currentRule.action_bundle.billing.enabled} onCheckedChange={c => updateAction('billing', 'enabled', c)} />
                   <Label className="font-medium">💰 חיוב שעות</Label>
                 </div>
                 {currentRule.action_bundle.billing.enabled && (
                   <div className="grid grid-cols-2 gap-3 pr-6">
                     <div>
                       <Label className="text-sm">שעות</Label>
-                      <Input 
-                        type="number" 
-                        step="0.25"
-                        value={currentRule.action_bundle.billing.hours} 
-                        onChange={e => updateAction('billing', 'hours', parseFloat(e.target.value) || 0)}
-                      />
+                      <Input type="number" step="0.25" value={currentRule.action_bundle.billing.hours} onChange={e => updateAction('billing', 'hours', parseFloat(e.target.value) || 0)} />
+                    </div>
+                    <div>
+                      <Label className="text-sm">תעריף לשעה (₪)</Label>
+                      <Input type="number" value={currentRule.action_bundle.billing.hourly_rate} onChange={e => updateAction('billing', 'hourly_rate', parseFloat(e.target.value) || 0)} />
                     </div>
                     <div className="col-span-2">
                       <Label className="text-sm">תיאור</Label>
-                      <TokenInput 
-                        value={currentRule.action_bundle.billing.description_template}
-                        onChange={v => updateAction('billing', 'description_template', v)}
-                        placeholder="עיבוד דואר: {Mail_Subject}"
-                      />
+                      <TokenInput value={currentRule.action_bundle.billing.description_template} onChange={v => updateAction('billing', 'description_template', v)} placeholder="עיבוד דואר: {Mail_Subject}" />
                     </div>
                   </div>
                 )}
@@ -409,10 +450,7 @@ export default function AutomationRulesManager() {
               {/* Create Alert */}
               <div className="p-4 border dark:border-slate-700 rounded-lg space-y-3">
                 <div className="flex items-center gap-2">
-                  <Checkbox 
-                    checked={currentRule.action_bundle.create_alert.enabled} 
-                    onCheckedChange={c => updateAction('create_alert', 'enabled', c)} 
-                  />
+                  <Checkbox checked={currentRule.action_bundle.create_alert.enabled} onCheckedChange={c => updateAction('create_alert', 'enabled', c)} />
                   <Label className="font-medium">🚨 התרעה / דוקטינג</Label>
                 </div>
                 {currentRule.action_bundle.create_alert.enabled && (
@@ -420,10 +458,7 @@ export default function AutomationRulesManager() {
                     <div className="grid grid-cols-2 gap-3">
                       <div>
                         <Label className="text-sm">סוג</Label>
-                        <Select 
-                          value={currentRule.action_bundle.create_alert.alert_type} 
-                          onValueChange={v => updateAction('create_alert', 'alert_type', v)}
-                        >
+                        <Select value={currentRule.action_bundle.create_alert.alert_type} onValueChange={v => updateAction('create_alert', 'alert_type', v)}>
                           <SelectTrigger><SelectValue /></SelectTrigger>
                           <SelectContent>
                             <SelectItem value="reminder">תזכורת</SelectItem>
@@ -432,22 +467,25 @@ export default function AutomationRulesManager() {
                           </SelectContent>
                         </Select>
                       </div>
-                      <div>
-                        <Label className="text-sm">ימים מתאריך המייל</Label>
-                        <Input 
-                          type="number"
-                          value={currentRule.action_bundle.create_alert.days_offset} 
-                          onChange={e => updateAction('create_alert', 'days_offset', parseInt(e.target.value) || 0)}
-                        />
-                      </div>
+                    </div>
+                    <div>
+                      <Label className="text-sm">תזמון</Label>
+                      <TimingSelector
+                        direction={currentRule.action_bundle.create_alert.timing_direction}
+                        offset={currentRule.action_bundle.create_alert.timing_offset}
+                        unit={currentRule.action_bundle.create_alert.timing_unit}
+                        onDirectionChange={v => updateAction('create_alert', 'timing_direction', v)}
+                        onOffsetChange={v => updateAction('create_alert', 'timing_offset', v)}
+                        onUnitChange={v => updateAction('create_alert', 'timing_unit', v)}
+                      />
                     </div>
                     <div>
                       <Label className="text-sm">הודעה</Label>
-                      <TokenInput 
-                        value={currentRule.action_bundle.create_alert.message_template}
-                        onChange={v => updateAction('create_alert', 'message_template', v)}
-                        placeholder="נדרשת תגובה בתיק {Case_No}"
-                      />
+                      <TokenInput value={currentRule.action_bundle.create_alert.message_template} onChange={v => updateAction('create_alert', 'message_template', v)} placeholder="נדרשת תגובה בתיק {Case_No}" />
+                    </div>
+                    <div>
+                      <Label className="text-sm">נמענים</Label>
+                      <RecipientsSelect value={currentRule.action_bundle.create_alert.recipients} onChange={v => updateAction('create_alert', 'recipients', v)} />
                     </div>
                   </div>
                 )}
@@ -456,38 +494,33 @@ export default function AutomationRulesManager() {
               {/* Calendar Event */}
               <div className="p-4 border dark:border-slate-700 rounded-lg space-y-3">
                 <div className="flex items-center gap-2">
-                  <Checkbox 
-                    checked={currentRule.action_bundle.calendar_event.enabled} 
-                    onCheckedChange={c => updateAction('calendar_event', 'enabled', c)} 
-                  />
+                  <Checkbox checked={currentRule.action_bundle.calendar_event.enabled} onCheckedChange={c => updateAction('calendar_event', 'enabled', c)} />
                   <Label className="font-medium">📅 אירוע ביומן</Label>
                 </div>
                 {currentRule.action_bundle.calendar_event.enabled && (
                   <div className="space-y-3 pr-6">
                     <div>
                       <Label className="text-sm">שם האירוע</Label>
-                      <TokenInput 
-                        value={currentRule.action_bundle.calendar_event.title_template}
-                        onChange={v => updateAction('calendar_event', 'title_template', v)}
-                        placeholder="מועד אחרון - {Case_No}"
+                      <TokenInput value={currentRule.action_bundle.calendar_event.title_template} onChange={v => updateAction('calendar_event', 'title_template', v)} placeholder="מועד אחרון - {Case_No}" />
+                    </div>
+                    <div>
+                      <Label className="text-sm">תזמון</Label>
+                      <TimingSelector
+                        direction={currentRule.action_bundle.calendar_event.timing_direction}
+                        offset={currentRule.action_bundle.calendar_event.timing_offset}
+                        unit={currentRule.action_bundle.calendar_event.timing_unit}
+                        onDirectionChange={v => updateAction('calendar_event', 'timing_direction', v)}
+                        onOffsetChange={v => updateAction('calendar_event', 'timing_offset', v)}
+                        onUnitChange={v => updateAction('calendar_event', 'timing_unit', v)}
                       />
                     </div>
-                    <div className="grid grid-cols-2 gap-3">
-                      <div>
-                        <Label className="text-sm">ימים מתאריך המייל</Label>
-                        <Input 
-                          type="number"
-                          value={currentRule.action_bundle.calendar_event.days_offset} 
-                          onChange={e => updateAction('calendar_event', 'days_offset', parseInt(e.target.value) || 0)}
-                        />
-                      </div>
-                      <div className="flex items-center gap-2 pt-6">
-                        <Checkbox 
-                          checked={currentRule.action_bundle.calendar_event.create_meet_link} 
-                          onCheckedChange={c => updateAction('calendar_event', 'create_meet_link', c)} 
-                        />
-                        <Label className="text-sm">צור קישור וידאו</Label>
-                      </div>
+                    <div>
+                      <Label className="text-sm">משתתפים</Label>
+                      <RecipientsSelect value={currentRule.action_bundle.calendar_event.attendees} onChange={v => updateAction('calendar_event', 'attendees', v)} />
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Checkbox checked={currentRule.action_bundle.calendar_event.create_meet_link} onCheckedChange={c => updateAction('calendar_event', 'create_meet_link', c)} />
+                      <Label className="text-sm">צור קישור וידאו</Label>
                     </div>
                   </div>
                 )}
@@ -496,54 +529,22 @@ export default function AutomationRulesManager() {
               {/* Send Email */}
               <div className="p-4 border dark:border-slate-700 rounded-lg space-y-3">
                 <div className="flex items-center gap-2">
-                  <Checkbox 
-                    checked={currentRule.action_bundle.send_email.enabled} 
-                    onCheckedChange={c => updateAction('send_email', 'enabled', c)} 
-                  />
+                  <Checkbox checked={currentRule.action_bundle.send_email.enabled} onCheckedChange={c => updateAction('send_email', 'enabled', c)} />
                   <Label className="font-medium">📧 שליחת מייל</Label>
                 </div>
                 {currentRule.action_bundle.send_email.enabled && (
                   <div className="space-y-3 pr-6">
-                    <div className="grid grid-cols-2 gap-3">
-                      <div>
-                        <Label className="text-sm">למי</Label>
-                        <Select 
-                          value={currentRule.action_bundle.send_email.recipient_type} 
-                          onValueChange={v => updateAction('send_email', 'recipient_type', v)}
-                        >
-                          <SelectTrigger><SelectValue /></SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="client">לקוח</SelectItem>
-                            <SelectItem value="attorney">שותף אחראי</SelectItem>
-                            <SelectItem value="custom">כתובת אחרת</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      {currentRule.action_bundle.send_email.recipient_type === 'custom' && (
-                        <div>
-                          <Label className="text-sm">כתובת מייל</Label>
-                          <Input 
-                            value={currentRule.action_bundle.send_email.custom_email}
-                            onChange={e => updateAction('send_email', 'custom_email', e.target.value)}
-                          />
-                        </div>
-                      )}
+                    <div>
+                      <Label className="text-sm">נמענים</Label>
+                      <RecipientsSelect value={currentRule.action_bundle.send_email.recipients} onChange={v => updateAction('send_email', 'recipients', v)} />
                     </div>
                     <div>
                       <Label className="text-sm">נושא</Label>
-                      <TokenInput 
-                        value={currentRule.action_bundle.send_email.subject_template}
-                        onChange={v => updateAction('send_email', 'subject_template', v)}
-                        placeholder="עדכון בתיק {Case_No}"
-                      />
+                      <TokenInput value={currentRule.action_bundle.send_email.subject_template} onChange={v => updateAction('send_email', 'subject_template', v)} placeholder="עדכון בתיק {Case_No}" />
                     </div>
                     <div>
                       <Label className="text-sm">תוכן</Label>
-                      <TokenTextarea 
-                        value={currentRule.action_bundle.send_email.body_template}
-                        onChange={v => updateAction('send_email', 'body_template', v)}
-                        placeholder="שלום {Client_Name},&#10;&#10;התקבלה הודעה בתיק..."
-                      />
+                      <TokenTextarea value={currentRule.action_bundle.send_email.body_template} onChange={v => updateAction('send_email', 'body_template', v)} placeholder="שלום {Client_Name},&#10;&#10;התקבלה הודעה בתיק..." />
                     </div>
                   </div>
                 )}
@@ -552,20 +553,13 @@ export default function AutomationRulesManager() {
               {/* Save File */}
               <div className="p-4 border dark:border-slate-700 rounded-lg space-y-3">
                 <div className="flex items-center gap-2">
-                  <Checkbox 
-                    checked={currentRule.action_bundle.save_file.enabled} 
-                    onCheckedChange={c => updateAction('save_file', 'enabled', c)} 
-                  />
+                  <Checkbox checked={currentRule.action_bundle.save_file.enabled} onCheckedChange={c => updateAction('save_file', 'enabled', c)} />
                   <Label className="font-medium">🗂️ שמירת קבצים</Label>
                 </div>
                 {currentRule.action_bundle.save_file.enabled && (
                   <div className="pr-6">
                     <Label className="text-sm">נתיב יעד</Label>
-                    <TokenInput 
-                      value={currentRule.action_bundle.save_file.path_template}
-                      onChange={v => updateAction('save_file', 'path_template', v)}
-                      placeholder="Clients/{Client_Name}/{Case_Type}/{Official_No}/Correspondence"
-                    />
+                    <TokenInput value={currentRule.action_bundle.save_file.path_template} onChange={v => updateAction('save_file', 'path_template', v)} placeholder="Clients/{Client_Name}/{Case_Type}/{Official_No}" />
                   </div>
                 )}
               </div>
