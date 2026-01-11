@@ -1,4 +1,27 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.6';
+import pdf from 'npm:pdf-parse@1.1.1';
+
+/**
+ * Parse PDF content from URL and extract text
+ * @param {string} fileUrl - URL of the PDF file
+ * @returns {Promise<string>} - Extracted text content
+ */
+async function extractTextFromPdf(fileUrl) {
+  try {
+    const response = await fetch(fileUrl);
+    if (!response.ok) {
+      console.error('Failed to fetch PDF:', response.status);
+      return '';
+    }
+    const arrayBuffer = await response.arrayBuffer();
+    const buffer = new Uint8Array(arrayBuffer);
+    const data = await pdf(buffer);
+    return data.text || '';
+  } catch (e) {
+    console.error('Error parsing PDF:', e);
+    return '';
+  }
+}
 
 /**
  * Extract identifier from text using anchor text pattern
@@ -254,8 +277,23 @@ Deno.serve(async (req) => {
           sourceText = mail.body_plain || mail.body_html || '';
           break;
         case 'attachment':
-          // For attachments, we'd need to parse content - use filename for now
-          sourceText = (mail.attachments || []).map(a => a.filename).join(' ');
+          // Parse PDF attachments to extract text
+          const attachments = mail.attachments || [];
+          const pdfAttachments = attachments.filter(a => 
+            (a.filename || '').toLowerCase().endsWith('.pdf') && a.url
+          );
+          
+          for (const att of pdfAttachments) {
+            const pdfText = await extractTextFromPdf(att.url);
+            if (pdfText) {
+              sourceText += ' ' + pdfText;
+            }
+          }
+          
+          // Fallback to filenames if no PDF content
+          if (!sourceText.trim()) {
+            sourceText = attachments.map(a => a.filename).join(' ');
+          }
           break;
         default:
           sourceText = mail.subject || '';
