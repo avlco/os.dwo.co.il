@@ -20,7 +20,6 @@ import {
   Search,
   ChevronDown,
   Mail,
-  Cog,
   PanelLeftClose,
   PanelLeftOpen
 } from 'lucide-react';
@@ -34,6 +33,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { cn } from "@/lib/utils";
 
 function LayoutContent({ children, currentPageName }) {
   const { t, i18n } = useTranslation();
@@ -88,15 +88,12 @@ function LayoutContent({ children, currentPageName }) {
       )}
 
       {/* Sidebar */}
-      <aside className={`
-        fixed top-0 ${isRTL ? 'right-0' : 'left-0'} h-full 
-        ${sidebarCollapsed ? 'w-20' : 'w-72'}
-        bg-white dark:bg-slate-800 
-        border-${isRTL ? 'l' : 'r'} border-slate-200 dark:border-slate-700 z-50
-        transform transition-all duration-300 ease-out
-        ${sidebarOpen ? 'translate-x-0' : (isRTL ? 'translate-x-full' : '-translate-x-full')}
-        lg:translate-x-0
-      `}>
+      <aside className={cn(
+        "fixed top-0 h-full bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 z-50 transform transition-all duration-300 ease-out lg:translate-x-0",
+        isRTL ? "right-0 border-l" : "left-0 border-r",
+        sidebarCollapsed ? "w-20" : "w-72",
+        sidebarOpen ? "translate-x-0" : (isRTL ? "translate-x-full" : "-translate-x-full")
+      )}>
         <div className="flex flex-col h-full">
           {/* Logo */}
           <div className={`flex items-center justify-between h-16 ${sidebarCollapsed ? 'px-4' : 'px-6'} border-b border-slate-100 dark:border-slate-700`}>
@@ -111,6 +108,7 @@ function LayoutContent({ children, currentPageName }) {
             <button 
               className="lg:hidden p-2 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg"
               onClick={() => setSidebarOpen(false)}
+              aria-label={t('common.close_sidebar')}
             >
               <X className="w-5 h-5 text-slate-500 dark:text-slate-400" />
             </button>
@@ -184,7 +182,12 @@ function LayoutContent({ children, currentPageName }) {
           </aside>
 
       {/* Main content */}
-      <div className={`lg:${isRTL ? 'mr-' : 'ml-'}${sidebarCollapsed ? '20' : '72'} transition-all duration-300`}>
+      <div className={cn(
+        "transition-all duration-300",
+        isRTL 
+          ? (sidebarCollapsed ? "lg:mr-20" : "lg:mr-72")
+          : (sidebarCollapsed ? "lg:ml-20" : "lg:ml-72")
+      )}>
         {/* Top header */}
         <header className="sticky top-0 z-30 bg-white/80 dark:bg-slate-800/80 backdrop-blur-lg border-b border-slate-200 dark:border-slate-700">
           <div className="flex items-center justify-between h-16 px-6">
@@ -192,6 +195,7 @@ function LayoutContent({ children, currentPageName }) {
               <button 
                 className="lg:hidden p-2 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg"
                 onClick={() => setSidebarOpen(true)}
+                aria-label={t('common.open_sidebar')}
               >
                 <Menu className="w-5 h-5 text-slate-600 dark:text-slate-300" />
               </button>
@@ -199,7 +203,7 @@ function LayoutContent({ children, currentPageName }) {
               <button 
                 className="hidden lg:flex p-2 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg"
                 onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
-                title={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+                aria-label={sidebarCollapsed ? t('common.expand_sidebar') : t('common.collapse_sidebar')}
               >
                 {sidebarCollapsed ? (
                   <PanelLeftOpen className="w-5 h-5 text-slate-600 dark:text-slate-300" />
@@ -216,7 +220,7 @@ function LayoutContent({ children, currentPageName }) {
               </div>
             </div>
             <div className="flex items-center gap-3">
-              <Button variant="ghost" size="icon" className="relative rounded-xl dark:hover:bg-slate-700">
+              <Button variant="ghost" size="icon" className="relative rounded-xl dark:hover:bg-slate-700" aria-label={t('common.notifications')}>
                 <Bell className="w-5 h-5 text-slate-600 dark:text-slate-300" />
                 <span className="absolute top-1 right-1 w-2 h-2 bg-rose-500 rounded-full" />
               </Button>
