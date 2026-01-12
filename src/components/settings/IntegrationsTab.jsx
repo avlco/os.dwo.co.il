@@ -83,23 +83,23 @@ export default function IntegrationsTab() {
   };
 
   const handleAuthCallback = async (provider, code) => {
-      if (isProcessing) return; // מניעת כפילות
+      if (isProcessing) return;
       setIsProcessing(true);
-      toast.info('משלים תהליך חיבור...');
+      const loadingToastId = toast.loading('משלים תהליך חיבור...');
 
       try {
-          // שינוי קריטי: קריאה לפונקציה בשם הקובץ, עם שם הפעולה
           await base44.functions.invoke('integrationAuth', { 
               action: 'handleCallback',
               provider, 
-              code, 
-              userId: user.id 
+              code
           });
           
+          toast.dismiss(loadingToastId);
           toast.success('החיבור נוצר בהצלחה!');
           queryClient.invalidateQueries(['integrationConnections']);
       } catch (error) {
           console.error(error);
+          toast.dismiss(loadingToastId);
           toast.error(`שגיאה בחיבור: ${error.message}`);
       } finally {
           setIsProcessing(false);
@@ -113,26 +113,26 @@ export default function IntegrationsTab() {
       return;
     }
     
-    // שמירת הספק כדי שנדע למי לשייך כשנחזור
     localStorage.setItem('pending_oauth_provider', provider);
+    const loadingToastId = toast.loading('מכין מעבר לאימות...');
 
     try {
-      toast.loading('מכין מעבר לאימות...');
-      
-      // שינוי קריטי: קריאה לפונקציה בשם הקובץ, עם שם הפעולה
       const response = await base44.functions.invoke('integrationAuth', { 
           action: 'getAuthUrl',
-          provider, 
-          userId: user.id 
+          provider
       });
 
-      if (response && response.authUrl) {
+      toast.dismiss(loadingToastId);
+
+      if (response?.data?.authUrl) {
+          window.location.href = response.data.authUrl;
+      } else if (response?.authUrl) {
           window.location.href = response.authUrl;
       } else {
           throw new Error("לא התקבלה כתובת אימות מהשרת");
       }
     } catch (error) {
-      toast.dismiss(); // הסתרת ה-loading
+      toast.dismiss(loadingToastId);
       toast.error(`שגיאה בהתחלת אינטגרציה: ${error.message}`);
       localStorage.removeItem('pending_oauth_provider');
     }
