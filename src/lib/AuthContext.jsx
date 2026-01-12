@@ -10,13 +10,10 @@ export const AuthProvider = ({ children }) => {
   const [isLoading, setIsLoading] = useState(true);
   const [appPublicSettings, setAppPublicSettings] = useState(null);
 
-  // פונקציה בטוחה למעבר למסך התחברות
   const navigateToLogin = () => {
-      // תיקון קריטי: בנייה ידנית של ה-URL במקום להסתמך על פונקציית SDK חסרה
-      const baseUrl = appParams.appBaseUrl || 'https://dwo.base44.app';
-      // מוודאים שאין לוכסן כפול
-      const cleanBaseUrl = baseUrl.endsWith('/') ? baseUrl.slice(0, -1) : baseUrl;
-      window.location.href = `${cleanBaseUrl}/login`;
+      // כתובת לוגין קשיחה למקרה שה-SDK לא נטען
+      const baseUrl = 'https://dwo.base44.app';
+      window.location.href = `${baseUrl}/login`;
   };
 
   const logout = async () => {
@@ -27,40 +24,42 @@ export const AuthProvider = ({ children }) => {
       }
       setUser(null);
       setIsAuthenticated(false);
-      localStorage.clear();
+      
+      // Security Phase 2: Selective Logout
+      // ניקוי כירורגי של נתוני האפליקציה בלבד
+      localStorage.removeItem('base44_access_token');
+      localStorage.removeItem('base44_refresh_token');
+      localStorage.removeItem('pending_oauth_provider');
       sessionStorage.clear();
+      
       navigateToLogin();
   };
 
   const checkAuth = async () => {
     setIsLoading(true);
     try {
-      // 1. נסיון לקבל משתמש
       const userData = await base44.auth.me();
       
       if (userData) {
         setUser(userData);
         setIsAuthenticated(true);
         
-        // 2. טעינת הגדרות רק למשתמש מחובר
-        if (appParams.appId && base44.app_client) {
-            try {
-                const settings = await base44.app_client.get(`/prod/public-settings/by-id/${appParams.appId}`);
-                setAppPublicSettings(settings);
-            } catch (settingsError) {
-                console.warn("Settings fetch warning:", settingsError);
-            }
+        // Security Phase 2: Clean URL
+        // ניקוי הטוקן משורת הכתובת לאחר אימות מוצלח
+        const url = new URL(window.location.href);
+        if (url.searchParams.has('access_token')) {
+            url.searchParams.delete('access_token');
+            window.history.replaceState({}, document.title, url.pathname + url.search);
         }
       }
     } catch (error) {
       const status = error.response?.status || 0;
-      
-      // משתמש לא מחובר או אין הרשאה - זה מצב תקין, המערכת תפנה אותו ללוגין
       setUser(null);
       setIsAuthenticated(false);
 
+      // אם הטוקן לא תקף, ננקה אותו מהזיכרון/סטורג'
       if (status === 403 || status === 401) {
-        localStorage.clear(); // ניקוי שאריות טוקן פגום
+        localStorage.removeItem('base44_access_token');
       }
     } finally {
       setIsLoading(false);
