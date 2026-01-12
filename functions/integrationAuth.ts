@@ -1,4 +1,4 @@
-import { base44 } from '@base44/sdk';
+import { createClientFromRequest } from 'npm:@base44/sdk@0.8.6';
 import * as crypto from './utils/crypto.ts';
 
 // הגדרת משתני סביבה
@@ -54,7 +54,7 @@ async function getAuthUrl(provider: string, userId: string) {
   throw new Error('Unsupported provider');
 }
 
-async function handleCallback(code: string, provider: string, userId: string) {
+async function handleCallback(code: string, provider: string, userId: string, base44: any) {
   let tokens;
   
   if (provider === 'google') {
@@ -103,7 +103,7 @@ async function handleCallback(code: string, provider: string, userId: string) {
   const expiresAt = Date.now() + (tokens.expires_in * 1000);
 
   // בדיקה אם קיים חיבור
-  const existingConnections = await base44.entities.IntegrationConnection.filter({ 
+  const existingConnections = await base44.asServiceRole.entities.IntegrationConnection.filter({ 
     user_id: userId, 
     provider 
   });
@@ -122,14 +122,14 @@ async function handleCallback(code: string, provider: string, userId: string) {
 
   if (existingConnections.length > 0) {
     // עדכון
-    await base44.entities.IntegrationConnection.update(existingConnections[0].id, connectionData);
+    await base44.asServiceRole.entities.IntegrationConnection.update(existingConnections[0].id, connectionData);
   } else {
     // יצירה חדשה
     // בודקים שהרפרש טוקן קיים ביצירה ראשונית (קריטי)
     if (!encryptedRefreshToken && provider === 'google') {
        console.warn("Warning: No refresh token received on first connect!");
     }
-    await base44.entities.IntegrationConnection.create({
+    await base44.asServiceRole.entities.IntegrationConnection.create({
         ...connectionData,
         refresh_token: encryptedRefreshToken || "MISSING" // Fallback למניעת קריסה, אבל דורש טיפול
     });
@@ -138,8 +138,8 @@ async function handleCallback(code: string, provider: string, userId: string) {
   return { success: true };
 }
 
-export async function getValidToken(userId: string, provider: 'google' | 'dropbox'): Promise<string> {
-    const connections = await base44.entities.IntegrationConnection.filter({ user_id: userId, provider });
+export async function getValidToken(userId: string, provider: 'google' | 'dropbox', base44: any): Promise<string> {
+    const connections = await base44.asServiceRole.entities.IntegrationConnection.filter({ user_id: userId, provider });
     if (connections.length === 0) throw new Error(`No connection found for ${provider}`);
   
     let connection = connections[0];
@@ -187,7 +187,7 @@ export async function getValidToken(userId: string, provider: 'google' | 'dropbo
         const newAccessTokenEnc = await crypto.encrypt(newTokens.access_token);
         const newExpiresAt = Date.now() + (newTokens.expires_in * 1000);
         
-        await base44.entities.IntegrationConnection.update(connection.id, {
+        await base44.asServiceRole.entities.IntegrationConnection.update(connection.id, {
             access_token: newAccessTokenEnc,
             expires_at: newExpiresAt,
             // לפעמים מקבלים רפרש טוקן חדש גם ברענון
@@ -201,24 +201,42 @@ export async function getValidToken(userId: string, provider: 'google' | 'dropbo
     return await crypto.decrypt(connection.access_token);
 }
 
-// === MAIN ROUTER (החלק שהיה חסר) ===
-export default async function(input: any) {
-    const { action, provider, userId, code } = input;
-
+// === MAIN ROUTER ===
+Deno.serve(async (req) => {
     try {
+        const base44 = createClientFromRequest(req);
+        const user = await base44.auth.me();
+        
+        if (!user) {
+            return Response.json({ error: 'Unauthorized' }, { status: 401 });
+        }
+
+        const { action, provider, code } = await req.json();
+        const userId = user.id;
+
+        if (!action) {
+            return Response.json({ error: 'Missing action parameter' }, { status: 400 });
+        }
+
         if (action === 'getAuthUrl') {
+            if (!provider) {
+                return Response.json({ error: 'Missing provider parameter' }, { status: 400 });
+            }
             const url = await getAuthUrl(provider, userId);
-            return { authUrl: url };
+            return Response.json({ authUrl: url });
         }
         
         if (action === 'handleCallback') {
-            await handleCallback(code, provider, userId);
-            return { success: true };
+            if (!provider || !code) {
+                return Response.json({ error: 'Missing provider or code parameter' }, { status: 400 });
+            }
+            await handleCallback(code, provider, userId, base44);
+            return Response.json({ success: true });
         }
 
-        throw new Error(`Unknown action: ${action}`);
-    } catch (err: any) {
+        return Response.json({ error: `Unknown action: ${action}` }, { status: 400 });
+    } catch (err) {
         console.error("Integration Auth Error:", err);
-        throw new Error(err.message || String(err));
+        return Response.json({ error: err.message || String(err) }, { status: 500 });
     }
-}
+});
