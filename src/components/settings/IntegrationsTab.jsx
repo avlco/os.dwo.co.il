@@ -4,14 +4,18 @@ import { base44 } from '@/api/base44Client';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
-import { Power, ExternalLink, Loader2, CheckCircle2, XCircle } from 'lucide-react';
+import { Power, ExternalLink, Loader2, CheckCircle2, XCircle, FileSpreadsheet, Save } from 'lucide-react';
 
 export default function IntegrationsTab({ user }) {
   const { t } = useTranslation();
   const [connectionStatus, setConnectionStatus] = useState({ google: null, dropbox: null });
   const [loading, setLoading] = useState(true);
   const [connecting, setConnecting] = useState(null);
+  const [spreadsheetId, setSpreadsheetId] = useState('');
+  const [savingSpreadsheet, setSavingSpreadsheet] = useState(false);
 
   useEffect(() => {
     loadConnectionStatus();
@@ -22,10 +26,34 @@ export default function IntegrationsTab({ user }) {
     try {
       const response = await base44.functions.invoke('integrationAuth', { action: 'getStatus' });
       setConnectionStatus(response.data);
+      if (response.data.google?.spreadsheet_id) {
+        setSpreadsheetId(response.data.google.spreadsheet_id);
+      }
     } catch (e) {
       console.error('Error loading connection status:', e);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const saveSpreadsheetId = async () => {
+    if (!spreadsheetId.trim()) {
+      toast.error('נא להזין מזהה גיליון');
+      return;
+    }
+    
+    setSavingSpreadsheet(true);
+    try {
+      await base44.functions.invoke('integrationAuth', {
+        action: 'updateMetadata',
+        provider: 'google',
+        metadata: { spreadsheet_id: spreadsheetId.trim() }
+      });
+      toast.success('מזהה הגיליון נשמר בהצלחה');
+    } catch (error) {
+      toast.error(`שגיאה בשמירה: ${error.message}`);
+    } finally {
+      setSavingSpreadsheet(false);
     }
   };
 
@@ -156,6 +184,39 @@ export default function IntegrationsTab({ user }) {
               <p className="text-xs text-slate-500">
                 הרשאות: Gmail (קריאה/כתיבה), יומן, Drive, Sheets
               </p>
+              
+              {/* Google Sheets Configuration */}
+              <div className="mt-4 p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
+                <div className="flex items-center gap-2 mb-3">
+                  <FileSpreadsheet className="w-4 h-4 text-blue-600" />
+                  <Label className="text-sm font-medium text-blue-800 dark:text-blue-300">
+                    הגדרת Google Sheets לגיבוי
+                  </Label>
+                </div>
+                <p className="text-xs text-blue-700 dark:text-blue-400 mb-3">
+                  הזן את מזהה הגיליון (Spreadsheet ID) לגיבוי אוטומטי של לקוחות וחיובים.
+                  <br />
+                  <span className="text-blue-600">ודא שיש בגיליון גיליונות בשם "Clients" ו-"Financials".</span>
+                </p>
+                <div className="flex gap-2">
+                  <Input
+                    value={spreadsheetId}
+                    onChange={(e) => setSpreadsheetId(e.target.value)}
+                    placeholder="1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms"
+                    className="flex-1 text-sm bg-white dark:bg-slate-800"
+                    dir="ltr"
+                  />
+                  <Button 
+                    size="sm" 
+                    onClick={saveSpreadsheetId}
+                    disabled={savingSpreadsheet}
+                    className="gap-1"
+                  >
+                    {savingSpreadsheet ? <Loader2 className="w-3 h-3 animate-spin" /> : <Save className="w-3 h-3" />}
+                    שמור
+                  </Button>
+                </div>
+              </div>
             </div>
           ) : (
             <div className="space-y-3">

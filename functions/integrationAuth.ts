@@ -328,12 +328,34 @@ Deno.serve(async (req) => {
             connected: true,
             email: conn.metadata?.email,
             display_name: conn.metadata?.display_name,
+            spreadsheet_id: conn.metadata?.spreadsheet_id,
             expires_at: conn.expires_at,
           };
         }
       }
       
       return Response.json(status);
+    }
+    
+    // Action: Update metadata (e.g., spreadsheet_id)
+    if (action === 'updateMetadata') {
+      const { metadata: newMetadata } = await req.json().catch(() => ({}));
+      
+      const connections = await base44.entities.IntegrationConnection.filter({
+        user_id: user.id,
+        provider,
+      });
+      
+      if (connections.length === 0) {
+        return Response.json({ error: 'Connection not found' }, { status: 404 });
+      }
+      
+      const existingMetadata = connections[0].metadata || {};
+      await base44.entities.IntegrationConnection.update(connections[0].id, {
+        metadata: { ...existingMetadata, ...newMetadata }
+      });
+      
+      return Response.json({ success: true });
     }
     
     return Response.json({ error: 'Invalid action' }, { status: 400 });
