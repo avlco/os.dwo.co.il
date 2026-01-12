@@ -4,10 +4,11 @@ import {
 } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Loader2, ArrowUpDown } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import { flexRender, getCoreRowModel, getFilteredRowModel, getPaginationRowModel, getSortedRowModel, useReactTable } from "@tanstack/react-table";
 
-export default function DataTable({ 
+// 1. Named Export (Required for MailRoom.jsx)
+export function DataTable({ 
   columns, 
   data, 
   searchKey, 
@@ -122,3 +123,6 @@ export default function DataTable({
     </div>
   );
 }
+
+// 2. Default Export (Required for Cases.jsx and legacy pages)
+export default DataTable;
