@@ -4,7 +4,7 @@ import { createPageUrl } from './utils';
 import { useTranslation } from 'react-i18next';
 import { ThemeProvider } from './components/ThemeProvider';
 import './components/i18nConfig';
-import { useAuth } from '@/components/AuthContext'; // שימוש בקונטקסט החדש
+import { useAuth } from '@/lib/AuthContext'; // חזרה ל-lib
 import {
   LayoutDashboard,
   Briefcase,
