@@ -7,11 +7,25 @@ import { Label } from "@/components/ui/label";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 import { toast } from "sonner";
 import { Power, ExternalLink, X, Loader2 } from 'lucide-react';
-import { useAuth } from '@/lib/AuthContext';
 
 export default function IntegrationsTab() {
   const queryClient = useQueryClient();
-  const { user } = useAuth();
+  const [user, setUser] = useState(null);
+  const [isLoadingUser, setIsLoadingUser] = useState(true);
+
+  useEffect(() => {
+    const loadUser = async () => {
+      try {
+        const userData = await base44.auth.me();
+        setUser(userData);
+      } catch (e) {
+        console.error('Failed to load user:', e);
+      } finally {
+        setIsLoadingUser(false);
+      }
+    };
+    loadUser();
+  }, []);
   const [integrationSettings, setIntegrationSettings] = useState({
     googleSpreadsheetId: '',
   });
@@ -130,7 +144,7 @@ export default function IntegrationsTab() {
       toast.info("שמירת הגדרות נוספות תיושם בקרוב");
   };
 
-  if (isLoadingConnections) return <div className="flex justify-center p-8"><Loader2 className="animate-spin" /></div>;
+  if (isLoadingConnections || isLoadingUser) return <div className="flex justify-center p-8"><Loader2 className="animate-spin" /></div>;
 
   return (
     <div className="space-y-6">
