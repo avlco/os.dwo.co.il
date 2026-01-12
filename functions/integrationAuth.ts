@@ -210,8 +210,12 @@ Deno.serve(async (req) => {
         console.log(`Action received: ${action}, Provider: ${provider}, User: ${user.id}`);
 
         if (action === 'getAuthUrl') {
-            const url = await getAuthUrl(provider, user.id);
-            return new Response(JSON.stringify({ authUrl: url }), { status: 200, headers });
+          const { state } = body;
+          if (!state) {
+            return new Response(JSON.stringify({ error: 'Missing state parameter' }), { status: 400, headers });
+          }
+          const url = await getAuthUrl(provider, state);
+          return new Response(JSON.stringify({ authUrl: url }), { status: 200, headers });
         }
         
         if (action === 'handleCallback') {
