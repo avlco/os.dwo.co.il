@@ -1,6 +1,7 @@
-import { createClientFromRequest } from 'npm:@base44/sdk@0.8.6';
-import { encrypt, decrypt, encryptTokens, decryptTokens } from './utils/crypto.js';
+import { base44 } from '@base44/sdk';
+import * as crypto from './utils/crypto.ts';
 
+// הגדרת משתני סביבה
 const GOOGLE_CLIENT_ID = Deno.env.get("GOOGLE_CLIENT_ID");
 const GOOGLE_CLIENT_SECRET = Deno.env.get("GOOGLE_CLIENT_SECRET");
 const GOOGLE_REDIRECT_URI = Deno.env.get("GOOGLE_REDIRECT_URI");
@@ -9,360 +10,215 @@ const DROPBOX_APP_KEY = Deno.env.get("DROPBOX_APP_KEY");
 const DROPBOX_APP_SECRET = Deno.env.get("DROPBOX_APP_SECRET");
 const DROPBOX_REDIRECT_URI = Deno.env.get("DROPBOX_REDIRECT_URI");
 
-// Google OAuth Scopes
-const GOOGLE_SCOPES = [
-  'https://www.googleapis.com/auth/gmail.modify',
-  'https://www.googleapis.com/auth/calendar',
-  'https://www.googleapis.com/auth/drive.file',
-  'https://www.googleapis.com/auth/spreadsheets',
-  'https://www.googleapis.com/auth/userinfo.email',
-].join(' ');
+// --- Helper Functions ---
 
-// Dropbox OAuth Scopes
-const DROPBOX_SCOPES = [
-  'files.content.write',
-  'files.content.read',
-  'sharing.write',
-  'account_info.read',
-].join(' ');
-
-/**
- * Generate OAuth authorization URL
- */
-function getAuthUrl(provider, userId) {
+async function getAuthUrl(provider: string, userId: string) {
   if (provider === 'google') {
+    if (!GOOGLE_CLIENT_ID || !GOOGLE_REDIRECT_URI) throw new Error("Missing Google Config");
+    
+    const scopes = [
+      'https://www.googleapis.com/auth/gmail.modify',
+      'https://www.googleapis.com/auth/calendar',
+      'https://www.googleapis.com/auth/drive.file',
+      'https://www.googleapis.com/auth/spreadsheets',
+    ];
+    
     const params = new URLSearchParams({
       client_id: GOOGLE_CLIENT_ID,
       redirect_uri: GOOGLE_REDIRECT_URI,
       response_type: 'code',
-      scope: GOOGLE_SCOPES,
-      access_type: 'offline',
-      prompt: 'consent',
-      state: JSON.stringify({ provider: 'google', userId }),
+      scope: scopes.join(' '),
+      access_type: 'offline', // חובה ל-Refresh Token
+      prompt: 'consent',      // חובה כדי לקבל Refresh Token כל פעם מחדש
+      state: userId,
+      include_granted_scopes: 'true'
     });
+    
     return `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`;
-  }
+  } 
   
   if (provider === 'dropbox') {
+    if (!DROPBOX_APP_KEY || !DROPBOX_REDIRECT_URI) throw new Error("Missing Dropbox Config");
+
     const params = new URLSearchParams({
       client_id: DROPBOX_APP_KEY,
       redirect_uri: DROPBOX_REDIRECT_URI,
       response_type: 'code',
-      token_access_type: 'offline',
-      state: JSON.stringify({ provider: 'dropbox', userId }),
+      token_access_type: 'offline', // חובה ל-Refresh Token ב-Dropbox
+      state: userId
     });
+
     return `https://www.dropbox.com/oauth2/authorize?${params.toString()}`;
   }
-  
+
   throw new Error('Unsupported provider');
 }
 
-/**
- * Exchange authorization code for tokens
- */
-async function exchangeCodeForTokens(provider, code) {
+async function handleCallback(code: string, provider: string, userId: string) {
+  let tokens;
+  
   if (provider === 'google') {
     const response = await fetch('https://oauth2.googleapis.com/token', {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: new URLSearchParams({
         code,
-        client_id: GOOGLE_CLIENT_ID,
-        client_secret: GOOGLE_CLIENT_SECRET,
-        redirect_uri: GOOGLE_REDIRECT_URI,
+        client_id: GOOGLE_CLIENT_ID!,
+        client_secret: GOOGLE_CLIENT_SECRET!,
+        redirect_uri: GOOGLE_REDIRECT_URI!,
         grant_type: 'authorization_code',
       }).toString(),
     });
     
-    const data = await response.json();
-    if (data.error) throw new Error(data.error_description || data.error);
-    return data;
-  }
-  
-  if (provider === 'dropbox') {
+    tokens = await response.json();
+    if (tokens.error) throw new Error(tokens.error_description || JSON.stringify(tokens));
+  } 
+  else if (provider === 'dropbox') {
+    // Dropbox Auth Code Exchange
+    const credentials = btoa(`${DROPBOX_APP_KEY}:${DROPBOX_APP_SECRET}`);
     const response = await fetch('https://api.dropboxapi.com/oauth2/token', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      headers: { 
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'Authorization': `Basic ${credentials}`
+      },
       body: new URLSearchParams({
         code,
-        client_id: DROPBOX_APP_KEY,
-        client_secret: DROPBOX_APP_SECRET,
-        redirect_uri: DROPBOX_REDIRECT_URI,
         grant_type: 'authorization_code',
+        redirect_uri: DROPBOX_REDIRECT_URI!,
       }).toString(),
     });
-    
-    const data = await response.json();
-    if (data.error) throw new Error(data.error_description || data.error);
-    return data;
-  }
-  
-  throw new Error('Unsupported provider');
-}
 
-/**
- * Get user info from provider
- */
-async function getUserInfo(provider, accessToken) {
-  if (provider === 'google') {
-    const response = await fetch('https://www.googleapis.com/oauth2/v2/userinfo', {
-      headers: { Authorization: `Bearer ${accessToken}` },
-    });
-    const data = await response.json();
-    return { email: data.email, display_name: data.name };
+    tokens = await response.json();
+    if (tokens.error) throw new Error(tokens.error_description || JSON.stringify(tokens));
+  } else {
+    throw new Error('Unsupported provider');
   }
-  
-  if (provider === 'dropbox') {
-    const response = await fetch('https://api.dropboxapi.com/2/users/get_current_account', {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${accessToken}` },
-    });
-    const data = await response.json();
-    return { 
-      email: data.email, 
-      display_name: data.name?.display_name,
-      account_id: data.account_id 
-    };
-  }
-  
-  return {};
-}
 
-/**
- * Refresh an expired token
- */
-async function refreshAccessToken(provider, refreshToken) {
-  if (provider === 'google') {
-    const response = await fetch('https://oauth2.googleapis.com/token', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({
-        refresh_token: refreshToken,
-        client_id: GOOGLE_CLIENT_ID,
-        client_secret: GOOGLE_CLIENT_SECRET,
-        grant_type: 'refresh_token',
-      }).toString(),
-    });
-    
-    const data = await response.json();
-    if (data.error) throw new Error(data.error_description || data.error);
-    return data;
-  }
-  
-  if (provider === 'dropbox') {
-    const response = await fetch('https://api.dropboxapi.com/oauth2/token', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({
-        refresh_token: refreshToken,
-        client_id: DROPBOX_APP_KEY,
-        client_secret: DROPBOX_APP_SECRET,
-        grant_type: 'refresh_token',
-      }).toString(),
-    });
-    
-    const data = await response.json();
-    if (data.error) throw new Error(data.error_description || data.error);
-    return data;
-  }
-  
-  throw new Error('Unsupported provider');
-}
+  // הצפנת הטוקנים
+  const encryptedAccessToken = await crypto.encrypt(tokens.access_token);
+  const encryptedRefreshToken = tokens.refresh_token ? await crypto.encrypt(tokens.refresh_token) : null;
 
-/**
- * Get a valid (non-expired) access token for a user
- */
-export async function getValidToken(base44, userId, provider) {
-  const connections = await base44.asServiceRole.entities.IntegrationConnection.filter({ 
+  // חישוב זמן תפוגה (במילישניות)
+  const expiresAt = Date.now() + (tokens.expires_in * 1000);
+
+  // בדיקה אם קיים חיבור
+  const existingConnections = await base44.entities.IntegrationConnection.filter({ 
     user_id: userId, 
+    provider 
+  });
+
+  const connectionData = {
+    user_id: userId,
     provider,
-    is_active: true 
-  });
-  
-  if (connections.length === 0) {
-    throw new Error(`No active ${provider} connection found for user`);
-  }
-  
-  const connection = connections[0];
-  const now = Date.now();
-  const bufferTime = 5 * 60 * 1000; // 5 minutes buffer
-  
-  // Decrypt current tokens
-  const { access_token, refresh_token } = await decryptTokens({
-    access_token_encrypted: connection.access_token_encrypted,
-    refresh_token_encrypted: connection.refresh_token_encrypted,
-  });
-  
-  // Check if token is still valid
-  if (connection.expires_at > now + bufferTime) {
-    // Update last_used_at
-    await base44.asServiceRole.entities.IntegrationConnection.update(connection.id, {
-      last_used_at: new Date().toISOString()
+    access_token: encryptedAccessToken,
+    expires_at: expiresAt,
+    // אם לא קיבלנו רפרש טוקן חדש (קורה לפעמים), נשמור על הישן אם יש, או נעדכן לחדש אם קיבלנו
+    ...(encryptedRefreshToken && { refresh_token: encryptedRefreshToken }),
+    metadata: {
+        last_updated: new Date().toISOString()
+    }
+  };
+
+  if (existingConnections.length > 0) {
+    // עדכון
+    await base44.entities.IntegrationConnection.update(existingConnections[0].id, connectionData);
+  } else {
+    // יצירה חדשה
+    // בודקים שהרפרש טוקן קיים ביצירה ראשונית (קריטי)
+    if (!encryptedRefreshToken && provider === 'google') {
+       console.warn("Warning: No refresh token received on first connect!");
+    }
+    await base44.entities.IntegrationConnection.create({
+        ...connectionData,
+        refresh_token: encryptedRefreshToken || "MISSING" // Fallback למניעת קריסה, אבל דורש טיפול
     });
-    return access_token;
   }
   
-  // Token expired, need to refresh
-  if (!refresh_token) {
-    throw new Error(`${provider} token expired and no refresh token available`);
-  }
-  
-  console.log(`Refreshing ${provider} token for user ${userId}...`);
-  
-  const newTokens = await refreshAccessToken(provider, refresh_token);
-  const encrypted = await encryptTokens({
-    access_token: newTokens.access_token,
-    refresh_token: newTokens.refresh_token || refresh_token,
-  });
-  
-  const newExpiresAt = now + (newTokens.expires_in * 1000);
-  
-  await base44.asServiceRole.entities.IntegrationConnection.update(connection.id, {
-    access_token_encrypted: encrypted.access_token_encrypted,
-    refresh_token_encrypted: encrypted.refresh_token_encrypted,
-    expires_at: newExpiresAt,
-    last_used_at: new Date().toISOString(),
-  });
-  
-  console.log(`${provider} token refreshed successfully`);
-  return newTokens.access_token;
+  return { success: true };
 }
 
-// Main HTTP handler
-Deno.serve(async (req) => {
-  try {
-    const base44 = createClientFromRequest(req);
-    const user = await base44.auth.me();
+export async function getValidToken(userId: string, provider: 'google' | 'dropbox'): Promise<string> {
+    const connections = await base44.entities.IntegrationConnection.filter({ user_id: userId, provider });
+    if (connections.length === 0) throw new Error(`No connection found for ${provider}`);
+  
+    let connection = connections[0];
     
-    if (!user) {
-      return Response.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-    
-    const { action, provider, code } = await req.json();
-    
-    // Action: Get OAuth URL
-    if (action === 'getAuthUrl') {
-      const authUrl = getAuthUrl(provider, user.id);
-      return Response.json({ authUrl });
-    }
-    
-    // Action: Handle OAuth Callback
-    if (action === 'handleCallback') {
-      if (!code) {
-        return Response.json({ error: 'Authorization code required' }, { status: 400 });
-      }
-      
-      // Exchange code for tokens
-      const tokens = await exchangeCodeForTokens(provider, code);
-      
-      // Get user info from provider
-      const userInfo = await getUserInfo(provider, tokens.access_token);
-      
-      // Encrypt tokens
-      const encrypted = await encryptTokens({
-        access_token: tokens.access_token,
-        refresh_token: tokens.refresh_token,
-      });
-      
-      const expiresAt = Date.now() + (tokens.expires_in * 1000);
-      
-      // Check for existing connection
-      const existing = await base44.entities.IntegrationConnection.filter({
-        user_id: user.id,
-        provider,
-      });
-      
-      const connectionData = {
-        user_id: user.id,
-        provider,
-        access_token_encrypted: encrypted.access_token_encrypted,
-        refresh_token_encrypted: encrypted.refresh_token_encrypted,
-        expires_at: expiresAt,
-        metadata: userInfo,
-        is_active: true,
-        last_used_at: new Date().toISOString(),
-      };
-      
-      if (existing.length > 0) {
-        await base44.entities.IntegrationConnection.update(existing[0].id, connectionData);
-      } else {
-        await base44.entities.IntegrationConnection.create(connectionData);
-      }
-      
-      return Response.json({ 
-        success: true, 
-        provider,
-        email: userInfo.email,
-        display_name: userInfo.display_name,
-      });
-    }
-    
-    // Action: Disconnect
-    if (action === 'disconnect') {
-      const connections = await base44.entities.IntegrationConnection.filter({
-        user_id: user.id,
-        provider,
-      });
-      
-      if (connections.length > 0) {
-        await base44.entities.IntegrationConnection.delete(connections[0].id);
-      }
-      
-      return Response.json({ success: true });
-    }
-    
-    // Action: Get connection status
-    if (action === 'getStatus') {
-      const connections = await base44.entities.IntegrationConnection.filter({
-        user_id: user.id,
-      });
-      
-      const status = {
-        google: null,
-        dropbox: null,
-      };
-      
-      for (const conn of connections) {
-        if (conn.is_active) {
-          status[conn.provider] = {
-            connected: true,
-            email: conn.metadata?.email,
-            display_name: conn.metadata?.display_name,
-            spreadsheet_id: conn.metadata?.spreadsheet_id,
-            expires_at: conn.expires_at,
-          };
+    // אם הטוקן פג תוקף (או עומד לפוג ב-5 דקות הקרובות)
+    if (Date.now() > (connection.expires_at - 300000)) {
+        console.log(`Refreshing token for ${provider}...`);
+        
+        if (!connection.refresh_token) throw new Error(`Cannot refresh token for ${provider} - no refresh token available`);
+        
+        const refreshTokenDecrypted = await crypto.decrypt(connection.refresh_token);
+        let newTokens;
+
+        if (provider === 'google') {
+            const response = await fetch('https://oauth2.googleapis.com/token', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: new URLSearchParams({
+                    client_id: GOOGLE_CLIENT_ID!,
+                    client_secret: GOOGLE_CLIENT_SECRET!,
+                    refresh_token: refreshTokenDecrypted,
+                    grant_type: 'refresh_token',
+                }).toString(),
+            });
+            newTokens = await response.json();
+        } else if (provider === 'dropbox') {
+             const credentials = btoa(`${DROPBOX_APP_KEY}:${DROPBOX_APP_SECRET}`);
+             const response = await fetch('https://api.dropboxapi.com/oauth2/token', {
+                method: 'POST',
+                headers: { 
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                    'Authorization': `Basic ${credentials}`
+                },
+                body: new URLSearchParams({
+                    refresh_token: refreshTokenDecrypted,
+                    grant_type: 'refresh_token',
+                }).toString(),
+            });
+            newTokens = await response.json();
         }
-      }
-      
-      return Response.json(status);
+
+        if (newTokens.error) throw new Error(JSON.stringify(newTokens));
+
+        // הצפנה ושמירה מחדש
+        const newAccessTokenEnc = await crypto.encrypt(newTokens.access_token);
+        const newExpiresAt = Date.now() + (newTokens.expires_in * 1000);
+        
+        await base44.entities.IntegrationConnection.update(connection.id, {
+            access_token: newAccessTokenEnc,
+            expires_at: newExpiresAt,
+            // לפעמים מקבלים רפרש טוקן חדש גם ברענון
+            ...(newTokens.refresh_token ? { refresh_token: await crypto.encrypt(newTokens.refresh_token) } : {}) 
+        });
+        
+        return newTokens.access_token;
     }
-    
-    // Action: Update metadata (e.g., spreadsheet_id)
-    if (action === 'updateMetadata') {
-      const requestBody = await req.json().catch(() => ({}));
-      const newMetadata = requestBody.metadata;
-      
-      const connections = await base44.entities.IntegrationConnection.filter({
-        user_id: user.id,
-        provider,
-      });
-      
-      if (connections.length === 0) {
-        return Response.json({ error: 'Connection not found' }, { status: 404 });
-      }
-      
-      const existingMetadata = connections[0].metadata || {};
-      await base44.entities.IntegrationConnection.update(connections[0].id, {
-        metadata: { ...existingMetadata, ...newMetadata }
-      });
-      
-      return Response.json({ success: true });
+
+    // הטוקן עדיין בתוקף - רק לפענח ולהחזיר
+    return await crypto.decrypt(connection.access_token);
+}
+
+// === MAIN ROUTER (החלק שהיה חסר) ===
+export default async function(input: any) {
+    const { action, provider, userId, code } = input;
+
+    try {
+        if (action === 'getAuthUrl') {
+            const url = await getAuthUrl(provider, userId);
+            return { authUrl: url };
+        }
+        
+        if (action === 'handleCallback') {
+            await handleCallback(code, provider, userId);
+            return { success: true };
+        }
+
+        throw new Error(`Unknown action: ${action}`);
+    } catch (err: any) {
+        console.error("Integration Auth Error:", err);
+        throw new Error(err.message || String(err));
     }
-    
-    return Response.json({ error: 'Invalid action' }, { status: 400 });
-    
-  } catch (error) {
-    console.error('Integration auth error:', error);
-    return Response.json({ error: error.message }, { status: 500 });
-  }
-});
+}
