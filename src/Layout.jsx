@@ -40,6 +40,7 @@ function LayoutContent({ children, currentPageName }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [user, setUser] = useState(null);
+  const [isLoading, setIsLoading] = useState(true);
   
   const isRTL = i18n.language === 'he';
 
@@ -64,8 +65,21 @@ function LayoutContent({ children, currentPageName }) {
       const userData = await base44.auth.me();
       setUser(userData);
     } catch (e) {
-      console.log('User not logged in', e);
-      base44.auth.redirectToLogin();
+      const status = e?.response?.status || e?.status;
+      console.log('Auth error:', status, e);
+      
+      // Clear any stale data for 403 errors
+      if (status === 403) {
+        localStorage.clear();
+      }
+      
+      // Redirect to login for both 401 and 403
+      if (status === 401 || status === 403) {
+        base44.auth.redirectToLogin();
+        return;
+      }
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -77,6 +91,14 @@ function LayoutContent({ children, currentPageName }) {
     if (!name) return 'U';
     return name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
   };
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-slate-50 dark:bg-slate-900 flex items-center justify-center">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-slate-800"></div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-900" dir={isRTL ? 'rtl' : 'ltr'}>
