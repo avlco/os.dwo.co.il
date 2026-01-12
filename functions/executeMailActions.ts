@@ -1,4 +1,143 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.6';
+import { getValidToken } from './integrationAuth.js';
+
+/**
+ * Sanitize folder/file name for Dropbox (remove invalid characters)
+ */
+function sanitizeDropboxName(name) {
+  if (!name) return 'Unknown';
+  // Remove invalid characters for Dropbox: \ / : * ? " < > |
+  return name.replace(/[\\/:*?"<>|]/g, '_').trim() || 'Unknown';
+}
+
+/**
+ * Ensure folder exists in Dropbox (create if not)
+ */
+async function ensureDropboxFolder(accessToken, folderPath) {
+  try {
+    const response = await fetch('https://api.dropboxapi.com/2/files/create_folder_v2', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        path: folderPath,
+        autorename: false,
+      }),
+    });
+    
+    const data = await response.json();
+    
+    // If folder already exists, that's fine
+    if (data.error?.path?.['.tag'] === 'conflict') {
+      console.log(`Folder already exists: ${folderPath}`);
+      return { exists: true, path: folderPath };
+    }
+    
+    if (data.error) {
+      throw new Error(data.error_summary || 'Failed to create folder');
+    }
+    
+    console.log(`Created folder: ${folderPath}`);
+    return { created: true, path: data.metadata?.path_display || folderPath };
+  } catch (error) {
+    // Check if it's a "conflict" error (folder exists)
+    if (error.message?.includes('conflict')) {
+      return { exists: true, path: folderPath };
+    }
+    throw error;
+  }
+}
+
+/**
+ * Upload file to Dropbox
+ */
+async function uploadToDropbox(accessToken, filePath, fileContent) {
+  const response = await fetch('https://content.dropboxapi.com/2/files/upload', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${accessToken}`,
+      'Dropbox-API-Arg': JSON.stringify({
+        path: filePath,
+        mode: 'add',
+        autorename: true,
+        mute: false,
+      }),
+      'Content-Type': 'application/octet-stream',
+    },
+    body: fileContent,
+  });
+  
+  const data = await response.json();
+  if (data.error) {
+    throw new Error(data.error_summary || 'Failed to upload file');
+  }
+  
+  return data;
+}
+
+/**
+ * Create shared link for a Dropbox file
+ */
+async function createDropboxSharedLink(accessToken, filePath) {
+  // First, try to create a new shared link
+  let response = await fetch('https://api.dropboxapi.com/2/sharing/create_shared_link_with_settings', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${accessToken}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      path: filePath,
+      settings: {
+        requested_visibility: 'public',
+        audience: 'public',
+        access: 'viewer',
+      },
+    }),
+  });
+  
+  let data = await response.json();
+  
+  // If link already exists, fetch existing links
+  if (data.error?.['.tag'] === 'shared_link_already_exists') {
+    response = await fetch('https://api.dropboxapi.com/2/sharing/list_shared_links', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        path: filePath,
+        direct_only: true,
+      }),
+    });
+    
+    data = await response.json();
+    if (data.links && data.links.length > 0) {
+      return data.links[0].url;
+    }
+  }
+  
+  if (data.error) {
+    console.warn('Could not create shared link:', data.error_summary);
+    return null;
+  }
+  
+  return data.url;
+}
+
+/**
+ * Download file from URL
+ */
+async function downloadFile(url) {
+  const response = await fetch(url);
+  if (!response.ok) {
+    throw new Error(`Failed to download file: ${response.status}`);
+  }
+  return new Uint8Array(await response.arrayBuffer());
+}
 
 Deno.serve(async (req) => {
   try {
@@ -91,22 +230,60 @@ Deno.serve(async (req) => {
 
           case 'upload_to_dropbox':
             if (case_id && mail?.attachments?.length > 0 && action.dropbox_folder_path) {
-              const cases = await base44.entities.Case.filter({id: case_id});
-              const currentCase = cases.length > 0 ? cases[0] : null;
-              const clients = await base44.entities.Client.filter({id: client_id});
-              const client = clients.length > 0 ? clients[0] : null;
-              
-              const folderPath = action.dropbox_folder_path
-                .replace('{{client_name}}', client?.name || 'Unknown')
-                .replace('{{case_number}}', currentCase?.case_number || 'Unknown');
-
-              for (const attachment of mail.attachments) {
-                console.log(`Dropbox upload: ${attachment.filename} to ${folderPath}`);
-                executedActions.push({ 
-                  type: 'upload_to_dropbox', 
-                  filename: attachment.filename, 
-                  destination: folderPath,
-                  status: 'simulated'
+              try {
+                // Get Dropbox access token
+                const dropboxToken = await getValidToken(base44, user.id, 'dropbox');
+                
+                const cases = await base44.entities.Case.filter({id: case_id});
+                const currentCase = cases.length > 0 ? cases[0] : null;
+                const clients = await base44.entities.Client.filter({id: client_id});
+                const client = clients.length > 0 ? clients[0] : null;
+                
+                // Build folder path with sanitized names
+                const clientName = sanitizeDropboxName(client?.name);
+                const caseNumber = sanitizeDropboxName(currentCase?.case_number);
+                
+                const folderPath = action.dropbox_folder_path
+                  .replace('{{client_name}}', clientName)
+                  .replace('{{case_number}}', caseNumber);
+                
+                // Ensure folder exists
+                await ensureDropboxFolder(dropboxToken, folderPath);
+                
+                // Upload each attachment
+                for (const attachment of mail.attachments) {
+                  if (!attachment.url) {
+                    console.warn(`No URL for attachment: ${attachment.filename}`);
+                    continue;
+                  }
+                  
+                  console.log(`Downloading attachment: ${attachment.filename}`);
+                  const fileContent = await downloadFile(attachment.url);
+                  
+                  const sanitizedFilename = sanitizeDropboxName(attachment.filename);
+                  const filePath = `${folderPath}/${sanitizedFilename}`;
+                  
+                  console.log(`Uploading to Dropbox: ${filePath}`);
+                  const uploadResult = await uploadToDropbox(dropboxToken, filePath, fileContent);
+                  
+                  // Create shared link
+                  const sharedUrl = await createDropboxSharedLink(dropboxToken, uploadResult.path_display);
+                  
+                  executedActions.push({ 
+                    type: 'upload_to_dropbox', 
+                    filename: attachment.filename, 
+                    destination: uploadResult.path_display,
+                    dropbox_url: sharedUrl,
+                    status: 'success'
+                  });
+                  
+                  console.log(`Uploaded successfully: ${uploadResult.path_display}`);
+                }
+              } catch (dropboxError) {
+                console.error('Dropbox upload error:', dropboxError);
+                errors.push({ 
+                  action: 'upload_to_dropbox', 
+                  error: dropboxError.message 
                 });
               }
             }
