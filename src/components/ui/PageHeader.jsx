@@ -2,7 +2,7 @@ import React from 'react';
 import { Button } from "@/components/ui/button";
 import { Plus } from 'lucide-react';
 
-export default function PageHeader({ title, subtitle, action, actionLabel, actionIcon: ActionIcon = Plus }) {
+export function PageHeader({ title, subtitle, action, actionLabel, actionIcon: ActionIcon = Plus }) {
   return (
     <div className="flex items-center justify-between mb-8">
       <div>
@@ -21,3 +21,5 @@ export default function PageHeader({ title, subtitle, action, actionLabel, actio
     </div>
   );
 }
+
+export default PageHeader;
