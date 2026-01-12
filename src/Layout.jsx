@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { createPageUrl } from './utils';
-import { base44 } from '@/api/base44Client';
 import { useTranslation } from 'react-i18next';
-import { ThemeProvider, useTheme } from './components/ThemeProvider';
+import { ThemeProvider } from './components/ThemeProvider';
 import './components/i18nConfig';
+import { useAuth } from '@/lib/AuthContext'; // שימוש בקונטקסט החדש
 import {
   LayoutDashboard,
   Briefcase,
@@ -21,7 +21,8 @@ import {
   ChevronDown,
   Mail,
   PanelLeftClose,
-  PanelLeftOpen
+  PanelLeftOpen,
+  Loader2 // הוספת אייקון טעינה
 } from 'lucide-react';
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -39,8 +40,9 @@ function LayoutContent({ children, currentPageName }) {
   const { t, i18n } = useTranslation();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  const [user, setUser] = useState(null);
-  const [isLoading, setIsLoading] = useState(true);
+  
+  // שליפת נתונים מהקונטקסט המרכזי
+  const { user, isLoading, isAuthenticated, logout, navigateToLogin } = useAuth();
   
   const isRTL = i18n.language === 'he';
 
@@ -56,50 +58,33 @@ function LayoutContent({ children, currentPageName }) {
         { name: t('nav.settings'), href: 'Settings', icon: Settings },
       ];
 
+  // אפקט שאחראי על ההפניה בלבד אם המשתמש לא מחובר
   useEffect(() => {
-    loadUser();
-  }, []);
-
-  const loadUser = async () => {
-    try {
-      const userData = await base44.auth.me();
-      setUser(userData);
-    } catch (e) {
-      const status = e?.response?.status || e?.status;
-      console.log('Auth error:', status, e);
-      
-      // Clear any stale data for 403 errors
-      if (status === 403) {
-        localStorage.clear();
-      }
-      
-      // Redirect to login for both 401 and 403
-      if (status === 401 || status === 403) {
-        base44.auth.redirectToLogin();
-        return;
-      }
-    } finally {
-      setIsLoading(false);
+    if (!isLoading && !isAuthenticated) {
+      navigateToLogin();
     }
-  };
-
-  const handleLogout = () => {
-    base44.auth.logout();
-  };
+  }, [isLoading, isAuthenticated, navigateToLogin]);
 
   const getInitials = (name) => {
     if (!name) return 'U';
     return name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
   };
 
+  // 1. מסך טעינה - מופיע כל עוד AuthContext בודק מול השרת
   if (isLoading) {
     return (
       <div className="min-h-screen bg-slate-50 dark:bg-slate-900 flex items-center justify-center">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-slate-800"></div>
+        <Loader2 className="h-8 w-8 animate-spin text-slate-800 dark:text-slate-200" />
       </div>
     );
   }
 
+  // 2. מניעת הבהוב (FOUC) - אם סיימנו לטעון ואין משתמש, אל תציג כלום (ה-useEffect למעלה כבר מפנה)
+  if (!isAuthenticated) {
+    return null;
+  }
+
+  // 3. התוכן הראשי - מוצג רק למשתמש מאומת
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-900" dir={isRTL ? 'rtl' : 'ltr'}>
       {/* Mobile sidebar overlay */}
@@ -193,7 +178,7 @@ function LayoutContent({ children, currentPageName }) {
                     </Link>
                   </DropdownMenuItem>
                   <DropdownMenuSeparator className="dark:bg-slate-700" />
-                  <DropdownMenuItem onClick={handleLogout} className="text-rose-600 dark:text-rose-400 cursor-pointer dark:hover:bg-slate-700">
+                  <DropdownMenuItem onClick={logout} className="text-rose-600 dark:text-rose-400 cursor-pointer dark:hover:bg-slate-700">
                     <LogOut className={`w-4 h-4 ${isRTL ? 'ml-2' : 'mr-2'}`} />
                     {t('nav.logout')}
                   </DropdownMenuItem>
