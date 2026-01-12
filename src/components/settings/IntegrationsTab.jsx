@@ -99,12 +99,16 @@ export default function IntegrationsTab() {
       const loadingToastId = toast.loading('משלים תהליך חיבור...');
 
       try {
-          await base44.functions.invoke('integrationAuth', { 
+          const response = await base44.functions.invoke('integrationAuth', { 
               action: 'handleCallback',
               provider, 
               code, 
               userId: user.id 
           });
+          
+          if (!response?.data?.success) {
+              throw new Error("האימות לא הושלם בהצלחה.");
+          }
           
           toast.dismiss(loadingToastId);
           toast.success('החיבור נוצר בהצלחה!');
@@ -144,8 +148,8 @@ export default function IntegrationsTab() {
 
       toast.dismiss(loadingToastId);
       
-      if (response && response.authUrl) {
-          window.location.href = response.authUrl;
+      if (response?.data?.authUrl) {
+          window.location.href = response.data.authUrl;
       } else {
           throw new Error("לא התקבלה כתובת אימות מהשרת");
       }
