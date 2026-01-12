@@ -339,7 +339,8 @@ Deno.serve(async (req) => {
     
     // Action: Update metadata (e.g., spreadsheet_id)
     if (action === 'updateMetadata') {
-      const { metadata: newMetadata } = await req.json().catch(() => ({}));
+      const requestBody = await req.json().catch(() => ({}));
+      const newMetadata = requestBody.metadata;
       
       const connections = await base44.entities.IntegrationConnection.filter({
         user_id: user.id,
