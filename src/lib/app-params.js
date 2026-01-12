@@ -1,54 +1,33 @@
 const isNode = typeof window === 'undefined';
-const windowObj = isNode ? { localStorage: new Map() } : window;
-const storage = windowObj.localStorage;
 
-const toSnakeCase = (str) => {
-	return str.replace(/([A-Z])/g, '_$1').toLowerCase();
-}
-
-const getAppParamValue = (paramName, { defaultValue = undefined, removeFromUrl = false } = {}) => {
-	if (isNode) {
-		return defaultValue;
-	}
-	const storageKey = `base44_${toSnakeCase(paramName)}`;
-	const urlParams = new URLSearchParams(window.location.search);
-	const searchParam = urlParams.get(paramName);
-	if (removeFromUrl) {
-		urlParams.delete(paramName);
-		const newUrl = `${window.location.pathname}${urlParams.toString() ? `?${urlParams.toString()}` : ""
-			}${window.location.hash}`;
-		window.history.replaceState({}, document.title, newUrl);
-	}
-	if (searchParam) {
-		storage.setItem(storageKey, searchParam);
-		return searchParam;
-	}
-	if (defaultValue) {
-		storage.setItem(storageKey, defaultValue);
-		return defaultValue;
-	}
-	const storedValue = storage.getItem(storageKey);
-	if (storedValue) {
-		return storedValue;
-	}
-	return null;
-}
+// פונקציית עזר לחילוץ פרמטרים (משמשת גם קבצים אחרים)
+export const getAppParamValue = (key) => {
+  if (isNode) return undefined;
+  return new URLSearchParams(window.location.search).get(key);
+};
 
 const getAppParams = () => {
-	if (getAppParamValue("clear_access_token") === 'true') {
-		storage.removeItem('base44_access_token');
-		storage.removeItem('token');
-	}
-	return {
-		appId: getAppParamValue("app_id", { defaultValue: import.meta.env.VITE_BASE44_APP_ID }),
-		token: getAppParamValue("access_token", { removeFromUrl: true }),
-		fromUrl: getAppParamValue("from_url", { defaultValue: window.location.href }),
-		functionsVersion: getAppParamValue("functions_version", { defaultValue: import.meta.env.VITE_BASE44_FUNCTIONS_VERSION }),
-		appBaseUrl: getAppParamValue("app_base_url", { defaultValue: import.meta.env.VITE_BASE44_APP_BASE_URL }),
-	}
-}
+  if (isNode) return {};
 
+  const urlParams = new URLSearchParams(window.location.search);
+  
+  // Security Fix: קריאת הטוקן מה-URL ללא שמירה אוטומטית ל-LocalStorage
+  const token = urlParams.get("access_token");
 
+  return {
+    // שמירה על תאימות למבנה שה-SDK מצפה לו
+    appId: urlParams.get("app_id") || import.meta.env.VITE_BASE44_APP_ID,
+    
+    // הטוקן מועבר ל-Base44Client לאתחול, אך האחריות לשמירה (אם בכלל) עוברת ל-AuthContext
+    token: token, 
+    
+    fromUrl: urlParams.get("from_url") || window.location.href,
+    functionsVersion: import.meta.env.VITE_BASE44_FUNCTIONS_VERSION,
+    appBaseUrl: import.meta.env.VITE_BASE44_APP_BASE_URL
+  };
+};
+
+// ייצוא האובייקט הקריטי (חובה כדי למנוע קריסה)
 export const appParams = {
-	...getAppParams()
-}
+  ...getAppParams()
+};
