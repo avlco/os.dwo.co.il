@@ -139,6 +139,89 @@ async function downloadFile(url) {
   return new Uint8Array(await response.arrayBuffer());
 }
 
+/**
+ * Format date to Israeli format DD/MM/YYYY
+ */
+function formatDateIsraeli(date) {
+  const d = new Date(date);
+  const day = String(d.getDate()).padStart(2, '0');
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const year = d.getFullYear();
+  return `${day}/${month}/${year}`;
+}
+
+/**
+ * Create Google Calendar event with Google Meet link
+ */
+async function createCalendarEvent(accessToken, eventData) {
+  const response = await fetch(
+    'https://www.googleapis.com/calendar/v3/calendars/primary/events?conferenceDataVersion=1',
+    {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(eventData),
+    }
+  );
+  
+  const data = await response.json();
+  if (data.error) {
+    throw new Error(data.error.message || 'Failed to create calendar event');
+  }
+  
+  return {
+    eventId: data.id,
+    htmlLink: data.htmlLink,
+    hangoutLink: data.hangoutLink,
+  };
+}
+
+/**
+ * Append row to Google Sheet
+ */
+async function syncToSheet(accessToken, spreadsheetId, range, values) {
+  if (!spreadsheetId) {
+    console.warn('No spreadsheetId configured, skipping Sheets sync');
+    return null;
+  }
+  
+  const url = `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(range)}:append?valueInputOption=USER_ENTERED`;
+  
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${accessToken}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      values: [values],
+    }),
+  });
+  
+  const data = await response.json();
+  if (data.error) {
+    throw new Error(data.error.message || 'Failed to append to sheet');
+  }
+  
+  return data;
+}
+
+/**
+ * Get user's Google spreadsheet ID from IntegrationConnection metadata
+ */
+async function getUserSpreadsheetId(base44, userId) {
+  const connections = await base44.asServiceRole.entities.IntegrationConnection.filter({
+    user_id: userId,
+    provider: 'google',
+    is_active: true,
+  });
+  
+  if (connections.length === 0) return null;
+  return connections[0].metadata?.spreadsheet_id || null;
+}
+
 Deno.serve(async (req) => {
   try {
     const base44 = createClientFromRequest(req);
@@ -291,19 +374,73 @@ Deno.serve(async (req) => {
           
           case 'create_calendar_event':
             if (case_id && action.calendar_event_template) {
-              const cases = await base44.entities.Case.filter({id: case_id});
-              const currentCase = cases.length > 0 ? cases[0] : null;
-              
-              const eventTitle = (action.calendar_event_template.title_template || '')
-                .replace('{{case_number}}', currentCase?.case_number || 'N/A')
-                .replace('{{mail_subject}}', mail?.subject || 'N/A');
-              
-              const eventDescription = (action.calendar_event_template.description_template || '')
-                .replace('{{case_number}}', currentCase?.case_number || 'N/A')
-                .replace('{{mail_subject}}', mail?.subject || 'N/A');
-              
-              console.log(`Calendar event: ${eventTitle}`);
-              executedActions.push({ type: 'create_calendar_event', title: eventTitle, status: 'simulated' });
+              try {
+                const googleToken = await getValidToken(base44, user.id, 'google');
+                
+                const cases = await base44.entities.Case.filter({id: case_id});
+                const currentCase = cases.length > 0 ? cases[0] : null;
+                
+                const eventTitle = (action.calendar_event_template.title_template || 'פגישה חדשה')
+                  .replace('{{case_number}}', currentCase?.case_number || 'N/A')
+                  .replace('{{mail_subject}}', mail?.subject || 'N/A');
+                
+                const eventDescription = (action.calendar_event_template.description_template || '')
+                  .replace('{{case_number}}', currentCase?.case_number || 'N/A')
+                  .replace('{{mail_subject}}', mail?.subject || 'N/A');
+                
+                // Default: tomorrow at 10:00 AM, 1 hour duration
+                const startDate = new Date();
+                startDate.setDate(startDate.getDate() + 1);
+                startDate.setHours(10, 0, 0, 0);
+                
+                const endDate = new Date(startDate);
+                endDate.setHours(11, 0, 0, 0);
+                
+                // Use extracted date if available
+                if (action.event_date) {
+                  const customDate = new Date(action.event_date);
+                  if (!isNaN(customDate.getTime())) {
+                    startDate.setTime(customDate.getTime());
+                    endDate.setTime(customDate.getTime() + 60 * 60 * 1000);
+                  }
+                }
+                
+                const eventData = {
+                  summary: eventTitle,
+                  description: `${eventDescription}\n\nנוצר אוטומטית ע"י Office OS`,
+                  start: {
+                    dateTime: startDate.toISOString(),
+                    timeZone: 'Asia/Jerusalem',
+                  },
+                  end: {
+                    dateTime: endDate.toISOString(),
+                    timeZone: 'Asia/Jerusalem',
+                  },
+                  conferenceData: {
+                    createRequest: {
+                      requestId: `officeos-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+                      conferenceSolutionKey: { type: 'hangoutsMeet' },
+                    },
+                  },
+                };
+                
+                console.log(`Creating calendar event: ${eventTitle}`);
+                const calendarResult = await createCalendarEvent(googleToken, eventData);
+                
+                executedActions.push({ 
+                  type: 'create_calendar_event', 
+                  title: eventTitle,
+                  event_id: calendarResult.eventId,
+                  calendar_link: calendarResult.htmlLink,
+                  meet_link: calendarResult.hangoutLink,
+                  status: 'success'
+                });
+                
+                console.log(`Calendar event created: ${calendarResult.htmlLink}`);
+              } catch (calendarError) {
+                console.error('Calendar event error:', calendarError);
+                errors.push({ action: 'create_calendar_event', error: calendarError.message });
+              }
             }
             break;
 
@@ -362,6 +499,25 @@ Deno.serve(async (req) => {
                 }] : [],
                 notes: `Auto-generated from mail processing: ${mail?.subject || ''}`
               });
+              
+              // Sync to Google Sheets (Financials)
+              try {
+                const spreadsheetId = await getUserSpreadsheetId(base44, user.id);
+                if (spreadsheetId) {
+                  const googleToken = await getValidToken(base44, user.id, 'google');
+                  await syncToSheet(googleToken, spreadsheetId, "'Financials'!A1", [
+                    formatDateIsraeli(new Date()),
+                    client?.name || 'N/A',
+                    extractedAmount * 1.17,
+                    invoiceNumber,
+                    'טיוטה'
+                  ]);
+                  console.log(`Invoice synced to Sheets: ${invoiceNumber}`);
+                }
+              } catch (sheetsError) {
+                console.warn('Sheets sync error (invoice):', sheetsError.message);
+              }
+              
               executedActions.push({ 
                 type: 'create_invoice_draft', 
                 id: invoice.id, 
