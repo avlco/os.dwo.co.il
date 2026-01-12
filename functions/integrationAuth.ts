@@ -1,18 +1,21 @@
-import { createClientFromRequest } from 'npm:@base44/sdk@0.8.6';
+import { createClientFromRequest } from '@base44/sdk';
 
 // --- Section 1: Inlined Crypto Logic (No external imports!) ---
+// זה מחליף את הצורך ב-utils/crypto.ts שגורם לקריסה
 
 async function getCryptoKey() {
   const keyString = Deno.env.get("ENCRYPTION_KEY");
   if (!keyString) {
-    console.warn("Missing ENCRYPTION_KEY, using fallback (NOT SECURE for production)");
-    return await crypto.subtle.generateKey(
-      { name: "AES-GCM", length: 256 },
-      true,
-      ["encrypt", "decrypt"]
-    );
+      // Fallback key for development if env var is missing (Remove in strict prod)
+      console.warn("Missing ENCRYPTION_KEY, using fallback (NOT SECURE for production)");
+      return await crypto.subtle.generateKey(
+        { name: "AES-GCM", length: 256 },
+        true,
+        ["encrypt", "decrypt"]
+      );
   }
   
+  // Pad or truncate key to 32 bytes (256 bits)
   const encoder = new TextEncoder();
   const keyBuffer = encoder.encode(keyString.padEnd(32, '0').slice(0, 32));
   
@@ -25,7 +28,7 @@ async function getCryptoKey() {
   );
 }
 
-async function encrypt(text) {
+async function encrypt(text: string): Promise<string> {
   try {
     const key = await getCryptoKey();
     const iv = crypto.getRandomValues(new Uint8Array(12));
@@ -41,14 +44,14 @@ async function encrypt(text) {
   }
 }
 
-async function decrypt(text) {
+async function decrypt(text: string): Promise<string> {
   try {
     const [ivHex, encryptedHex] = text.split(':');
     if (!ivHex || !encryptedHex) throw new Error("Invalid encrypted format");
     
     const key = await getCryptoKey();
-    const iv = new Uint8Array(ivHex.match(/.{1,2}/g).map(byte => parseInt(byte, 16)));
-    const encrypted = new Uint8Array(encryptedHex.match(/.{1,2}/g).map(byte => parseInt(byte, 16)));
+    const iv = new Uint8Array(ivHex.match(/.{1,2}/g)!.map(byte => parseInt(byte, 16)));
+    const encrypted = new Uint8Array(encryptedHex.match(/.{1,2}/g)!.map(byte => parseInt(byte, 16)));
     
     const decrypted = await crypto.subtle.decrypt({ name: "AES-GCM", iv }, key, encrypted);
     return new TextDecoder().decode(decrypted);
@@ -68,7 +71,7 @@ const DROPBOX_APP_KEY = Deno.env.get("DROPBOX_APP_KEY");
 const DROPBOX_APP_SECRET = Deno.env.get("DROPBOX_APP_SECRET");
 const DROPBOX_REDIRECT_URI = Deno.env.get("DROPBOX_REDIRECT_URI");
 
-async function getAuthUrl(provider, userId) {
+async function getAuthUrl(provider: string, userId: string) {
   console.log(`Generating Auth URL for ${provider}`);
 
   if (provider === 'google') {
@@ -107,7 +110,7 @@ async function getAuthUrl(provider, userId) {
   throw new Error(`Unsupported provider: ${provider}`);
 }
 
-async function handleCallback(code, provider, userId, base44) {
+async function handleCallback(code: string, provider: string, userId: string, base44: any) {
   console.log(`Handling callback for ${provider}`);
   let tokens;
   
@@ -117,9 +120,9 @@ async function handleCallback(code, provider, userId, base44) {
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: new URLSearchParams({
         code,
-        client_id: GOOGLE_CLIENT_ID,
-        client_secret: GOOGLE_CLIENT_SECRET,
-        redirect_uri: GOOGLE_REDIRECT_URI,
+        client_id: GOOGLE_CLIENT_ID!,
+        client_secret: GOOGLE_CLIENT_SECRET!,
+        redirect_uri: GOOGLE_REDIRECT_URI!,
         grant_type: 'authorization_code',
       }).toString(),
     });
@@ -135,7 +138,7 @@ async function handleCallback(code, provider, userId, base44) {
       body: new URLSearchParams({
         code,
         grant_type: 'authorization_code',
-        redirect_uri: DROPBOX_REDIRECT_URI,
+        redirect_uri: DROPBOX_REDIRECT_URI!,
       }).toString(),
     });
     tokens = await res.json();
@@ -146,146 +149,80 @@ async function handleCallback(code, provider, userId, base44) {
     throw new Error(`Provider Error: ${tokens?.error_description || JSON.stringify(tokens)}`);
   }
 
+  // שימוש בפונקציות ההצפנה הפנימיות (ללא crypto.encrypt החיצוני)
   const encryptedAccess = await encrypt(tokens.access_token);
   const encryptedRefresh = tokens.refresh_token ? await encrypt(tokens.refresh_token) : null;
+  
+  // המרת זמן תפוגה ל-Epoch Milliseconds (התאמה לשדה בדאטה בייס)
+  // גוגל מחזירים expires_in בשניות
   const expiresAt = Date.now() + ((tokens.expires_in || 3600) * 1000); 
 
+  // שימוש בלקוח המשתמש (ולא admin) שומר על ה-RLS
   const existing = await base44.entities.IntegrationConnection.filter({ user_id: userId, provider });
 
   const data = {
     user_id: userId,
     provider,
-    access_token_encrypted: encryptedAccess,
+    access_token: encryptedAccess,
     expires_at: expiresAt, 
-    metadata: { last_updated: new Date().toISOString() },
-    is_active: true
+    metadata: { last_updated: new Date().toISOString() }
   };
 
   if (encryptedRefresh) {
-    data.refresh_token_encrypted = encryptedRefresh;
+    Object.assign(data, { refresh_token: encryptedRefresh });
   }
 
   if (existing.length > 0) {
     await base44.entities.IntegrationConnection.update(existing[0].id, data);
   } else {
     await base44.entities.IntegrationConnection.create({
-      ...data,
-      refresh_token_encrypted: encryptedRefresh || "MISSING_REFRESH_TOKEN"
+        ...data,
+        refresh_token: encryptedRefresh || "MISSING_REFRESH_TOKEN"
     });
   }
 }
 
-// --- Section 3: Token Refresh Utility ---
-
-async function getValidToken(userId, provider, base44) {
-  const connections = await base44.entities.IntegrationConnection.filter({ user_id: userId, provider });
-  if (connections.length === 0) throw new Error(`No connection found for ${provider}`);
-
-  let connection = connections[0];
-  
-  if (Date.now() > (connection.expires_at - 300000)) {
-    console.log(`Refreshing token for ${provider}...`);
-    
-    if (!connection.refresh_token_encrypted) throw new Error(`Cannot refresh token for ${provider}`);
-    
-    const refreshToken = await decrypt(connection.refresh_token_encrypted);
-    let newTokens;
-
-    if (provider === 'google') {
-      const res = await fetch('https://oauth2.googleapis.com/token', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: new URLSearchParams({
-          client_id: GOOGLE_CLIENT_ID,
-          client_secret: GOOGLE_CLIENT_SECRET,
-          refresh_token: refreshToken,
-          grant_type: 'refresh_token',
-        }).toString(),
-      });
-      newTokens = await res.json();
-    } else if (provider === 'dropbox') {
-      const credentials = btoa(`${DROPBOX_APP_KEY}:${DROPBOX_APP_SECRET}`);
-      const res = await fetch('https://api.dropboxapi.com/oauth2/token', {
-        method: 'POST',
-        headers: { 
-          'Content-Type': 'application/x-www-form-urlencoded',
-          'Authorization': `Basic ${credentials}`
-        },
-        body: new URLSearchParams({
-          refresh_token: refreshToken,
-          grant_type: 'refresh_token',
-        }).toString(),
-      });
-      newTokens = await res.json();
-    }
-
-    if (newTokens.error) throw new Error(JSON.stringify(newTokens));
-
-    const newAccessEnc = await encrypt(newTokens.access_token);
-    const newExpiresAt = Date.now() + (newTokens.expires_in * 1000);
-    
-    const updateData = {
-      access_token_encrypted: newAccessEnc,
-      expires_at: newExpiresAt,
-    };
-    
-    if (newTokens.refresh_token) {
-      updateData.refresh_token_encrypted = await encrypt(newTokens.refresh_token);
-    }
-    
-    await base44.entities.IntegrationConnection.update(connection.id, updateData);
-    
-    return newTokens.access_token;
-  }
-
-  return await decrypt(connection.access_token_encrypted);
-}
-
-// === MAIN ENTRY POINT ===
+// === MAIN ENTRY POINT (Deno.serve) ===
 Deno.serve(async (req) => {
-  const headers = new Headers({
-    "Access-Control-Allow-Origin": "*",
-    "Access-Control-Allow-Methods": "POST, OPTIONS",
-    "Access-Control-Allow-Headers": "Content-Type, Authorization",
-    "Content-Type": "application/json"
-  });
+    // CORS Headers - חובה כדי שהדפדפן לא יחסום
+    const headers = new Headers({
+        "Access-Control-Allow-Origin": "*",
+        "Access-Control-Allow-Methods": "POST, OPTIONS",
+        "Access-Control-Allow-Headers": "Content-Type, Authorization",
+        "Content-Type": "application/json"
+    });
 
-  if (req.method === "OPTIONS") {
-    return new Response(null, { headers });
-  }
-
-  try {
-    const base44 = createClientFromRequest(req);
-    const user = await base44.auth.me();
-    
-    if (!user) {
-      return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers });
+    if (req.method === "OPTIONS") {
+        return new Response(null, { headers });
     }
 
-    const body = await req.json();
-    const { action, provider, code } = body;
+    try {
+        const base44 = createClientFromRequest(req);
+        const user = await base44.auth.me();
+        
+        if (!user) {
+            return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers });
+        }
 
-    console.log(`Action: ${action}, Provider: ${provider}, User: ${user.id}`);
+        const body = await req.json();
+        const { action, provider, code } = body;
 
-    if (action === 'getAuthUrl') {
-      const url = await getAuthUrl(provider, user.id);
-      return new Response(JSON.stringify({ authUrl: url }), { status: 200, headers });
+        console.log(`Action received: ${action}, Provider: ${provider}, User: ${user.id}`);
+
+        if (action === 'getAuthUrl') {
+            const url = await getAuthUrl(provider, user.id);
+            return new Response(JSON.stringify({ authUrl: url }), { status: 200, headers });
+        }
+        
+        if (action === 'handleCallback') {
+            await handleCallback(code, provider, user.id, base44);
+            return new Response(JSON.stringify({ success: true }), { status: 200, headers });
+        }
+
+        return new Response(JSON.stringify({ error: 'Unknown action' }), { status: 400, headers });
+
+    } catch (err: any) {
+        console.error("Function Error:", err);
+        return new Response(JSON.stringify({ error: err.message || String(err) }), { status: 500, headers });
     }
-    
-    if (action === 'handleCallback') {
-      await handleCallback(code, provider, user.id, base44);
-      return new Response(JSON.stringify({ success: true }), { status: 200, headers });
-    }
-
-    if (action === 'getValidToken') {
-      const token = await getValidToken(user.id, provider, base44);
-      return new Response(JSON.stringify({ token }), { status: 200, headers });
-    }
-
-    return new Response(JSON.stringify({ error: 'Unknown action' }), { status: 400, headers });
-
-  } catch (err) {
-    console.error("Function Error:", err);
-    return new Response(JSON.stringify({ error: err.message || String(err) }), { status: 500, headers });
-  }
 });
