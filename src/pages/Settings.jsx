@@ -6,12 +6,14 @@ import { useTheme } from '../components/ThemeProvider';
 import PageHeader from '../components/ui/PageHeader';
 import UserManagement from '../components/settings/UserManagement';
 import AutomationRulesManager from '../components/settings/AutomationRulesManager';
+import IntegrationsTab from '../components/settings/IntegrationsTab';
 import {
   User,
   Bell,
   Shield,
   Users,
-  Settings as SettingsIcon
+  Settings as SettingsIcon,
+  Link2
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -120,6 +122,10 @@ export default function Settings() {
               {t('settings.automation_rules')}
             </TabsTrigger>
           )}
+          <TabsTrigger value="integrations" className="gap-2 dark:text-slate-300 dark:data-[state=active]:bg-slate-700">
+            <Link2 className="w-4 h-4" />
+            אינטגרציות
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="profile">
@@ -338,6 +344,12 @@ export default function Settings() {
         <TabsContent value="automation">
           <div className="max-w-4xl mx-auto">
             <AutomationRulesManager />
+          </div>
+        </TabsContent>
+
+        <TabsContent value="integrations">
+          <div className="max-w-4xl mx-auto">
+            <IntegrationsTab user={user} />
           </div>
         </TabsContent>
       </Tabs>
