@@ -54,32 +54,43 @@ export default function IntegrationsTab() {
   useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search);
     const code = urlParams.get('code');
-    const state = urlParams.get('state'); // ה-User ID ששלחנו
+    const returnedState = urlParams.get('state');
     
-    // בדיקה בסיסית: האם חזרנו עם קוד, והאם זה המשתמש הנכון?
-    if (code && state && user?.id && state === user.id) {
-      
-      // זיהוי הספק לפי ה-URL הנוכחי או פרמטר שנשמר (בדרך כלל עדיף לשמור ב-localStorage לפני היציאה, אבל כאן ננחש לפי הקוד)
-      // מכיוון שאנחנו לא יודעים מי הספק רק לפי ה-Code, נבדוק את ה-Redirect URI או שננסה את שניהם?
-      // הדרך הנכונה: כשלוחצים על הכפתור, שומרים ב-localStorage את הספק.
-      const pendingProvider = localStorage.getItem('pending_oauth_provider');
-      
-      if (pendingProvider) {
-        handleAuthCallback(pendingProvider, code);
-      } else {
-          // Fallback: אם אין ב-storage, ננקה את ה-URL כי זה אולי callback ישן או שגוי
-          cleanUrl();
-      }
+    if (!code || !returnedState || !user?.id) return;
+    
+    // אבטחת CSRF: אימות ה-Nonce שנשלח ושחזר
+    const savedNonce = sessionStorage.getItem('oauth_nonce');
+    const expectedState = `${user.id}:${savedNonce}`;
+    
+    if (returnedState !== expectedState) {
+      console.error('CSRF Protection: State mismatch!', { returnedState, expectedState });
+      toast.error('שגיאת אבטחה: תהליך האימות לא תקין. אנא נסה שוב.');
+      cleanUrl();
+      return;
+    }
+    
+    const pendingProvider = localStorage.getItem('pending_oauth_provider');
+    
+    if (pendingProvider) {
+      handleAuthCallback(pendingProvider, code);
+    } else {
+      cleanUrl();
     }
   }, [user]);
+
+  const generateNonce = () => {
+    return crypto.randomUUID ? crypto.randomUUID() : 
+      Math.random().toString(36).substring(2) + Date.now().toString(36);
+  };
 
   const cleanUrl = () => {
       const newUrl = new URL(window.location.href);
       newUrl.searchParams.delete('code');
       newUrl.searchParams.delete('state');
-      // newUrl.searchParams.delete('scope'); // גוגל מוסיפים גם את זה
+      newUrl.searchParams.delete('scope');
       window.history.replaceState({}, document.title, newUrl.toString());
       localStorage.removeItem('pending_oauth_provider');
+      sessionStorage.removeItem('oauth_nonce');
   };
 
   const handleAuthCallback = async (provider, code) => {
@@ -114,15 +125,21 @@ export default function IntegrationsTab() {
       return;
     }
     
-    // שמירת הספק כדי שנדע למי לשייך כשנחזור
+    // יצירת Nonce להגנת CSRF
+    const nonce = generateNonce();
+    sessionStorage.setItem('oauth_nonce', nonce);
     localStorage.setItem('pending_oauth_provider', provider);
+    
     const loadingToastId = toast.loading('מכין מעבר לאימות...');
 
     try {
+      // שליחת state משולב: userId:nonce
+      const secureState = `${user.id}:${nonce}`;
+      
       const response = await base44.functions.invoke('integrationAuth', { 
           action: 'getAuthUrl',
           provider, 
-          userId: user.id 
+          state: secureState
       });
 
       toast.dismiss(loadingToastId);
@@ -136,6 +153,7 @@ export default function IntegrationsTab() {
       toast.dismiss(loadingToastId);
       toast.error(`שגיאה בהתחלת אינטגרציה: ${error.message}`);
       localStorage.removeItem('pending_oauth_provider');
+      sessionStorage.removeItem('oauth_nonce');
     }
   };
 
