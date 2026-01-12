@@ -64,7 +64,8 @@ function LayoutContent({ children, currentPageName }) {
       const userData = await base44.auth.me();
       setUser(userData);
     } catch (e) {
-      console.log('User not logged in');
+      console.log('User not logged in', e);
+      base44.auth.redirectToLogin();
     }
   };
 
