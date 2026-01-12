@@ -1,31 +1,37 @@
-import React, { useState, useMemo } from 'react';
+import React from 'react';
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Loader2 } from "lucide-react";
+import { Loader2, ArrowUpDown } from "lucide-react";
+import { flexRender, getCoreRowModel, getFilteredRowModel, getPaginationRowModel, getSortedRowModel, useReactTable } from "@tanstack/react-table";
 
 export function DataTable({ 
   columns, 
-  data = [], 
+  data, 
   searchKey, 
   onRowClick,
-  page = 1,
-  totalPages = 1,
+  page,
+  totalPages,
   onPageChange,
-  isLoading,
-  emptyMessage = "אין תוצאות."
+  isLoading 
 }) {
-  const [searchValue, setSearchValue] = useState('');
+  const [sorting, setSorting] = React.useState([]);
+  const [columnFilters, setColumnFilters] = React.useState([]);
 
-  const filteredData = useMemo(() => {
-    if (!searchKey || !searchValue) return data;
-    return data.filter(row => {
-      const value = row[searchKey];
-      return value && String(value).toLowerCase().includes(searchValue.toLowerCase());
-    });
-  }, [data, searchKey, searchValue]);
+  const table = useReactTable({
+    data,
+    columns,
+    getCoreRowModel: getCoreRowModel(),
+    manualPagination: true, // חובה כשעושים Server-Side Pagination
+    pageCount: totalPages,
+    onSortingChange: setSorting,
+    getSortedRowModel: getSortedRowModel(),
+    onColumnFiltersChange: setColumnFilters,
+    getFilteredRowModel: getFilteredRowModel(),
+    state: { sorting, columnFilters },
+  });
 
   return (
     <div>
@@ -33,8 +39,8 @@ export function DataTable({
         {searchKey && (
           <Input
             placeholder="חיפוש..."
-            value={searchValue}
-            onChange={(e) => setSearchValue(e.target.value)}
+            value={(table.getColumn(searchKey)?.getFilterValue()) ?? ""}
+            onChange={(event) => table.getColumn(searchKey)?.setFilterValue(event.target.value)}
             className="max-w-sm ml-2"
           />
         )}
@@ -42,17 +48,21 @@ export function DataTable({
       <div className="rounded-md border dark:border-slate-700">
         <Table>
           <TableHeader>
-            <TableRow className="dark:border-slate-700">
-              {columns.map((col, idx) => (
-                <TableHead key={col.accessorKey || col.id || idx} className="text-right">
-                  {col.header}
-                </TableHead>
-              ))}
-            </TableRow>
+            {table.getHeaderGroups().map((headerGroup) => (
+              <TableRow key={headerGroup.id} className="dark:border-slate-700">
+                {headerGroup.headers.map((header) => {
+                  return (
+                    <TableHead key={header.id} className="text-right">
+                      {header.isPlaceholder ? null : flexRender(header.column.columnDef.header, header.getContext())}
+                    </TableHead>
+                  );
+                })}
+              </TableRow>
+            ))}
           </TableHeader>
           <TableBody>
             {isLoading ? (
-              <TableRow>
+               <TableRow>
                 <TableCell colSpan={columns.length} className="h-24 text-center">
                   <div className="flex justify-center items-center gap-2">
                     <Loader2 className="h-6 w-6 animate-spin text-primary" />
@@ -60,19 +70,17 @@ export function DataTable({
                   </div>
                 </TableCell>
               </TableRow>
-            ) : filteredData.length > 0 ? (
-              filteredData.map((row, rowIdx) => (
+            ) : table.getRowModel().rows?.length ? (
+              table.getRowModel().rows.map((row) => (
                 <TableRow
-                  key={row.id || rowIdx}
-                  onClick={() => onRowClick && onRowClick(row)}
+                  key={row.id}
+                  data-state={row.getIsSelected() && "selected"}
+                  onClick={() => onRowClick && onRowClick(row.original)}
                   className={onRowClick ? "cursor-pointer dark:hover:bg-slate-800" : ""}
                 >
-                  {columns.map((col, colIdx) => (
-                    <TableCell key={col.accessorKey || col.id || colIdx}>
-                      {col.cell 
-                        ? col.cell({ row: { original: row, getValue: (key) => row[key] } })
-                        : row[col.accessorKey]
-                      }
+                  {row.getVisibleCells().map((cell) => (
+                    <TableCell key={cell.id}>
+                      {flexRender(cell.column.columnDef.cell, cell.getContext())}
                     </TableCell>
                   ))}
                 </TableRow>
@@ -80,7 +88,7 @@ export function DataTable({
             ) : (
               <TableRow>
                 <TableCell colSpan={columns.length} className="h-24 text-center text-muted-foreground">
-                  {emptyMessage}
+                  אין תוצאות.
                 </TableCell>
               </TableRow>
             )}
@@ -88,34 +96,29 @@ export function DataTable({
         </Table>
       </div>
       
-      {onPageChange && (
-        <div className="flex items-center justify-end space-x-2 py-4">
-          <div className="flex-1 text-sm text-muted-foreground ml-2">
-            {totalPages > 0 ? `עמוד ${page} מתוך ${totalPages}` : ''}
-          </div>
-          <div className="flex gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => onPageChange(page - 1)}
-              disabled={page <= 1 || isLoading}
-            >
-              הקודם
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => onPageChange(page + 1)}
-              disabled={page >= totalPages || isLoading}
-            >
-              הבא
-            </Button>
-          </div>
+      <div className="flex items-center justify-end space-x-2 py-4">
+        <div className="flex-1 text-sm text-muted-foreground ml-2">
+           {totalPages ? `עמוד ${page} מתוך ${totalPages}` : ''}
         </div>
-      )}
+        <div className="flex gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => onPageChange && onPageChange(page - 1)}
+            disabled={!onPageChange || page <= 1 || isLoading}
+          >
+            הקודם
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => onPageChange && onPageChange(page + 1)}
+            disabled={!onPageChange || page >= totalPages || isLoading}
+          >
+            הבא
+          </Button>
+        </div>
+      </div>
     </div>
   );
 }
-
-// Export default for backward compatibility
-export default DataTable;
