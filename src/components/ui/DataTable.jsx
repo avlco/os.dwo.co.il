@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Loader2, ArrowUpDown } from "lucide-react";
 import { flexRender, getCoreRowModel, getFilteredRowModel, getPaginationRowModel, getSortedRowModel, useReactTable } from "@tanstack/react-table";
 
-export function DataTable({ 
+export default function DataTable({ 
   columns, 
   data, 
   searchKey, 
