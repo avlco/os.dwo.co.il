@@ -71,8 +71,8 @@ const DROPBOX_APP_KEY = Deno.env.get("DROPBOX_APP_KEY");
 const DROPBOX_APP_SECRET = Deno.env.get("DROPBOX_APP_SECRET");
 const DROPBOX_REDIRECT_URI = Deno.env.get("DROPBOX_REDIRECT_URI");
 
-async function getAuthUrl(provider: string, userId: string) {
-  console.log(`Generating Auth URL for ${provider}`);
+async function getAuthUrl(provider: string, state: string) {
+  console.log(`Generating Auth URL for ${provider} with secure state`);
 
   if (provider === 'google') {
     if (!GOOGLE_CLIENT_ID || !GOOGLE_REDIRECT_URI) throw new Error("Missing Google Config");
@@ -89,7 +89,7 @@ async function getAuthUrl(provider: string, userId: string) {
       ].join(' '),
       access_type: 'offline',
       prompt: 'consent',
-      state: userId,
+      state: state,
       include_granted_scopes: 'true'
     });
     return `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`;
@@ -102,7 +102,7 @@ async function getAuthUrl(provider: string, userId: string) {
       redirect_uri: DROPBOX_REDIRECT_URI,
       response_type: 'code',
       token_access_type: 'offline',
-      state: userId
+      state: state
     });
     return `https://www.dropbox.com/oauth2/authorize?${params.toString()}`;
   }
