@@ -11,11 +11,11 @@ export default function IntegrationsTab() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   
-  // State נפרד לכל כפתור כדי למנוע הפעלה כפולה
+  // State נפרד לכל כפתור למניעת התנגשויות
   const [loadingGoogle, setLoadingGoogle] = useState(false);
   const [loadingDropbox, setLoadingDropbox] = useState(false);
 
-  // שליפת סטטוס
+  // שליפת סטטוס חיבורים
   const { data: activeIntegrations = [], refetch, isLoading: isFetchingStatus } = useQuery({
     queryKey: ['integrations'],
     queryFn: async () => {
@@ -28,7 +28,7 @@ export default function IntegrationsTab() {
     }
   });
 
-  // Callback Handler
+  // טיפול בחזרה מגוגל/דרופבוקס
   useEffect(() => {
     const handleCallback = async () => {
       const params = new URLSearchParams(window.location.search);
@@ -38,6 +38,7 @@ export default function IntegrationsTab() {
 
       if (!code && !error) return;
 
+      // ניקוי שורת הכתובת
       window.history.replaceState({}, document.title, window.location.pathname);
 
       if (error) {
@@ -49,22 +50,22 @@ export default function IntegrationsTab() {
       if (provider === 'google') setLoadingGoogle(true);
       else setLoadingDropbox(true);
 
-      toast({ title: "מאמת...", description: "שומר את החיבור בשרת." });
+      toast({ title: "מאמת...", description: "מבצע אימות ושמירה מול השרת." });
 
       try {
-        // --- התיקון כאן: פירוק התשובה ל-data ו-error ---
+        // פירוק התשובה ל-data ו-error (חשוב מאוד!)
         const { data, error: apiError } = await base44.functions.invoke('integrationAuth', {
           action: 'handleCallback',
           provider: provider,
           code: code
         });
 
-        if (apiError) throw new Error(apiError.message || "שגיאת שרת");
+        if (apiError) throw new Error(apiError.message || "שגיאת שרת כללית");
         if (data && data.error) throw new Error(data.error);
 
         toast({ 
           title: "מחובר בהצלחה!", 
-          description: `חשבון ${provider} חובר.`,
+          description: `חשבון ${provider} חובר למערכת.`,
           className: "bg-green-50 border-green-200 text-green-900" 
         });
         
@@ -83,51 +84,51 @@ export default function IntegrationsTab() {
   }, []);
 
   const startAuth = async (provider) => {
+    // הפעלת הספינר המתאים
     if (provider === 'google') setLoadingGoogle(true);
     else setLoadingDropbox(true);
 
     try {
-      // --- התיקון כאן: שימוש ב-data ---
       const { data, error } = await base44.functions.invoke('integrationAuth', {
         action: 'getAuthUrl',
         provider: provider,
         state: provider
       });
 
-      console.log("Response:", { data, error }); // לוג לווידוא
+      console.log("Server Response:", { data, error });
 
-      if (error) throw new Error(error.message || "שגיאת תקשורת");
+      if (error) throw new Error(error.message || "שגיאת תקשורת עם השרת");
       if (data && data.error) throw new Error(data.error);
 
-      // בדיקה בתוך האובייקט data
       if (data && data.authUrl) {
         window.location.href = data.authUrl;
       } else {
-        throw new Error("השרת החזיר תשובה תקינה אך ריקה (חסר authUrl)");
+        throw new Error("התקבלה תשובה לא תקינה (חסר קישור)");
       }
 
     } catch (err) {
-      console.error("Start Auth Error:", err);
+      console.error("Auth Start Error:", err);
       toast({ 
           variant: "destructive", 
-          title: "שגיאת התחלה", 
+          title: "שגיאת אתחול", 
           description: err.message 
       });
-      // איפוס הכפתור רק במקרה שגיאה (בהצלחה הדף עובר לגוגל)
+      
+      // איפוס הכפתור רק במקרה של שגיאה
       if (provider === 'google') setLoadingGoogle(false);
       else setLoadingDropbox(false);
     }
   };
 
   const disconnect = async (provider) => {
-    if (!confirm("האם לנתק?")) return;
+    if (!confirm("האם לנתק את החשבון?")) return;
     try {
       const connections = await base44.entities.IntegrationConnection.list({ limit: 50 });
       const toDelete = connections.data.find(c => c.provider === provider);
       
       if (toDelete) {
         await base44.entities.IntegrationConnection.delete(toDelete.id);
-        toast({ description: "החיבור הוסר." });
+        toast({ description: "החיבור הוסר בהצלחה." });
         refetch();
       }
     } catch (err) {
