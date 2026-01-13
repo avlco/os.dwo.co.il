@@ -198,9 +198,7 @@ Deno.serve(async (req) => {
         }
 
         const body = await req.json();
-        const { action, provider, code, state, origin } = body;
-        
-        const effectiveOrigin = origin || Deno.env.get("APP_BASE_URL") || "https://dwo.base44.app";
+        const { action, provider, code, state } = body;
 
         if (action === 'getAuthUrl') {
             const url = await getAuthUrl(provider, state || user.id);
