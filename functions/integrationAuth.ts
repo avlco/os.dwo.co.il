@@ -53,13 +53,19 @@ async function decrypt(text: string): Promise<string> {
 
 const GOOGLE_CLIENT_ID = Deno.env.get("GOOGLE_CLIENT_ID");
 const GOOGLE_CLIENT_SECRET = Deno.env.get("GOOGLE_CLIENT_SECRET");
+const GOOGLE_REDIRECT_URI = Deno.env.get("GOOGLE_REDIRECT_URI");
 
 const DROPBOX_APP_KEY = Deno.env.get("DROPBOX_APP_KEY");
 const DROPBOX_APP_SECRET = Deno.env.get("DROPBOX_APP_SECRET");
+const DROPBOX_REDIRECT_URI = Deno.env.get("DROPBOX_REDIRECT_URI");
 
 async function getAuthUrl(provider: string, state: string, origin: string) {
-  const redirectUri = `${origin}/Settings`; 
-  console.log(`Generating Auth URL for ${provider}. State: ${state}, Redirect: ${redirectUri}`);
+  // Use configured redirect URIs from environment variables
+  // These must match exactly what's registered in Google/Dropbox consoles
+  const googleRedirect = GOOGLE_REDIRECT_URI || `${origin}/Settings`;
+  const dropboxRedirect = DROPBOX_REDIRECT_URI || `${origin}/Settings`;
+  
+  console.log(`Generating Auth URL for ${provider}. State: ${state}`);
 
   if (provider === 'google') {
     if (!GOOGLE_CLIENT_ID) throw new Error("Missing Google Config (GOOGLE_CLIENT_ID)");
