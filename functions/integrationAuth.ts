@@ -59,10 +59,10 @@ const GOOGLE_CLIENT_SECRET = Deno.env.get("GOOGLE_CLIENT_SECRET");
 const DROPBOX_APP_KEY = Deno.env.get("DROPBOX_APP_KEY");
 const DROPBOX_APP_SECRET = Deno.env.get("DROPBOX_APP_SECRET");
 
+// קבלת origin מהקריאה
 async function getAuthUrl(provider: string, state: string, origin: string) {
-  // בניית ה-Redirect URI באופן דינמי לפי הכתובת שהתקבלה מהלקוח
-  const redirectUri = `${origin}/Settings`;
-  
+  // שימוש בכתובת שהגיעה מהלקוח לבניית ה-Redirect URI
+  const redirectUri = `${origin}/Settings`; 
   console.log(`Generating Auth URL for ${provider}. State: ${state}, Redirect: ${redirectUri}`);
 
   if (provider === 'google') {
@@ -101,9 +101,9 @@ async function getAuthUrl(provider: string, state: string, origin: string) {
   throw new Error(`Unsupported provider: ${provider}`);
 }
 
+// קבלת origin מהקריאה
 async function handleCallback(code: string, provider: string, userId: string, base44: any, origin: string) {
-  // חובה שתהיה זהה לזו שנשלחה ב-getAuthUrl
-  const redirectUri = `${origin}/Settings`; 
+  const redirectUri = `${origin}/Settings`; // חובה להיות זהה למה שנשלח ב-getAuthUrl
   console.log(`Handling callback for ${provider}. Redirect: ${redirectUri}`);
   
   let tokens;
@@ -177,7 +177,7 @@ async function handleCallback(code: string, provider: string, userId: string, ba
 
 // === MAIN ENTRY POINT ===
 Deno.serve(async (req) => {
-    // CORS Headers
+    // CORS Headers - קריטי כדי שהדפדפן לא יחסום את הבקשה
     const headers = new Headers({
         "Access-Control-Allow-Origin": "*",
         "Access-Control-Allow-Methods": "POST, OPTIONS",
@@ -198,13 +198,13 @@ Deno.serve(async (req) => {
         }
 
         const body = await req.json();
-        // חילוץ ה-origin שהגיע מהקליינט
+        // חילוץ ה-origin והנתונים האחרים מהבקשה
         const { action, provider, code, state, origin } = body;
-        
-        // Fallback למקרה שאין origin בבקשה (למשל גרסה ישנה בקאש), נשתמש במשתנה הסביבה
+
+        // Fallback למקרה שהקליינט לא שלח origin (או לשימוש ישיר), נשתמש במשתנה הסביבה או ברירת מחדל
         const effectiveOrigin = origin || Deno.env.get("APP_BASE_URL") || "https://dwo.base44.app";
 
-        // ניתוב הפעולות עם העברת ה-Origin
+        // ניתוב הפעולות
         if (action === 'getAuthUrl') {
             const url = await getAuthUrl(provider, state || user.id, effectiveOrigin);
             return new Response(JSON.stringify({ authUrl: url }), { status: 200, headers });
