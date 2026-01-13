@@ -59,20 +59,12 @@ const DROPBOX_APP_KEY = Deno.env.get("DROPBOX_APP_KEY");
 const DROPBOX_APP_SECRET = Deno.env.get("DROPBOX_APP_SECRET");
 const DROPBOX_REDIRECT_URI = Deno.env.get("DROPBOX_REDIRECT_URI");
 
-async function getAuthUrl(provider: string, state: string, origin: string) {
-  // Use configured redirect URIs from environment variables
-  // These must match exactly what's registered in Google/Dropbox consoles
-  const googleRedirect = GOOGLE_REDIRECT_URI || `${origin}/Settings`;
-  const dropboxRedirect = DROPBOX_REDIRECT_URI || `${origin}/Settings`;
+async function getAuthUrl(provider: string, state: string) {
+  // Always use APP_BASE_URL for redirect URIs - never trust origin from frontend
+  const APP_BASE_URL = Deno.env.get("APP_BASE_URL") || "https://dwo.base44.app";
+  const FIXED_REDIRECT_URI = `${APP_BASE_URL}/Settings`;
   
-  console.log(`=== DEBUG getAuthUrl ===`);
-  console.log(`Provider: ${provider}`);
-  console.log(`Origin received: ${origin}`);
-  console.log(`GOOGLE_REDIRECT_URI env: ${GOOGLE_REDIRECT_URI}`);
-  console.log(`DROPBOX_REDIRECT_URI env: ${DROPBOX_REDIRECT_URI}`);
-  console.log(`Google redirect (actual): ${googleRedirect}`);
-  console.log(`Dropbox redirect (actual): ${dropboxRedirect}`);
-  console.log(`========================`);
+  console.log(`Generating Auth URL for ${provider}. Using redirect: ${FIXED_REDIRECT_URI}`);
 
   if (provider === 'google') {
     if (!GOOGLE_CLIENT_ID) throw new Error("Missing Google Config (GOOGLE_CLIENT_ID)");
