@@ -53,25 +53,22 @@ async function decrypt(text: string): Promise<string> {
 
 const GOOGLE_CLIENT_ID = Deno.env.get("GOOGLE_CLIENT_ID");
 const GOOGLE_CLIENT_SECRET = Deno.env.get("GOOGLE_CLIENT_SECRET");
-const GOOGLE_REDIRECT_URI = Deno.env.get("GOOGLE_REDIRECT_URI");
 
 const DROPBOX_APP_KEY = Deno.env.get("DROPBOX_APP_KEY");
 const DROPBOX_APP_SECRET = Deno.env.get("DROPBOX_APP_SECRET");
-const DROPBOX_REDIRECT_URI = Deno.env.get("DROPBOX_REDIRECT_URI");
+
+const APP_BASE_URL = Deno.env.get("APP_BASE_URL");
+const REDIRECT_URI = `${APP_BASE_URL}/Settings`;
 
 async function getAuthUrl(provider: string, state: string) {
-  // Always use APP_BASE_URL for redirect URIs - never trust origin from frontend
-  const APP_BASE_URL = Deno.env.get("APP_BASE_URL") || "https://dwo.base44.app";
-  const FIXED_REDIRECT_URI = `${APP_BASE_URL}/Settings`;
-  
-  console.log(`Generating Auth URL for ${provider}. Using redirect: ${FIXED_REDIRECT_URI}`);
+  console.log(`Generating Auth URL for ${provider}. Using redirect: ${REDIRECT_URI}`);
 
   if (provider === 'google') {
     if (!GOOGLE_CLIENT_ID) throw new Error("Missing Google Config (GOOGLE_CLIENT_ID)");
     
     const params = new URLSearchParams({
       client_id: GOOGLE_CLIENT_ID,
-      redirect_uri: FIXED_REDIRECT_URI,
+      redirect_uri: REDIRECT_URI,
       response_type: 'code',
       scope: [
         'https://www.googleapis.com/auth/gmail.modify',
@@ -92,7 +89,7 @@ async function getAuthUrl(provider: string, state: string) {
     
     const params = new URLSearchParams({
       client_id: DROPBOX_APP_KEY,
-      redirect_uri: FIXED_REDIRECT_URI,
+      redirect_uri: REDIRECT_URI,
       response_type: 'code',
       token_access_type: 'offline',
       state: state
@@ -104,11 +101,7 @@ async function getAuthUrl(provider: string, state: string) {
 }
 
 async function handleCallback(code: string, provider: string, userId: string, base44: any) {
-  // Always use APP_BASE_URL for redirect URIs - must match getAuthUrl exactly
-  const APP_BASE_URL = Deno.env.get("APP_BASE_URL") || "https://dwo.base44.app";
-  const FIXED_REDIRECT_URI = `${APP_BASE_URL}/Settings`;
-  
-  console.log(`Handling callback for ${provider}. Using redirect: ${FIXED_REDIRECT_URI}`);
+  console.log(`Handling callback for ${provider}. Using redirect: ${REDIRECT_URI}`);
   
   let tokens;
   
@@ -120,7 +113,7 @@ async function handleCallback(code: string, provider: string, userId: string, ba
         code,
         client_id: GOOGLE_CLIENT_ID!,
         client_secret: GOOGLE_CLIENT_SECRET!,
-        redirect_uri: FIXED_REDIRECT_URI,
+        redirect_uri: REDIRECT_URI,
         grant_type: 'authorization_code',
       }).toString(),
     });
@@ -136,7 +129,7 @@ async function handleCallback(code: string, provider: string, userId: string, ba
       body: new URLSearchParams({
         code,
         grant_type: 'authorization_code',
-        redirect_uri: FIXED_REDIRECT_URI,
+        redirect_uri: REDIRECT_URI,
       }).toString(),
     });
     tokens = await res.json();
