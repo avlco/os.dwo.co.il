@@ -1,82 +1,59 @@
+// @ts-nocheck
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.6';
 
-// --- Section 1: Inlined Crypto Logic ---
+// --- אותו מפתח קבוע בדיוק כמו ב-processIncomingMail ---
+const STATIC_KEY = "my-secret-key-1234567890123456";
+
+// הגדרת כתובת האתר בייצור
+const APP_BASE_URL = "https://os.dwo.co.il"; 
+const FINAL_REDIRECT_URI = `${APP_BASE_URL}/settings`;
+
+// מזהי אפליקציה (ודא שהם מוגדרים ב-Secrets של המערכת)
+const GOOGLE_CLIENT_ID = Deno.env.get("GOOGLE_CLIENT_ID");
+const GOOGLE_CLIENT_SECRET = Deno.env.get("GOOGLE_CLIENT_SECRET");
+const DROPBOX_APP_KEY = Deno.env.get("DROPBOX_APP_KEY");
+const DROPBOX_APP_SECRET = Deno.env.get("DROPBOX_APP_SECRET");
 
 async function getCryptoKey() {
-  const keyString = Deno.env.get("ENCRYPTION_KEY");
-  if (!keyString) {
-      console.warn("Missing ENCRYPTION_KEY, using fallback (NOT SECURE for production)");
-      return await crypto.subtle.generateKey(
-        { name: "AES-GCM", length: 256 },
-        true,
-        ["encrypt", "decrypt"]
-      );
-  }
-  
   const encoder = new TextEncoder();
-  const keyBuffer = encoder.encode(keyString.padEnd(32, '0').slice(0, 32));
-  
+  const keyBuffer = encoder.encode(STATIC_KEY);
   return await crypto.subtle.importKey("raw", keyBuffer, { name: "AES-GCM" }, false, ["encrypt", "decrypt"]);
 }
 
 async function encrypt(text) {
-    try {
-        const key = await getCryptoKey();
-        const iv = crypto.getRandomValues(new Uint8Array(12));
-        const encoded = new TextEncoder().encode(text);
-        const encrypted = await crypto.subtle.encrypt({ name: "AES-GCM", iv }, key, encoded);
-        const ivHex = Array.from(iv).map(b => b.toString(16).padStart(2, '0')).join('');
-        const encryptedHex = Array.from(new Uint8Array(encrypted)).map(b => b.toString(16).padStart(2, '0')).join('');
-        return `${ivHex}:${encryptedHex}`;
-    } catch (e) {
-        console.error("Encryption failed:", e);
-        throw new Error("Failed to encrypt token");
-    }
-}
-
-async function decrypt(text) {
   try {
-    const [ivHex, encryptedHex] = text.split(':');
-    if (!ivHex || !encryptedHex) throw new Error("Invalid encrypted format");
     const key = await getCryptoKey();
-    const iv = new Uint8Array(ivHex.match(/.{1,2}/g).map(byte => parseInt(byte, 16)));
-    const encrypted = new Uint8Array(encryptedHex.match(/.{1,2}/g).map(byte => parseInt(byte, 16)));
-    const decrypted = await crypto.subtle.decrypt({ name: "AES-GCM", iv }, key, encrypted);
-    return new TextDecoder().decode(decrypted);
+    const iv = crypto.getRandomValues(new Uint8Array(12));
+    const encoded = new TextEncoder().encode(text);
+    const encrypted = await crypto.subtle.encrypt({ name: "AES-GCM", iv }, key, encoded);
+    
+    const ivHex = Array.from(iv).map(b => b.toString(16).padStart(2, '0')).join('');
+    const encryptedHex = Array.from(new Uint8Array(encrypted)).map(b => b.toString(16).padStart(2, '0')).join('');
+    return `${ivHex}:${encryptedHex}`;
   } catch (e) {
-    console.error("Decryption failed:", e);
-    throw new Error("Failed to decrypt token");
+    console.error("Encryption failed:", e);
+    throw new Error("Failed to encrypt token");
   }
 }
 
-// --- Section 2: Integration Logic ---
-
-const GOOGLE_CLIENT_ID = Deno.env.get("GOOGLE_CLIENT_ID");
-const GOOGLE_CLIENT_SECRET = Deno.env.get("GOOGLE_CLIENT_SECRET");
-
-const DROPBOX_APP_KEY = Deno.env.get("DROPBOX_APP_KEY");
-const DROPBOX_APP_SECRET = Deno.env.get("DROPBOX_APP_SECRET");
-
-const APP_BASE_URL = Deno.env.get("APP_BASE_URL");
-const REDIRECT_URI = `${APP_BASE_URL}/Settings`;
+// --- OAuth Logic ---
 
 async function getAuthUrl(provider, state) {
-  console.log(`Generating Auth URL for ${provider}. Using redirect: ${REDIRECT_URI}`);
+  console.log(`Generating Auth URL for ${provider}`);
 
   if (provider === 'google') {
     if (!GOOGLE_CLIENT_ID) throw new Error("Missing Google Config (GOOGLE_CLIENT_ID)");
     
     const params = new URLSearchParams({
       client_id: GOOGLE_CLIENT_ID,
-      redirect_uri: REDIRECT_URI,
+      redirect_uri: FINAL_REDIRECT_URI,
       response_type: 'code',
       scope: [
-        'https://www.googleapis.com/auth/gmail.modify',
+        'https://www.googleapis.com/auth/gmail.modify', // קריטי לקריאת מיילים
         'https://www.googleapis.com/auth/calendar',
-        'https://www.googleapis.com/auth/drive.file',
-        'https://www.googleapis.com/auth/spreadsheets'
+        'https://www.googleapis.com/auth/drive.file'
       ].join(' '),
-      access_type: 'offline',
+      access_type: 'offline', // חובה כדי לקבל Refresh Token
       prompt: 'consent',
       state: state,
       include_granted_scopes: 'true'
@@ -85,11 +62,10 @@ async function getAuthUrl(provider, state) {
   } 
   
   if (provider === 'dropbox') {
-    if (!DROPBOX_APP_KEY) throw new Error("Missing Dropbox Config (DROPBOX_APP_KEY)");
-    
+    if (!DROPBOX_APP_KEY) throw new Error("Missing Dropbox Config");
     const params = new URLSearchParams({
       client_id: DROPBOX_APP_KEY,
-      redirect_uri: REDIRECT_URI,
+      redirect_uri: FINAL_REDIRECT_URI,
       response_type: 'code',
       token_access_type: 'offline',
       state: state
@@ -101,10 +77,10 @@ async function getAuthUrl(provider, state) {
 }
 
 async function handleCallback(code, provider, userId, base44) {
-  console.log(`Handling callback for ${provider}. Using redirect: ${REDIRECT_URI}`);
-  
+  console.log(`Handling callback for ${provider}, user: ${userId}`);
   let tokens;
   
+  // 1. החלפת Code ב-Token מול הספק
   if (provider === 'google') {
     const res = await fetch('https://oauth2.googleapis.com/token', {
       method: 'POST',
@@ -113,7 +89,7 @@ async function handleCallback(code, provider, userId, base44) {
         code,
         client_id: GOOGLE_CLIENT_ID,
         client_secret: GOOGLE_CLIENT_SECRET,
-        redirect_uri: REDIRECT_URI,
+        redirect_uri: FINAL_REDIRECT_URI,
         grant_type: 'authorization_code',
       }).toString(),
     });
@@ -129,7 +105,7 @@ async function handleCallback(code, provider, userId, base44) {
       body: new URLSearchParams({
         code,
         grant_type: 'authorization_code',
-        redirect_uri: REDIRECT_URI,
+        redirect_uri: FINAL_REDIRECT_URI,
       }).toString(),
     });
     tokens = await res.json();
@@ -140,55 +116,60 @@ async function handleCallback(code, provider, userId, base44) {
     throw new Error(`Provider Error: ${tokens?.error_description || JSON.stringify(tokens)}`);
   }
 
+  // 2. הצפנת הטוקנים עם המפתח הקבוע
   const encryptedAccess = await encrypt(tokens.access_token);
+  // אם אין refresh token, ננסה להשתמש בקיים או נסמן כחסר
   const encryptedRefresh = tokens.refresh_token ? await encrypt(tokens.refresh_token) : null;
+  
   const expiresAt = Date.now() + ((tokens.expires_in || 3600) * 1000); 
 
-  const existing = await base44.asServiceRole.entities.IntegrationConnection.filter({ user_id: userId, provider });
-
-  const data = {
+  // 3. שמירה/עדכון בבסיס הנתונים
+  // אנחנו מוחקים חיבורים ישנים כדי למנוע כפילויות ולנקות זבל
+  const existing = await base44.entities.IntegrationConnection.filter({ user_id: userId, provider });
+  
+  // הכנת הרשומה החדשה
+  const newRecord = {
     user_id: userId,
-    provider,
+    provider: provider, // 'google' (lowercase)
     access_token: encryptedAccess,
     expires_at: expiresAt, 
     metadata: { last_updated: new Date().toISOString() }
   };
 
   if (encryptedRefresh) {
-    Object.assign(data, { refresh_token: encryptedRefresh });
+    newRecord.refresh_token = encryptedRefresh;
+  } else if (existing.length > 0 && existing[0].refresh_token) {
+    // שמירת ה-refresh token הישן אם החדש לא הגיע
+    newRecord.refresh_token = existing[0].refresh_token;
+  } else {
+    newRecord.refresh_token = "MISSING"; // סימון לדיבוג
   }
 
   if (existing.length > 0) {
-    await base44.asServiceRole.entities.IntegrationConnection.update(existing[0].id, data);
+    await base44.entities.IntegrationConnection.update(existing[0].id, newRecord);
+    console.log("Updated existing integration record");
   } else {
-    await base44.asServiceRole.entities.IntegrationConnection.create({
-        ...data,
-        refresh_token: encryptedRefresh || "MISSING_REFRESH_TOKEN"
-    });
+    await base44.entities.IntegrationConnection.create(newRecord);
+    console.log("Created new integration record");
   }
-  console.log(`Successfully connected ${provider} for user ${userId}`);
 }
 
 // === MAIN ENTRY POINT ===
 Deno.serve(async (req) => {
-    const headers = new Headers({
+    const headers = {
         "Access-Control-Allow-Origin": "*",
         "Access-Control-Allow-Methods": "POST, OPTIONS",
         "Access-Control-Allow-Headers": "Content-Type, Authorization",
         "Content-Type": "application/json"
-    });
+    };
 
-    if (req.method === "OPTIONS") {
-        return new Response(null, { headers });
-    }
+    if (req.method === "OPTIONS") return new Response(null, { headers });
 
     try {
         const base44 = createClientFromRequest(req);
         const user = await base44.auth.me();
         
-        if (!user) {
-            return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers });
-        }
+        if (!user) return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers });
 
         const body = await req.json();
         const { action, provider, code, state } = body;
@@ -205,8 +186,8 @@ Deno.serve(async (req) => {
 
         return new Response(JSON.stringify({ error: 'Unknown action' }), { status: 400, headers });
 
-    } catch (err) { // הסרת : any
-        console.error("Function Error:", err);
+    } catch (err) {
+        console.error("Integration Error:", err);
         return new Response(JSON.stringify({ error: err.message || String(err) }), { status: 500, headers });
     }
 });
