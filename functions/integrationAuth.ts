@@ -19,7 +19,7 @@ async function getCryptoKey() {
   return await crypto.subtle.importKey("raw", keyBuffer, { name: "AES-GCM" }, false, ["encrypt", "decrypt"]);
 }
 
-async function encrypt(text: string): Promise<string> {
+async function encrypt(text) {
     try {
         const key = await getCryptoKey();
         const iv = crypto.getRandomValues(new Uint8Array(12));
@@ -34,13 +34,13 @@ async function encrypt(text: string): Promise<string> {
     }
 }
 
-async function decrypt(text: string): Promise<string> {
+async function decrypt(text) {
   try {
     const [ivHex, encryptedHex] = text.split(':');
     if (!ivHex || !encryptedHex) throw new Error("Invalid encrypted format");
     const key = await getCryptoKey();
-    const iv = new Uint8Array(ivHex.match(/.{1,2}/g)!.map(byte => parseInt(byte, 16)));
-    const encrypted = new Uint8Array(encryptedHex.match(/.{1,2}/g)!.map(byte => parseInt(byte, 16)));
+    const iv = new Uint8Array(ivHex.match(/.{1,2}/g).map(byte => parseInt(byte, 16)));
+    const encrypted = new Uint8Array(encryptedHex.match(/.{1,2}/g).map(byte => parseInt(byte, 16)));
     const decrypted = await crypto.subtle.decrypt({ name: "AES-GCM", iv }, key, encrypted);
     return new TextDecoder().decode(decrypted);
   } catch (e) {
@@ -60,7 +60,7 @@ const DROPBOX_APP_SECRET = Deno.env.get("DROPBOX_APP_SECRET");
 const APP_BASE_URL = Deno.env.get("APP_BASE_URL");
 const REDIRECT_URI = `${APP_BASE_URL}/Settings`;
 
-async function getAuthUrl(provider: string, state: string) {
+async function getAuthUrl(provider, state) {
   console.log(`Generating Auth URL for ${provider}. Using redirect: ${REDIRECT_URI}`);
 
   if (provider === 'google') {
@@ -100,7 +100,7 @@ async function getAuthUrl(provider: string, state: string) {
   throw new Error(`Unsupported provider: ${provider}`);
 }
 
-async function handleCallback(code: string, provider: string, userId: string, base44: any) {
+async function handleCallback(code, provider, userId, base44) {
   console.log(`Handling callback for ${provider}. Using redirect: ${REDIRECT_URI}`);
   
   let tokens;
@@ -111,8 +111,8 @@ async function handleCallback(code: string, provider: string, userId: string, ba
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: new URLSearchParams({
         code,
-        client_id: GOOGLE_CLIENT_ID!,
-        client_secret: GOOGLE_CLIENT_SECRET!,
+        client_id: GOOGLE_CLIENT_ID,
+        client_secret: GOOGLE_CLIENT_SECRET,
         redirect_uri: REDIRECT_URI,
         grant_type: 'authorization_code',
       }).toString(),
@@ -205,7 +205,7 @@ Deno.serve(async (req) => {
 
         return new Response(JSON.stringify({ error: 'Unknown action' }), { status: 400, headers });
 
-    } catch (err: any) {
+    } catch (err) { // הסרת : any
         console.error("Function Error:", err);
         return new Response(JSON.stringify({ error: err.message || String(err) }), { status: 500, headers });
     }
