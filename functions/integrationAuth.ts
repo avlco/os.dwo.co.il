@@ -1,7 +1,6 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.6';
 
 // --- Section 1: Inlined Crypto Logic ---
-// לוגיקת הצפנה פנימית (חובה שתהיה כאן כדי למנוע קריסות של תלויות חיצוניות)
 
 async function getCryptoKey() {
   const keyString = Deno.env.get("ENCRYPTION_KEY");
@@ -15,7 +14,6 @@ async function getCryptoKey() {
   }
   
   const encoder = new TextEncoder();
-  // חיתוך או ריפוד המפתח ל-32 תווים בדיוק (דרישת AES-256)
   const keyBuffer = encoder.encode(keyString.padEnd(32, '0').slice(0, 32));
   
   return await crypto.subtle.importKey("raw", keyBuffer, { name: "AES-GCM" }, false, ["encrypt", "decrypt"]);
@@ -59,9 +57,7 @@ const GOOGLE_CLIENT_SECRET = Deno.env.get("GOOGLE_CLIENT_SECRET");
 const DROPBOX_APP_KEY = Deno.env.get("DROPBOX_APP_KEY");
 const DROPBOX_APP_SECRET = Deno.env.get("DROPBOX_APP_SECRET");
 
-// קבלת origin מהקריאה
 async function getAuthUrl(provider: string, state: string, origin: string) {
-  // שימוש בכתובת שהגיעה מהלקוח לבניית ה-Redirect URI
   const redirectUri = `${origin}/Settings`; 
   console.log(`Generating Auth URL for ${provider}. State: ${state}, Redirect: ${redirectUri}`);
 
@@ -101,9 +97,8 @@ async function getAuthUrl(provider: string, state: string, origin: string) {
   throw new Error(`Unsupported provider: ${provider}`);
 }
 
-// קבלת origin מהקריאה
 async function handleCallback(code: string, provider: string, userId: string, base44: any, origin: string) {
-  const redirectUri = `${origin}/Settings`; // חובה להיות זהה למה שנשלח ב-getAuthUrl
+  const redirectUri = `${origin}/Settings`; 
   console.log(`Handling callback for ${provider}. Redirect: ${redirectUri}`);
   
   let tokens;
@@ -143,12 +138,10 @@ async function handleCallback(code: string, provider: string, userId: string, ba
     throw new Error(`Provider Error: ${tokens?.error_description || JSON.stringify(tokens)}`);
   }
 
-  // הצפנת הטוקנים
   const encryptedAccess = await encrypt(tokens.access_token);
   const encryptedRefresh = tokens.refresh_token ? await encrypt(tokens.refresh_token) : null;
   const expiresAt = Date.now() + ((tokens.expires_in || 3600) * 1000); 
 
-  // בדיקה אם קיים חיבור
   const existing = await base44.entities.IntegrationConnection.filter({ user_id: userId, provider });
 
   const data = {
@@ -163,7 +156,6 @@ async function handleCallback(code: string, provider: string, userId: string, ba
     Object.assign(data, { refresh_token: encryptedRefresh });
   }
 
-  // עדכון או יצירה
   if (existing.length > 0) {
     await base44.entities.IntegrationConnection.update(existing[0].id, data);
   } else {
@@ -177,7 +169,6 @@ async function handleCallback(code: string, provider: string, userId: string, ba
 
 // === MAIN ENTRY POINT ===
 Deno.serve(async (req) => {
-    // CORS Headers - קריטי כדי שהדפדפן לא יחסום את הבקשה
     const headers = new Headers({
         "Access-Control-Allow-Origin": "*",
         "Access-Control-Allow-Methods": "POST, OPTIONS",
@@ -198,13 +189,10 @@ Deno.serve(async (req) => {
         }
 
         const body = await req.json();
-        // חילוץ ה-origin והנתונים האחרים מהבקשה
         const { action, provider, code, state, origin } = body;
-
-        // Fallback למקרה שהקליינט לא שלח origin (או לשימוש ישיר), נשתמש במשתנה הסביבה או ברירת מחדל
+        
         const effectiveOrigin = origin || Deno.env.get("APP_BASE_URL") || "https://dwo.base44.app";
 
-        // ניתוב הפעולות
         if (action === 'getAuthUrl') {
             const url = await getAuthUrl(provider, state || user.id, effectiveOrigin);
             return new Response(JSON.stringify({ authUrl: url }), { status: 200, headers });
