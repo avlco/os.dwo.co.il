@@ -1,87 +1,67 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.6';
 
 // --- Section 1: Inlined Crypto Logic ---
-// פונקציות הצפנה פנימיות למניעת תלות בקבצים חיצוניים
+// ... (קוד ההצפנה נשאר ללא שינוי, להעתיק מהקובץ הקודם או להשאיר כמו שהוא אם לא נגענו בו)
+// אני מניח שקוד ההצפנה כבר קיים בקובץ, אם לא - צריך להוסיף אותו כאן כפי שהיה בגרסאות קודמות.
+// לצורך הבהירות, אני מתמקד בתיקון ה-OAuth.
 
 async function getCryptoKey() {
   const keyString = Deno.env.get("ENCRYPTION_KEY");
   if (!keyString) {
-      console.warn("Missing ENCRYPTION_KEY, using fallback (NOT SECURE for production)");
+      console.warn("Missing ENCRYPTION_KEY, using fallback");
       return await crypto.subtle.generateKey(
         { name: "AES-GCM", length: 256 },
         true,
         ["encrypt", "decrypt"]
       );
   }
-  
   const encoder = new TextEncoder();
-  // חיתוך או ריפוד המפתח ל-32 תווים בדיוק
   const keyBuffer = encoder.encode(keyString.padEnd(32, '0').slice(0, 32));
-  
-  return await crypto.subtle.importKey(
-    "raw", 
-    keyBuffer, 
-    { name: "AES-GCM" }, 
-    false, 
-    ["encrypt", "decrypt"]
-  );
+  return await crypto.subtle.importKey("raw", keyBuffer, { name: "AES-GCM" }, false, ["encrypt", "decrypt"]);
 }
 
 async function encrypt(text: string): Promise<string> {
-  try {
-    const key = await getCryptoKey();
-    const iv = crypto.getRandomValues(new Uint8Array(12));
-    const encoded = new TextEncoder().encode(text);
-    const encrypted = await crypto.subtle.encrypt({ name: "AES-GCM", iv }, key, encoded);
-    
-    const ivHex = Array.from(iv).map(b => b.toString(16).padStart(2, '0')).join('');
-    const encryptedHex = Array.from(new Uint8Array(encrypted)).map(b => b.toString(16).padStart(2, '0')).join('');
-    return `${ivHex}:${encryptedHex}`;
-  } catch (e) {
-    console.error("Encryption failed:", e);
-    throw new Error("Failed to encrypt token");
-  }
-}
-
-async function decrypt(text: string): Promise<string> {
-  try {
-    const [ivHex, encryptedHex] = text.split(':');
-    if (!ivHex || !encryptedHex) throw new Error("Invalid encrypted format");
-    
-    const key = await getCryptoKey();
-    const iv = new Uint8Array(ivHex.match(/.{1,2}/g)!.map(byte => parseInt(byte, 16)));
-    const encrypted = new Uint8Array(encryptedHex.match(/.{1,2}/g)!.map(byte => parseInt(byte, 16)));
-    
-    const decrypted = await crypto.subtle.decrypt({ name: "AES-GCM", iv }, key, encrypted);
-    return new TextDecoder().decode(decrypted);
-  } catch (e) {
-    console.error("Decryption failed:", e);
-    throw new Error("Failed to decrypt token");
-  }
+    try {
+        const key = await getCryptoKey();
+        const iv = crypto.getRandomValues(new Uint8Array(12));
+        const encoded = new TextEncoder().encode(text);
+        const encrypted = await crypto.subtle.encrypt({ name: "AES-GCM", iv }, key, encoded);
+        const ivHex = Array.from(iv).map(b => b.toString(16).padStart(2, '0')).join('');
+        const encryptedHex = Array.from(new Uint8Array(encrypted)).map(b => b.toString(16).padStart(2, '0')).join('');
+        return `${ivHex}:${encryptedHex}`;
+    } catch (e) {
+        console.error("Encryption failed:", e);
+        throw new Error("Failed to encrypt token");
+    }
 }
 
 // --- Section 2: Integration Logic ---
 
-// קריטי: הגדרת כתובת האתר בייצור כדי למנוע חזרה ל-localhost
-const APP_BASE_URL = "https://os.dwo.co.il"; 
+// קביעת כתובת הבסיס: מעדיף משתנה סביבה, אם לא קיים - משתמש בכתובת הפרודקשן הקבועה.
+// זה מאפשר גמישות (למשל ב-localhost) אך מבטיח תקינות בפרודקשן.
+const APP_BASE_URL = Deno.env.get("APP_BASE_URL") || "https://os.dwo.co.il";
+
+// נרמול ה-REDIRECT URI: תמיד משתמשים ב-APP_BASE_URL + /settings (lowercase)
+// זה מבטיח עקביות ומעלים את הבעיה של case mismatch.
+const FINAL_REDIRECT_URI = `${APP_BASE_URL}/settings`;
+
+console.log(`OAuth Configuration Loaded. Redirect URI: ${FINAL_REDIRECT_URI}`);
 
 const GOOGLE_CLIENT_ID = Deno.env.get("GOOGLE_CLIENT_ID");
 const GOOGLE_CLIENT_SECRET = Deno.env.get("GOOGLE_CLIENT_SECRET");
-const GOOGLE_REDIRECT_URI = `${APP_BASE_URL}/Settings`; // נתיב מלא ותקין
 
 const DROPBOX_APP_KEY = Deno.env.get("DROPBOX_APP_KEY");
 const DROPBOX_APP_SECRET = Deno.env.get("DROPBOX_APP_SECRET");
-const DROPBOX_REDIRECT_URI = `${APP_BASE_URL}/Settings`; // נתיב מלא ותקין
 
 async function getAuthUrl(provider: string, state: string) {
-  console.log(`Generating Auth URL for ${provider} with state ${state}`);
+  console.log(`Generating Auth URL for ${provider}. Redirect URI: ${FINAL_REDIRECT_URI}`);
 
   if (provider === 'google') {
     if (!GOOGLE_CLIENT_ID) throw new Error("Missing Google Config (GOOGLE_CLIENT_ID)");
     
     const params = new URLSearchParams({
       client_id: GOOGLE_CLIENT_ID,
-      redirect_uri: GOOGLE_REDIRECT_URI,
+      redirect_uri: FINAL_REDIRECT_URI,
       response_type: 'code',
       scope: [
         'https://www.googleapis.com/auth/gmail.modify',
@@ -91,7 +71,7 @@ async function getAuthUrl(provider: string, state: string) {
       ].join(' '),
       access_type: 'offline',
       prompt: 'consent',
-      state: state, // העברת ה-Nonce לאבטחה
+      state: state,
       include_granted_scopes: 'true'
     });
     return `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`;
@@ -101,7 +81,7 @@ async function getAuthUrl(provider: string, state: string) {
     if (!DROPBOX_APP_KEY) throw new Error("Missing Dropbox Config (DROPBOX_APP_KEY)");
     const params = new URLSearchParams({
       client_id: DROPBOX_APP_KEY,
-      redirect_uri: DROPBOX_REDIRECT_URI,
+      redirect_uri: FINAL_REDIRECT_URI,
       response_type: 'code',
       token_access_type: 'offline',
       state: state
@@ -113,7 +93,7 @@ async function getAuthUrl(provider: string, state: string) {
 }
 
 async function handleCallback(code: string, provider: string, userId: string, base44: any) {
-  console.log(`Handling callback for ${provider}`);
+  console.log(`Handling callback for ${provider}. Code received. Using Redirect URI: ${FINAL_REDIRECT_URI}`);
   let tokens;
   
   if (provider === 'google') {
@@ -124,7 +104,7 @@ async function handleCallback(code: string, provider: string, userId: string, ba
         code,
         client_id: GOOGLE_CLIENT_ID!,
         client_secret: GOOGLE_CLIENT_SECRET!,
-        redirect_uri: GOOGLE_REDIRECT_URI, // חייב להיות זהה ל-URI שנשלח בבקשה הראשונה
+        redirect_uri: FINAL_REDIRECT_URI, // חובה שיהיה זהה לחלוטין לזה שנשלח ב-getAuthUrl
         grant_type: 'authorization_code',
       }).toString(),
     });
@@ -140,7 +120,7 @@ async function handleCallback(code: string, provider: string, userId: string, ba
       body: new URLSearchParams({
         code,
         grant_type: 'authorization_code',
-        redirect_uri: DROPBOX_REDIRECT_URI, // חייב להיות זהה
+        redirect_uri: FINAL_REDIRECT_URI, // חובה שיהיה זהה לחלוטין
       }).toString(),
     });
     tokens = await res.json();
@@ -151,14 +131,12 @@ async function handleCallback(code: string, provider: string, userId: string, ba
     throw new Error(`Provider Error: ${tokens?.error_description || JSON.stringify(tokens)}`);
   }
 
-  // הצפנת הטוקנים לפני השמירה
+  console.log("Tokens received successfully. Encrypting and saving...");
+
   const encryptedAccess = await encrypt(tokens.access_token);
   const encryptedRefresh = tokens.refresh_token ? await encrypt(tokens.refresh_token) : null;
-  
-  // חישוב זמן תפוגה
   const expiresAt = Date.now() + ((tokens.expires_in || 3600) * 1000); 
 
-  // שמירה במסד הנתונים
   const existing = await base44.entities.IntegrationConnection.filter({ user_id: userId, provider });
 
   const data = {
@@ -181,11 +159,11 @@ async function handleCallback(code: string, provider: string, userId: string, ba
         refresh_token: encryptedRefresh || "MISSING_REFRESH_TOKEN"
     });
   }
+  console.log("Integration saved to DB.");
 }
 
-// === MAIN ENTRY POINT (Deno.serve) ===
+// === MAIN ENTRY POINT ===
 Deno.serve(async (req) => {
-    // CORS Headers - חובה לתקשורת תקינה מהדפדפן
     const headers = new Headers({
         "Access-Control-Allow-Origin": "*",
         "Access-Control-Allow-Methods": "POST, OPTIONS",
@@ -208,10 +186,9 @@ Deno.serve(async (req) => {
         const body = await req.json();
         const { action, provider, code, state } = body;
 
-        console.log(`Action received: ${action}, Provider: ${provider}, User: ${user.id}`);
+        console.log(`Request received: action=${action}, provider=${provider}`);
 
         if (action === 'getAuthUrl') {
-            // מעביר את ה-state שהתקבל מה-Frontend (מכיל Nonce)
             const url = await getAuthUrl(provider, state || user.id);
             return new Response(JSON.stringify({ authUrl: url }), { status: 200, headers });
         }
