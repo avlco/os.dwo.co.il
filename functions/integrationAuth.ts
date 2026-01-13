@@ -144,7 +144,7 @@ async function handleCallback(code, provider, userId, base44) {
   const encryptedRefresh = tokens.refresh_token ? await encrypt(tokens.refresh_token) : null;
   const expiresAt = Date.now() + ((tokens.expires_in || 3600) * 1000); 
 
-  const existing = await base44.entities.IntegrationConnection.filter({ user_id: userId, provider });
+  const existing = await base44.asServiceRole.entities.IntegrationConnection.filter({ user_id: userId, provider });
 
   const data = {
     user_id: userId,
@@ -159,9 +159,9 @@ async function handleCallback(code, provider, userId, base44) {
   }
 
   if (existing.length > 0) {
-    await base44.entities.IntegrationConnection.update(existing[0].id, data);
+    await base44.asServiceRole.entities.IntegrationConnection.update(existing[0].id, data);
   } else {
-    await base44.entities.IntegrationConnection.create({
+    await base44.asServiceRole.entities.IntegrationConnection.create({
         ...data,
         refresh_token: encryptedRefresh || "MISSING_REFRESH_TOKEN"
     });
