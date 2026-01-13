@@ -26,6 +26,7 @@ export default function IntegrationsTab() {
     };
     loadUser();
   }, []);
+  
   const [integrationSettings, setIntegrationSettings] = useState({
     googleSpreadsheetId: '',
   });
@@ -99,11 +100,15 @@ export default function IntegrationsTab() {
       const loadingToastId = toast.loading('משלים תהליך חיבור...');
 
       try {
+          // שליפת ה-Origin הנוכחי כדי לשלוח לשרת לאימות
+          const currentOrigin = window.location.origin;
+
           const response = await base44.functions.invoke('integrationAuth', { 
               action: 'handleCallback',
               provider, 
               code, 
-              userId: user.id 
+              userId: user.id,
+              origin: currentOrigin 
           });
           
           if (!response?.data?.success) {
@@ -140,10 +145,14 @@ export default function IntegrationsTab() {
       // שליחת state משולב: userId:nonce
       const secureState = `${user.id}:${nonce}`;
       
+      // שליפת ה-Origin הנוכחי של הדפדפן (למשל: http://localhost:5173 או https://dwo.base44.app)
+      const currentOrigin = window.location.origin;
+
       const response = await base44.functions.invoke('integrationAuth', { 
           action: 'getAuthUrl',
           provider, 
-          state: secureState
+          state: secureState,
+          origin: currentOrigin
       });
 
       toast.dismiss(loadingToastId);
