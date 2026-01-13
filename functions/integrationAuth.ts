@@ -1,33 +1,46 @@
 // @ts-nocheck
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.6';
 
-const STATIC_KEY = "my-secret-key-1234567890123456";
+// --- הגדרות ---
 const APP_BASE_URL = "https://os.dwo.co.il"; 
-// תיקון: S גדולה, בדיוק כפי שנדרש במערכת שלך
+// כתובת החזרה חייבת להיות תואמת בדיוק (כולל אותיות גדולות) למה שמוגדר בגוגל/דרופבוקס
 const REDIRECT_URI = `${APP_BASE_URL}/Settings`; 
 
-// Helper: Validate Environment Variables
+// --- עזרי אבטחה וקונפיגורציה ---
+
 function getProviderConfig(providerRaw) {
     const provider = providerRaw.toLowerCase().trim();
     
     if (provider === 'google') {
         const clientId = Deno.env.get("GOOGLE_CLIENT_ID");
         const clientSecret = Deno.env.get("GOOGLE_CLIENT_SECRET");
-        if (!clientId || !clientSecret) throw new Error("Missing Google Credentials (CLIENT_ID/SECRET) in Server Env.");
+        if (!clientId || !clientSecret) throw new Error("Critical Error: Missing GOOGLE_CLIENT_ID or GOOGLE_CLIENT_SECRET in environment variables.");
         return { clientId, clientSecret, type: 'google' };
     }
     if (provider === 'dropbox') {
         const key = Deno.env.get("DROPBOX_APP_KEY");
         const secret = Deno.env.get("DROPBOX_APP_SECRET");
-        if (!key || !secret) throw new Error("Missing Dropbox Credentials (KEY/SECRET) in Server Env.");
+        if (!key || !secret) throw new Error("Critical Error: Missing DROPBOX_APP_KEY or DROPBOX_APP_SECRET in environment variables.");
         return { key, secret, type: 'dropbox' };
     }
     throw new Error(`Unknown provider: ${providerRaw}`);
 }
 
 async function getCryptoKey() {
+  // שליפה ישירה של המפתח מהסביבה
+  const envKey = Deno.env.get("ENCRYPTION_KEY");
+  
+  // בדיקה קשיחה: אם המפתח חסר, המערכת לא תעבוד (במקום להשתמש במפתח סתמי)
+  if (!envKey) {
+      console.error("CRITICAL: ENCRYPTION_KEY is missing!");
+      throw new Error("Server Configuration Error: ENCRYPTION_KEY is missing. Please set it in your environment variables.");
+  }
+
   const encoder = new TextEncoder();
-  const keyBuffer = encoder.encode(STATIC_KEY);
+  // התאמה ל-32 תווים בדיוק (דרישת AES-256) למקרה שהמפתח שהוזן קצר/ארוך מדי
+  const keyString = envKey.padEnd(32, '0').slice(0, 32);
+  const keyBuffer = encoder.encode(keyString);
+  
   return await crypto.subtle.importKey("raw", keyBuffer, { name: "AES-GCM" }, false, ["encrypt", "decrypt"]);
 }
 
@@ -37,23 +50,25 @@ async function encrypt(text) {
         const iv = crypto.getRandomValues(new Uint8Array(12));
         const encoded = new TextEncoder().encode(text);
         const encrypted = await crypto.subtle.encrypt({ name: "AES-GCM", iv }, key, encoded);
+        
         const ivHex = Array.from(iv).map(b => b.toString(16).padStart(2, '0')).join('');
         const encryptedHex = Array.from(new Uint8Array(encrypted)).map(b => b.toString(16).padStart(2, '0')).join('');
         return `${ivHex}:${encryptedHex}`;
     } catch (e) {
         console.error("Encryption failed:", e);
-        throw new Error("Server Security Error: Encryption failed");
+        throw new Error(`Encryption failed: ${e.message}`);
     }
 }
 
-// Handler Logic
+// --- לוגיקה עסקית ---
+
 async function handleRequest(req) {
-    // 1. Auth check FIRST
+    // 1. אימות משתמש
     const base44 = createClientFromRequest(req);
     const user = await base44.auth.me();
     if (!user) throw new Error("Unauthorized: Please log in.");
 
-    // 2. Parse Body safely
+    // 2. קריאת הגוף
     let body;
     try {
         body = await req.json();
@@ -64,7 +79,7 @@ async function handleRequest(req) {
     const { action, provider, code, state } = body;
     console.log(`Processing: ${action} for ${provider}`);
 
-    // 3. Action Routing
+    // 3. ניתוב פעולות
     if (action === 'getAuthUrl') {
         const config = getProviderConfig(provider);
         let url;
@@ -92,7 +107,6 @@ async function handleRequest(req) {
             url = `https://www.dropbox.com/oauth2/authorize?${params.toString()}`;
         }
         
-        console.log("Generated URL successfully.");
         return { authUrl: url };
     }
 
@@ -130,12 +144,16 @@ async function handleRequest(req) {
         }
 
         const tokens = await tokenRes.json();
-        if (tokens.error) throw new Error(`Provider Error: ${JSON.stringify(tokens)}`);
+        if (tokens.error) {
+            console.error("Provider Error:", tokens);
+            throw new Error(`Provider Error: ${JSON.stringify(tokens)}`);
+        }
 
-        // Save to DB (Using Service Role)
+        // שמירה מוצפנת (תשתמש במפתח האמיתי או תיכשל)
         const encryptedAccess = await encrypt(tokens.access_token);
         const encryptedRefresh = tokens.refresh_token ? await encrypt(tokens.refresh_token) : null;
         
+        // עקיפת RLS
         const db = base44.asServiceRole;
         const existing = await db.entities.IntegrationConnection.filter({ user_id: user.id, provider: config.type });
         
