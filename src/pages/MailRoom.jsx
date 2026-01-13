@@ -81,6 +81,27 @@ export default function MailRoom() {
     <div className="space-y-6">
       <PageHeader title="חדר דואר" description="ניהול ומיון דואר נכנס, סריקת מסמכים וניתוב לתיקים.">
         <div className="flex gap-2">
+          <Button variant="outline" size="sm" onClick={async () => {
+            try {
+              await base44.entities.Mail.create({
+                message_id: `test-${Date.now()}`,
+                subject: "מייל לדוגמה - " + new Date().toLocaleTimeString('he-IL'),
+                sender_email: "test@example.com",
+                sender_name: "שולח לדוגמה",
+                body_plain: "זהו מייל לדוגמה שנוצר לבדיקת המערכת.",
+                received_at: new Date().toISOString(),
+                processing_status: "pending",
+                category: "other",
+                priority: "medium"
+              });
+              toast.success("מייל לדוגמה נוצר בהצלחה");
+              queryClient.invalidateQueries(['mails']);
+            } catch (e) {
+              toast.error("שגיאה ביצירת מייל: " + e.message);
+            }
+          }}>
+            <Mail className="w-4 h-4 mr-2" /> הוסף מייל לדוגמה
+          </Button>
           <Button variant="outline" size="sm" onClick={() => queryClient.invalidateQueries(['mails'])}>
             <RefreshCw className="w-4 h-4 mr-2" /> רענן
           </Button>
