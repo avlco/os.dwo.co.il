@@ -1,11 +1,10 @@
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query';
-// שימוש בנתיבים יחסיים (..) כדי למנוע שגיאות עורך
-import { base44 } from '../api/base44Client';
+import { base44 } from '../api/base44Client'; // נתיב מתוקן
 import { PageHeader } from "../components/ui/PageHeader";
 import { DataTable } from "../components/ui/DataTable";
 import { Button } from "../components/ui/button";
-import { Mail, RefreshCw, CheckCircle, Clock, CloudDownload, Loader2 } from 'lucide-react';
+import { Mail, RefreshCw, CheckCircle, Clock, Download, Loader2 } from 'lucide-react';
 import { createPageUrl } from '../utils';
 import { useNavigate } from 'react-router-dom';
 import { format } from 'date-fns';
@@ -25,7 +24,7 @@ export default function MailRoom() {
   const pageSize = 50;
 
   // שליפת נתונים
-  const { data, isLoading, refetch } = useQuery({
+  const { data, isLoading, isRefetching, refetch } = useQuery({
     queryKey: ['mails', activeTab, page],
     queryFn: async () => {
       let filter = {};
@@ -43,10 +42,19 @@ export default function MailRoom() {
     placeholderData: keepPreviousData
   });
 
+  // פעולת הרענן הידנית
+  const handleRefresh = async () => {
+      await refetch();
+      toast({ description: "הטבלה רועננה בהצלחה" });
+  };
+
   // פעולת הסנכרון
   const syncMutation = useMutation({
     mutationFn: async () => {
-        return await base44.functions.invoke('processIncomingMail', {});
+        const res = await base44.functions.invoke('processIncomingMail', {});
+        // בדיקה ידנית אם חזרה שגיאה מהשרת (גם בסטטוס 200 לפעמים)
+        if (res && res.error) throw new Error(res.error);
+        return res;
     },
     onSuccess: (res) => {
         const count = res.synced || 0;
@@ -56,7 +64,12 @@ export default function MailRoom() {
     },
     onError: (err) => {
         console.error("Sync failed:", err);
-        toast({ variant: "destructive", title: "שגיאה", description: "ודא שביצעת אינטגרציה בהגדרות." });
+        // הצגת השגיאה האמיתית מהשרת
+        toast({ 
+            variant: "destructive", 
+            title: "שגיאת סנכרון", 
+            description: err.message || "שגיאה לא ידועה"
+        });
     }
   });
 
@@ -99,7 +112,7 @@ export default function MailRoom() {
     <div className="space-y-6">
       <PageHeader title="חדר דואר" description="ניהול ומיון דואר נכנס." />
       
-      {/* כפתורי פעולה מחוץ לכותרת כדי להבטיח נראות */}
+      {/* כפתורי פעולה */}
       <div className="flex justify-end gap-2 p-2 bg-slate-50 dark:bg-slate-900 rounded-md border">
           <Button 
             className="bg-blue-600 hover:bg-blue-700 text-white" 
@@ -107,12 +120,18 @@ export default function MailRoom() {
             onClick={() => syncMutation.mutate()} 
             disabled={syncMutation.isPending}
           >
-            {syncMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin ml-2"/> : <CloudDownload className="w-4 h-4 ml-2"/>}
+            {syncMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin ml-2"/> : <Download className="w-4 h-4 ml-2"/>}
             סנכרן מ-Gmail
           </Button>
           
-          <Button variant="outline" size="sm" onClick={() => refetch()}>
-            <RefreshCw className="w-4 h-4 ml-2" /> רענן
+          <Button 
+            variant="outline" 
+            size="sm" 
+            onClick={handleRefresh}
+            disabled={isLoading || isRefetching}
+          >
+            {(isLoading || isRefetching) ? <Loader2 className="w-4 h-4 ml-2 animate-spin" /> : <RefreshCw className="w-4 h-4 ml-2" />}
+            רענן טבלה
           </Button>
       </div>
 
