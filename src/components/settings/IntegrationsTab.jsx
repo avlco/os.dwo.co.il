@@ -26,6 +26,7 @@ export default function IntegrationsTab() {
     };
     loadUser();
   }, []);
+  
   const [integrationSettings, setIntegrationSettings] = useState({
     googleSpreadsheetId: '',
   });
@@ -50,7 +51,7 @@ export default function IntegrationsTab() {
     }
   });
 
-  // Handle OAuth callback (כשחוזרים מגוגל/דרופבוקס)
+  // Handle OAuth callback
   useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search);
     const code = urlParams.get('code');
@@ -58,7 +59,6 @@ export default function IntegrationsTab() {
     
     if (!code || !returnedState || !user?.id) return;
     
-    // אבטחת CSRF: אימות ה-Nonce שנשלח ושחזר
     const savedNonce = sessionStorage.getItem('oauth_nonce');
     const expectedState = `${user.id}:${savedNonce}`;
     
@@ -94,7 +94,7 @@ export default function IntegrationsTab() {
   };
 
   const handleAuthCallback = async (provider, code) => {
-      if (isProcessing) return; // מניעת כפילות
+      if (isProcessing) return;
       setIsProcessing(true);
       const loadingToastId = toast.loading('משלים תהליך חיבור...');
 
@@ -128,12 +128,15 @@ export default function IntegrationsTab() {
   };
 
   const initiateOAuth = async (provider) => {
+    // --- DEBUG LINE: הודעה קופצת לבדיקת הכתובת ---
+    alert(`DEBUG: Current Origin is:\n${window.location.origin}`);
+    // ---------------------------------------------
+
     if (!user) {
       toast.error('שגיאה: יש להתחבר למערכת כדי לבצע אינטגרציה.');
       return;
     }
     
-    // יצירת Nonce להגנת CSRF
     const nonce = generateNonce();
     sessionStorage.setItem('oauth_nonce', nonce);
     localStorage.setItem('pending_oauth_provider', provider);
@@ -141,10 +144,9 @@ export default function IntegrationsTab() {
     const loadingToastId = toast.loading('מכין מעבר לאימות...');
 
     try {
-      // שליחת state משולב: userId:nonce
       const secureState = `${user.id}:${nonce}`;
       
-      // שליפת ה-Origin הנוכחי של הדפדפן (למשל: http://localhost:5173 או https://dwo.base44.app)
+      // שליפת ה-Origin הנוכחי
       const currentOrigin = window.location.origin;
 
       const response = await base44.functions.invoke('integrationAuth', { 
@@ -170,8 +172,6 @@ export default function IntegrationsTab() {
   };
 
   const saveSettings = async () => {
-      // כאן אפשר להוסיף שמירה של הגדרות נוספות כמו Spreadsheet ID ל-DB
-      // כרגע זה ב-state מקומי, צריך לחבר לישות
       toast.info("שמירת הגדרות נוספות תיושם בקרוב");
   };
 
