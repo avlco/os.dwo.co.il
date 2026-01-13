@@ -99,15 +99,11 @@ export default function IntegrationsTab() {
       const loadingToastId = toast.loading('משלים תהליך חיבור...');
 
       try {
-          // שליפת ה-Origin הנוכחי כדי לשלוח לשרת לאימות
-          const currentOrigin = window.location.origin;
-
           const response = await base44.functions.invoke('integrationAuth', { 
               action: 'handleCallback',
               provider, 
               code, 
-              userId: user.id,
-              origin: currentOrigin 
+              userId: user.id
           });
           
           if (!response?.data?.success) {
@@ -128,10 +124,6 @@ export default function IntegrationsTab() {
   };
 
   const initiateOAuth = async (provider) => {
-    // --- DEBUG LINE: הודעה קופצת לבדיקת הכתובת ---
-    alert(`DEBUG: Current Origin is:\n${window.location.origin}`);
-    // ---------------------------------------------
-
     if (!user) {
       toast.error('שגיאה: יש להתחבר למערכת כדי לבצע אינטגרציה.');
       return;
@@ -145,15 +137,11 @@ export default function IntegrationsTab() {
 
     try {
       const secureState = `${user.id}:${nonce}`;
-      
-      // שליפת ה-Origin הנוכחי
-      const currentOrigin = window.location.origin;
 
       const response = await base44.functions.invoke('integrationAuth', { 
           action: 'getAuthUrl',
           provider, 
-          state: secureState,
-          origin: currentOrigin
+          state: secureState
       });
 
       toast.dismiss(loadingToastId);
