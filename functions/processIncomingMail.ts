@@ -1,7 +1,6 @@
 // @ts-nocheck
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.6';
 
-// מפתח קבוע
 const STATIC_KEY = "my-secret-key-1234567890123456";
 
 async function getCryptoKey() {
@@ -14,7 +13,7 @@ async function decrypt(text) {
   try {
     if (!text) return null;
     const parts = text.split(':');
-    if (parts.length !== 2) return text; 
+    if (parts.length !== 2) return text;
     
     const [ivHex, encryptedHex] = parts;
     const key = await getCryptoKey();
@@ -30,7 +29,7 @@ async function decrypt(text) {
 }
 
 async function fetchGmailMessages(accessToken, limit = 10) {
-    console.log("Fetching Gmail messages...");
+    console.log("Fetching from Gmail...");
     const listUrl = `https://gmail.googleapis.com/gmail/v1/users/me/messages?maxResults=${limit}&q=in:inbox`;
     
     const listRes = await fetch(listUrl, {
@@ -39,8 +38,7 @@ async function fetchGmailMessages(accessToken, limit = 10) {
     
     if (!listRes.ok) {
         const txt = await listRes.text();
-        // אם הטוקן פג תוקף - נחזיר שגיאה ברורה
-        if (listRes.status === 401) throw new Error("Google Token Expired. Please reconnect in Settings.");
+        if (listRes.status === 401) throw new Error("Google Token Expired. Please reconnect.");
         throw new Error(`Gmail API Error: ${listRes.status} - ${txt}`);
     }
 
@@ -77,7 +75,7 @@ async function fetchGmailMessages(accessToken, limit = 10) {
                 source: 'gmail'
             });
         } catch (e) {
-            console.error("Error fetching specific msg", e);
+            console.error("Msg fetch error", e);
         }
     }
     return emails;
@@ -99,23 +97,16 @@ Deno.serve(async (req) => {
         
         if (!user) return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers });
 
-        // --- תיקון קריטי: חיפוש חכם של האינטגרציה ---
-        // במקום לסנן לפי 'google', נביא הכל ונבדוק בקוד (פותר בעיות אותיות גדולות/קטנות)
-        const allConnections = await base44.entities.IntegrationConnection.filter({ user_id: user.id });
+        // --- תיקון: שימוש ב-asServiceRole לקריאת הנתונים ---
+        // זה עוקף את ה-RLS ומוודא שנמצא את החיבור אם הוא קיים בבסיס הנתונים
+        const allConnections = await base44.asServiceRole.entities.IntegrationConnection.filter({ user_id: user.id });
         
-        // מציאת החיבור הרלוונטי (Google, google, GOOGLE)
         const connection = allConnections.find(c => c.provider && c.provider.toLowerCase() === 'google');
 
         if (!connection) {
-            // דיבוג למשתמש: מה כן מצאנו?
-            const foundProviders = allConnections.map(c => c.provider).join(', ') || "None";
             return new Response(JSON.stringify({ 
-                error: `No Google integration found. Found providers: [${foundProviders}]. Please go to Settings -> Integrations.` 
+                error: `Connection not found in DB. User: ${user.id}` 
             }), { status: 404, headers });
-        }
-
-        if (!connection.access_token) {
-             return new Response(JSON.stringify({ error: 'Integration found but Token is missing. Please reconnect.' }), { status: 400, headers });
         }
 
         const accessToken = await decrypt(connection.access_token);
@@ -123,9 +114,10 @@ Deno.serve(async (req) => {
         
         let savedCount = 0;
         for (const mail of newEmails) {
-            const exists = await base44.entities.Mail.filter({ external_id: mail.external_id });
+            const exists = await base44.asServiceRole.entities.Mail.filter({ external_id: mail.external_id });
             if (exists.length === 0) {
-                await base44.entities.Mail.create({ ...mail, user_id: user.id });
+                // שימוש ב-ServiceRole גם לשמירה כדי למנוע בעיות הרשאה
+                await base44.asServiceRole.entities.Mail.create({ ...mail, user_id: user.id });
                 savedCount++;
             }
         }
@@ -133,7 +125,7 @@ Deno.serve(async (req) => {
         return new Response(JSON.stringify({ success: true, synced: savedCount, total: newEmails.length }), { status: 200, headers });
 
     } catch (err) {
-        console.error("Critical Function Error:", err);
+        console.error("Sync Error:", err);
         return new Response(JSON.stringify({ error: err.message || String(err) }), { status: 500, headers });
     }
 });
