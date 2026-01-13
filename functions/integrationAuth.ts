@@ -4,7 +4,7 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.6';
 // --- קונפיגורציה ואבטחה ---
 const STATIC_KEY = "my-secret-key-1234567890123456"; // חובה שיהיה זהה בכל המערכת
 const APP_BASE_URL = "https://os.dwo.co.il"; 
-const REDIRECT_URI = `${APP_BASE_URL}/settings`; 
+const REDIRECT_URI = `${APP_BASE_URL}/Settings`; 
 
 // פונקציית עזר לבדיקת תקינות הסביבה (Health Check)
 function validateEnv(provider) {
