@@ -65,7 +65,14 @@ async function getAuthUrl(provider: string, state: string, origin: string) {
   const googleRedirect = GOOGLE_REDIRECT_URI || `${origin}/Settings`;
   const dropboxRedirect = DROPBOX_REDIRECT_URI || `${origin}/Settings`;
   
-  console.log(`Generating Auth URL for ${provider}. State: ${state}`);
+  console.log(`=== DEBUG getAuthUrl ===`);
+  console.log(`Provider: ${provider}`);
+  console.log(`Origin received: ${origin}`);
+  console.log(`GOOGLE_REDIRECT_URI env: ${GOOGLE_REDIRECT_URI}`);
+  console.log(`DROPBOX_REDIRECT_URI env: ${DROPBOX_REDIRECT_URI}`);
+  console.log(`Google redirect (actual): ${googleRedirect}`);
+  console.log(`Dropbox redirect (actual): ${dropboxRedirect}`);
+  console.log(`========================`);
 
   if (provider === 'google') {
     if (!GOOGLE_CLIENT_ID) throw new Error("Missing Google Config (GOOGLE_CLIENT_ID)");
