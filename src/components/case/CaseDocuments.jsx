@@ -14,7 +14,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 
-export default function CaseDocuments({ caseId }) {
+export function CaseDocuments({ caseId }) {
   const { i18n } = useTranslation();
   const isRTL = i18n.language === 'he';
 
@@ -108,3 +108,5 @@ export default function CaseDocuments({ caseId }) {
     </Card>
   );
 }
+
+export default CaseDocuments;
