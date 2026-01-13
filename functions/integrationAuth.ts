@@ -70,9 +70,10 @@ async function getAuthUrl(provider: string, state: string, origin: string) {
   if (provider === 'google') {
     if (!GOOGLE_CLIENT_ID) throw new Error("Missing Google Config (GOOGLE_CLIENT_ID)");
     
+    console.log(`Google redirect URI: ${googleRedirect}`);
     const params = new URLSearchParams({
       client_id: GOOGLE_CLIENT_ID,
-      redirect_uri: redirectUri,
+      redirect_uri: googleRedirect,
       response_type: 'code',
       scope: [
         'https://www.googleapis.com/auth/gmail.modify',
@@ -90,9 +91,11 @@ async function getAuthUrl(provider: string, state: string, origin: string) {
   
   if (provider === 'dropbox') {
     if (!DROPBOX_APP_KEY) throw new Error("Missing Dropbox Config (DROPBOX_APP_KEY)");
+    
+    console.log(`Dropbox redirect URI: ${dropboxRedirect}`);
     const params = new URLSearchParams({
       client_id: DROPBOX_APP_KEY,
-      redirect_uri: redirectUri,
+      redirect_uri: dropboxRedirect,
       response_type: 'code',
       token_access_type: 'offline',
       state: state
