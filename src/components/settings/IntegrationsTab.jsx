@@ -1,242 +1,199 @@
 import React, { useState, useEffect } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { base44 } from '@/api/base44Client';
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
-import { toast } from "sonner";
-import { Power, ExternalLink, X, Loader2 } from 'lucide-react';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Loader2, CheckCircle, XCircle, RefreshCw, Cloud } from "lucide-react";
+import { base44 } from '@/api/base44Client';
+import { useToast } from "@/components/ui/use-toast";
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 
 export default function IntegrationsTab() {
+  const { toast } = useToast();
   const queryClient = useQueryClient();
-  const [user, setUser] = useState(null);
-  const [isLoadingUser, setIsLoadingUser] = useState(true);
+  const [isConnecting, setIsConnecting] = useState(false);
 
-  useEffect(() => {
-    const loadUser = async () => {
+  // 1. שליפת סטטוס אינטגרציות קיים מהשרת
+  const { data: activeIntegrations = [], refetch, isLoading } = useQuery({
+    queryKey: ['integrations'],
+    queryFn: async () => {
       try {
-        const userData = await base44.auth.me();
-        setUser(userData);
+        // מנסים לשלוף את רשימת החיבורים הקיימים
+        const res = await base44.entities.IntegrationConnection.list({ limit: 10 });
+        // מחזירים רשימה של שמות הספקים (למשל: ['google', 'dropbox'])
+        return res.data ? res.data.map(i => i.provider.toLowerCase()) : [];
       } catch (e) {
-        console.error('Failed to load user:', e);
+        console.error("Failed to fetch integrations", e);
+        return [];
+      }
+    }
+  });
+
+  // 2. המנגנון הקריטי החסר: האזנה לחזרה מגוגל (Listener)
+  useEffect(() => {
+    const handleCallback = async () => {
+      // בדיקה: האם יש קוד בשורת הכתובת?
+      const params = new URLSearchParams(window.location.search);
+      const code = params.get('code');
+      const state = params.get('state'); // יכיל 'google' או 'dropbox'
+      const error = params.get('error');
+
+      // אם אין קוד, אנחנו במצב רגיל - לא עושים כלום
+      if (!code && !error) return;
+
+      // ניקוי כתובת ה-URL כדי שהמשתמש לא ישלח את אותו קוד פעמיים בטעות
+      window.history.replaceState({}, document.title, window.location.pathname);
+
+      if (error) {
+        toast({ variant: "destructive", title: "התחברות נכשלה", description: "הפעולה בוטלה או נדחתה." });
+        return;
+      }
+
+      // יש קוד! מתחילים תהליך שמירה מול השרת
+      setIsConnecting(true);
+      toast({ title: "מאמת חיבור...", description: "אנא המתן, שומרים את מפתח הגישה המאובטח." });
+
+      try {
+        // קריאה לפונקציית השרת (integrationAuth) עם הקוד שקיבלנו
+        const res = await base44.functions.invoke('integrationAuth', {
+          action: 'handleCallback',
+          provider: state || 'google', // ברירת מחדל אם לא חזר state
+          code: code
+        });
+
+        // בדיקת תשובת השרת
+        if (res && res.error) {
+            throw new Error(res.error);
+        }
+
+        toast({ 
+          title: "החיבור הושלם בהצלחה!", 
+          description: "כעת המערכת מחוברת ויכולה לסנכרן נתונים.",
+          className: "bg-green-50 border-green-200 text-green-900" 
+        });
+        
+        // רענון הרשימה כדי להציג את הוי הירוק מיד
+        await refetch();
+
+      } catch (err) {
+        console.error("Callback Error:", err);
+        toast({ 
+          variant: "destructive", 
+          title: "שגיאה בשמירת החיבור", 
+          description: err.message || "אירעה שגיאה בתקשורת עם השרת." 
+        });
       } finally {
-        setIsLoadingUser(false);
+        setIsConnecting(false);
       }
     };
-    loadUser();
+
+    // הפעלת הבדיקה בטעינת הדף
+    handleCallback();
   }, []);
-  
-  const [integrationSettings, setIntegrationSettings] = useState({
-    googleSpreadsheetId: '',
-  });
-  const [isProcessing, setIsProcessing] = useState(false);
 
-  // Fetch integration connections
-  const { data: connections = [], isLoading: isLoadingConnections } = useQuery({
-    queryKey: ['integrationConnections'],
-    queryFn: () => base44.entities.IntegrationConnection.filter({ user_id: user?.id }),
-    enabled: !!user?.id,
-  });
-
-  // Mutation to disconnect
-  const disconnectMutation = useMutation({
-    mutationFn: (id) => base44.entities.IntegrationConnection.delete(id),
-    onSuccess: () => {
-      queryClient.invalidateQueries(['integrationConnections']);
-      toast.success('החיבור נותק בהצלחה');
-    },
-    onError: (error) => {
-      toast.error(`שגיאה בניתוק: ${error.message}`);
-    }
-  });
-
-  // Handle OAuth callback
-  useEffect(() => {
-    const urlParams = new URLSearchParams(window.location.search);
-    const code = urlParams.get('code');
-    const returnedState = urlParams.get('state');
-    
-    if (!code || !returnedState || !user?.id) return;
-    
-    const savedNonce = sessionStorage.getItem('oauth_nonce');
-    const expectedState = `${user.id}:${savedNonce}`;
-    
-    if (returnedState !== expectedState) {
-      console.error('CSRF Protection: State mismatch!', { returnedState, expectedState });
-      toast.error('שגיאת אבטחה: תהליך האימות לא תקין. אנא נסה שוב.');
-      cleanUrl();
-      return;
-    }
-    
-    const pendingProvider = localStorage.getItem('pending_oauth_provider');
-    
-    if (pendingProvider) {
-      handleAuthCallback(pendingProvider, code);
-    } else {
-      cleanUrl();
-    }
-  }, [user]);
-
-  const generateNonce = () => {
-    return crypto.randomUUID ? crypto.randomUUID() : 
-      Math.random().toString(36).substring(2) + Date.now().toString(36);
-  };
-
-  const cleanUrl = () => {
-      const newUrl = new URL(window.location.href);
-      newUrl.searchParams.delete('code');
-      newUrl.searchParams.delete('state');
-      newUrl.searchParams.delete('scope');
-      window.history.replaceState({}, document.title, newUrl.toString());
-      localStorage.removeItem('pending_oauth_provider');
-      sessionStorage.removeItem('oauth_nonce');
-  };
-
-  const handleAuthCallback = async (provider, code) => {
-      if (isProcessing) return;
-      setIsProcessing(true);
-      const loadingToastId = toast.loading('משלים תהליך חיבור...');
-
-      try {
-          const response = await base44.functions.invoke('integrationAuth', { 
-              action: 'handleCallback',
-              provider, 
-              code, 
-              userId: user.id
-          });
-          
-          if (!response?.data?.success) {
-              throw new Error("האימות לא הושלם בהצלחה.");
-          }
-          
-          toast.dismiss(loadingToastId);
-          toast.success('החיבור נוצר בהצלחה!');
-          queryClient.invalidateQueries(['integrationConnections']);
-      } catch (error) {
-          console.error(error);
-          toast.dismiss(loadingToastId);
-          toast.error(`שגיאה בחיבור: ${error.message}`);
-      } finally {
-          setIsProcessing(false);
-          cleanUrl();
-      }
-  };
-
-  const initiateOAuth = async (provider) => {
-    if (!user) {
-      toast.error('שגיאה: יש להתחבר למערכת כדי לבצע אינטגרציה.');
-      return;
-    }
-    
-    const nonce = generateNonce();
-    sessionStorage.setItem('oauth_nonce', nonce);
-    localStorage.setItem('pending_oauth_provider', provider);
-    
-    const loadingToastId = toast.loading('מכין מעבר לאימות...');
-
+  // 3. התחלת תהליך (Redirect to Google)
+  const startAuth = async (provider) => {
     try {
-      const secureState = `${user.id}:${nonce}`;
-
-      const response = await base44.functions.invoke('integrationAuth', { 
-          action: 'getAuthUrl',
-          provider, 
-          state: secureState
+      setIsConnecting(true);
+      // מבקשים מהשרת את הלינק המדויק לגוגל (כולל Client ID ו-Redirect URI)
+      const res = await base44.functions.invoke('integrationAuth', {
+        action: 'getAuthUrl',
+        provider: provider,
+        state: provider
       });
 
-      toast.dismiss(loadingToastId);
-      
-      if (response?.data?.authUrl) {
-          window.location.href = response.data.authUrl;
+      if (res.authUrl) {
+        // מעבר לדף של גוגל
+        window.location.href = res.authUrl;
       } else {
-          throw new Error("לא התקבלה כתובת אימות מהשרת");
+        throw new Error("השרת לא החזיר קישור התחברות תקין.");
       }
-    } catch (error) {
-      toast.dismiss(loadingToastId);
-      toast.error(`שגיאה בהתחלת אינטגרציה: ${error.message}`);
-      localStorage.removeItem('pending_oauth_provider');
-      sessionStorage.removeItem('oauth_nonce');
+    } catch (err) {
+      toast({ variant: "destructive", title: "שגיאה", description: err.message });
+      setIsConnecting(false);
     }
   };
 
-  const saveSettings = async () => {
-      toast.info("שמירת הגדרות נוספות תיושם בקרוב");
+  // 4. ניתוק יזום
+  const disconnect = async (provider) => {
+    if (!confirm(`האם לנתק את ${provider}? סנכרון נתונים יופסק.`)) return;
+    
+    try {
+      // מציאת הרשומה למחיקה
+      const connections = await base44.entities.IntegrationConnection.list({ limit: 50 });
+      const toDelete = connections.data.find(c => c.provider === provider);
+      
+      if (toDelete) {
+        await base44.entities.IntegrationConnection.delete(toDelete.id);
+        toast({ description: "החיבור הוסר בהצלחה." });
+        refetch();
+      } else {
+        toast({ description: "לא נמצא חיבור פעיל לניתוק." });
+        refetch(); // רענון למקרה שהממשק לא היה מעודכן
+      }
+    } catch (err) {
+        toast({ variant: "destructive", title: "שגיאה בניתוק", description: err.message });
+    }
   };
 
-  if (isLoadingConnections || isLoadingUser) return <div className="flex justify-center p-8"><Loader2 className="animate-spin" /></div>;
+  const renderIntegrationCard = (name, providerKey, icon) => {
+    const isConnected = activeIntegrations.includes(providerKey);
+    
+    return (
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+          <CardTitle className="text-lg font-medium flex items-center gap-2">
+            {icon}
+            {name}
+          </CardTitle>
+          {isConnected ? 
+            <Badge className="bg-green-100 text-green-800 hover:bg-green-100 flex gap-1">
+                <CheckCircle className="w-3 h-3"/> מחובר
+            </Badge> : 
+            <Badge variant="outline" className="text-gray-500">לא מחובר</Badge>
+          }
+        </CardHeader>
+        <CardContent>
+          <CardDescription className="mb-4">
+            {isConnected 
+              ? `החשבון מחובר. המערכת יכולה לקרוא ולכתוב נתונים.`
+              : `חבר את חשבון ה-${name} שלך כדי להפעיל אוטומציות.`
+            }
+          </CardDescription>
+          
+          <div className="flex justify-end">
+            {isConnected ? (
+                <Button variant="outline" className="text-red-600 hover:text-red-700 hover:bg-red-50 border-red-200" onClick={() => disconnect(providerKey)}>
+                <XCircle className="w-4 h-4 mr-2" /> התנתק
+                </Button>
+            ) : (
+                <Button onClick={() => startAuth(providerKey)} disabled={isConnecting}>
+                {isConnecting ? <Loader2 className="w-4 h-4 mr-2 animate-spin"/> : <Cloud className="w-4 h-4 mr-2"/>}
+                חבר חשבון {name}
+                </Button>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+    );
+  };
 
   return (
     <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h3 className="text-lg font-medium">אינטגרציות חיצוניות</h3>
+          <p className="text-sm text-muted-foreground">נהל את החיבורים לגוגל, דרופבוקס ושירותים נוספים.</p>
+        </div>
+        <Button variant="ghost" size="sm" onClick={() => refetch()} disabled={isLoading}>
+            <RefreshCw className={`w-4 h-4 mr-2 ${isLoading ? 'animate-spin' : ''}`}/> 
+            רענן סטטוס
+        </Button>
+      </div>
       
-      {/* Google Workspace Card */}
-      <Card className="dark:bg-slate-800 dark:border-slate-700">
-        <CardHeader>
-          <CardTitle>Google Workspace</CardTitle>
-          <CardDescription>חבר את חשבון Google שלך כדי לאפשר אינטגרציה עם Gmail, Calendar ו-Sheets.</CardDescription>
-        </CardHeader>
-        <CardContent>
-          {connections.some(c => c.provider === 'google') ? (
-            <div className="space-y-4">
-                <div className="flex items-center justify-between p-3 bg-green-50 dark:bg-green-900/20 rounded-lg border border-green-100 dark:border-green-900">
-                  <span className="text-sm font-medium flex items-center gap-2 text-green-700 dark:text-green-400">
-                    <Power className="w-4 h-4" />
-                    מחובר ופעיל
-                  </span>
-                  <Button variant="ghost" size="sm" className="text-red-500 hover:text-red-700 hover:bg-red-50" onClick={() => disconnectMutation.mutate(connections.find(c => c.provider === 'google').id)}>
-                    <X className="w-4 h-4 mr-2" /> התנתק
-                  </Button>
-                </div>
-                
-                <div className="pt-2">
-                    <Label htmlFor="google-spreadsheet-id">מזהה גיליון אלקטרוני של Google Sheets (לגיבוי נתונים)</Label>
-                    <div className="flex gap-2 mt-1.5">
-                        <Input
-                        id="google-spreadsheet-id"
-                        value={integrationSettings.googleSpreadsheetId}
-                        onChange={(e) => setIntegrationSettings({ ...integrationSettings, googleSpreadsheetId: e.target.value })}
-                        placeholder="הדבק כאן את ה-ID (לדוגמה: 1BxiMVs0XRA5n...)"
-                        />
-                        <Button variant="outline" onClick={saveSettings}>שמור</Button>
-                    </div>
-                    <p className="text-xs text-muted-foreground mt-1">
-                    ניתן למצוא את המזהה בכתובת ה-URL של הגיליון (הטקסט בין ה-/d/ לבין ה-/edit).
-                    </p>
-                </div>
-            </div>
-          ) : (
-            <Button onClick={() => initiateOAuth('google')} disabled={isProcessing}>
-              {isProcessing ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <ExternalLink className="w-4 h-4 mr-2" />} 
-              חבר חשבון Google
-            </Button>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* Dropbox Card */}
-      <Card className="dark:bg-slate-800 dark:border-slate-700">
-        <CardHeader>
-          <CardTitle>Dropbox</CardTitle>
-          <CardDescription>חבר את חשבון Dropbox שלך לאחסון ושיתוף קבצים אוטומטי.</CardDescription>
-        </CardHeader>
-        <CardContent>
-          {connections.some(c => c.provider === 'dropbox') ? (
-            <div className="flex items-center justify-between p-3 bg-green-50 dark:bg-green-900/20 rounded-lg border border-green-100 dark:border-green-900">
-              <span className="text-sm font-medium flex items-center gap-2 text-green-700 dark:text-green-400">
-                <Power className="w-4 h-4" />
-                מחובר ופעיל
-              </span>
-              <Button variant="ghost" size="sm" className="text-red-500 hover:text-red-700 hover:bg-red-50" onClick={() => disconnectMutation.mutate(connections.find(c => c.provider === 'dropbox').id)}>
-                <X className="w-4 h-4 mr-2" /> התנתק
-              </Button>
-            </div>
-          ) : (
-            <Button onClick={() => initiateOAuth('dropbox')} disabled={isProcessing}>
-               {isProcessing ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <ExternalLink className="w-4 h-4 mr-2" />} 
-               חבר חשבון Dropbox
-            </Button>
-          )}
-        </CardContent>
-      </Card>
+      <div className="grid gap-4 md:grid-cols-2">
+        {renderIntegrationCard("Google (Gmail/Drive)", "google", <span className="text-xl font-bold text-blue-500">G</span>)}
+        {renderIntegrationCard("Dropbox", "dropbox", <span className="text-xl font-bold text-blue-600">D</span>)}
+      </div>
     </div>
   );
 }
