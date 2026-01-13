@@ -1,7 +1,7 @@
 // @ts-nocheck
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.6';
 
-// מפתח קבוע (Hardcoded) לפתרון בעיות סביבה - זמני וקריטי להפעלה
+// מפתח קבוע
 const STATIC_KEY = "my-secret-key-1234567890123456";
 
 async function getCryptoKey() {
@@ -14,7 +14,7 @@ async function decrypt(text) {
   try {
     if (!text) return null;
     const parts = text.split(':');
-    if (parts.length !== 2) return text; // אם לא מוצפן, החזר את הטקסט המקורי
+    if (parts.length !== 2) return text; 
     
     const [ivHex, encryptedHex] = parts;
     const key = await getCryptoKey();
@@ -25,7 +25,7 @@ async function decrypt(text) {
     return new TextDecoder().decode(decrypted);
   } catch (e) {
     console.error("Decryption warning:", e);
-    return text; // Fallback
+    return text; 
   }
 }
 
@@ -39,8 +39,9 @@ async function fetchGmailMessages(accessToken, limit = 10) {
     
     if (!listRes.ok) {
         const txt = await listRes.text();
-        console.error("Gmail API Error:", txt);
-        return [];
+        // אם הטוקן פג תוקף - נחזיר שגיאה ברורה
+        if (listRes.status === 401) throw new Error("Google Token Expired. Please reconnect in Settings.");
+        throw new Error(`Gmail API Error: ${listRes.status} - ${txt}`);
     }
 
     const listData = await listRes.json();
@@ -60,7 +61,6 @@ async function fetchGmailMessages(accessToken, limit = 10) {
             const from = headers.find(h => h.name === 'From')?.value || 'Unknown';
             const dateHeader = headers.find(h => h.name === 'Date')?.value;
             
-            // חילוץ כתובת מייל נקייה
             let senderEmail = from;
             if (from.includes('<') && from.includes('>')) {
                 const match = from.match(/<(.+)>/);
@@ -83,9 +83,7 @@ async function fetchGmailMessages(accessToken, limit = 10) {
     return emails;
 }
 
-// Main Function Handler
 Deno.serve(async (req) => {
-    // CORS Headers
     const headers = {
         "Access-Control-Allow-Origin": "*",
         "Access-Control-Allow-Methods": "POST, OPTIONS",
@@ -101,27 +99,32 @@ Deno.serve(async (req) => {
         
         if (!user) return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers });
 
-        console.log(`Starting sync for user ${user.id}`);
-
-        // 1. מציאת חיבור גוגל
-        const connections = await base44.entities.IntegrationConnection.filter({ user_id: user.id, provider: 'google' });
+        // --- תיקון קריטי: חיפוש חכם של האינטגרציה ---
+        // במקום לסנן לפי 'google', נביא הכל ונבדוק בקוד (פותר בעיות אותיות גדולות/קטנות)
+        const allConnections = await base44.entities.IntegrationConnection.filter({ user_id: user.id });
         
-        if (connections.length === 0) {
-            return new Response(JSON.stringify({ error: 'No Google integration found' }), { status: 404, headers });
+        // מציאת החיבור הרלוונטי (Google, google, GOOGLE)
+        const connection = allConnections.find(c => c.provider && c.provider.toLowerCase() === 'google');
+
+        if (!connection) {
+            // דיבוג למשתמש: מה כן מצאנו?
+            const foundProviders = allConnections.map(c => c.provider).join(', ') || "None";
+            return new Response(JSON.stringify({ 
+                error: `No Google integration found. Found providers: [${foundProviders}]. Please go to Settings -> Integrations.` 
+            }), { status: 404, headers });
         }
 
-        // 2. פענוח טוקן ומשיכה
-        const accessToken = await decrypt(connections[0].access_token);
-        if (!accessToken) throw new Error("Failed to decrypt access token");
+        if (!connection.access_token) {
+             return new Response(JSON.stringify({ error: 'Integration found but Token is missing. Please reconnect.' }), { status: 400, headers });
+        }
 
+        const accessToken = await decrypt(connection.access_token);
         const newEmails = await fetchGmailMessages(accessToken);
         
-        // 3. שמירה למסד הנתונים
         let savedCount = 0;
         for (const mail of newEmails) {
             const exists = await base44.entities.Mail.filter({ external_id: mail.external_id });
             if (exists.length === 0) {
-                // הוספת ה-User ID קריטית לעקיפת ה-RLS
                 await base44.entities.Mail.create({ ...mail, user_id: user.id });
                 savedCount++;
             }
