@@ -77,10 +77,9 @@ async function getAuthUrl(provider: string, state: string, origin: string) {
   if (provider === 'google') {
     if (!GOOGLE_CLIENT_ID) throw new Error("Missing Google Config (GOOGLE_CLIENT_ID)");
     
-    console.log(`Google redirect URI: ${googleRedirect}`);
     const params = new URLSearchParams({
       client_id: GOOGLE_CLIENT_ID,
-      redirect_uri: googleRedirect,
+      redirect_uri: FIXED_REDIRECT_URI,
       response_type: 'code',
       scope: [
         'https://www.googleapis.com/auth/gmail.modify',
@@ -99,10 +98,9 @@ async function getAuthUrl(provider: string, state: string, origin: string) {
   if (provider === 'dropbox') {
     if (!DROPBOX_APP_KEY) throw new Error("Missing Dropbox Config (DROPBOX_APP_KEY)");
     
-    console.log(`Dropbox redirect URI: ${dropboxRedirect}`);
     const params = new URLSearchParams({
       client_id: DROPBOX_APP_KEY,
-      redirect_uri: dropboxRedirect,
+      redirect_uri: FIXED_REDIRECT_URI,
       response_type: 'code',
       token_access_type: 'offline',
       state: state
@@ -113,17 +111,16 @@ async function getAuthUrl(provider: string, state: string, origin: string) {
   throw new Error(`Unsupported provider: ${provider}`);
 }
 
-async function handleCallback(code: string, provider: string, userId: string, base44: any, origin: string) {
-  // Use the same redirect URIs as in getAuthUrl - they MUST match
-  const googleRedirect = GOOGLE_REDIRECT_URI || `${origin}/Settings`;
-  const dropboxRedirect = DROPBOX_REDIRECT_URI || `${origin}/Settings`;
+async function handleCallback(code: string, provider: string, userId: string, base44: any) {
+  // Always use APP_BASE_URL for redirect URIs - must match getAuthUrl exactly
+  const APP_BASE_URL = Deno.env.get("APP_BASE_URL") || "https://dwo.base44.app";
+  const FIXED_REDIRECT_URI = `${APP_BASE_URL}/Settings`;
   
-  console.log(`Handling callback for ${provider}.`);
+  console.log(`Handling callback for ${provider}. Using redirect: ${FIXED_REDIRECT_URI}`);
   
   let tokens;
   
   if (provider === 'google') {
-    console.log(`Google callback redirect URI: ${googleRedirect}`);
     const res = await fetch('https://oauth2.googleapis.com/token', {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -131,13 +128,12 @@ async function handleCallback(code: string, provider: string, userId: string, ba
         code,
         client_id: GOOGLE_CLIENT_ID!,
         client_secret: GOOGLE_CLIENT_SECRET!,
-        redirect_uri: googleRedirect,
+        redirect_uri: FIXED_REDIRECT_URI,
         grant_type: 'authorization_code',
       }).toString(),
     });
     tokens = await res.json();
   } else if (provider === 'dropbox') {
-    console.log(`Dropbox callback redirect URI: ${dropboxRedirect}`);
     const credentials = btoa(`${DROPBOX_APP_KEY}:${DROPBOX_APP_SECRET}`);
     const res = await fetch('https://api.dropboxapi.com/oauth2/token', {
       method: 'POST',
@@ -148,7 +144,7 @@ async function handleCallback(code: string, provider: string, userId: string, ba
       body: new URLSearchParams({
         code,
         grant_type: 'authorization_code',
-        redirect_uri: dropboxRedirect,
+        redirect_uri: FIXED_REDIRECT_URI,
       }).toString(),
     });
     tokens = await res.json();
@@ -215,12 +211,12 @@ Deno.serve(async (req) => {
         const effectiveOrigin = origin || Deno.env.get("APP_BASE_URL") || "https://dwo.base44.app";
 
         if (action === 'getAuthUrl') {
-            const url = await getAuthUrl(provider, state || user.id, effectiveOrigin);
+            const url = await getAuthUrl(provider, state || user.id);
             return new Response(JSON.stringify({ authUrl: url }), { status: 200, headers });
         }
         
         if (action === 'handleCallback') {
-            await handleCallback(code, provider, user.id, base44, effectiveOrigin);
+            await handleCallback(code, provider, user.id, base44);
             return new Response(JSON.stringify({ success: true }), { status: 200, headers });
         }
 
