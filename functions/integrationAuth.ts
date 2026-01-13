@@ -1,22 +1,23 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.6';
 
 // --- Section 1: Inlined Crypto Logic ---
-// ... (קוד ההצפנה נשאר ללא שינוי, להעתיק מהקובץ הקודם או להשאיר כמו שהוא אם לא נגענו בו)
-// אני מניח שקוד ההצפנה כבר קיים בקובץ, אם לא - צריך להוסיף אותו כאן כפי שהיה בגרסאות קודמות.
-// לצורך הבהירות, אני מתמקד בתיקון ה-OAuth.
+// לוגיקת הצפנה פנימית (חובה שתהיה כאן כדי למנוע קריסות של תלויות חיצוניות)
 
 async function getCryptoKey() {
   const keyString = Deno.env.get("ENCRYPTION_KEY");
   if (!keyString) {
-      console.warn("Missing ENCRYPTION_KEY, using fallback");
+      console.warn("Missing ENCRYPTION_KEY, using fallback (NOT SECURE for production)");
       return await crypto.subtle.generateKey(
         { name: "AES-GCM", length: 256 },
         true,
         ["encrypt", "decrypt"]
       );
   }
+  
   const encoder = new TextEncoder();
+  // חיתוך או ריפוד המפתח ל-32 תווים בדיוק (דרישת AES-256)
   const keyBuffer = encoder.encode(keyString.padEnd(32, '0').slice(0, 32));
+  
   return await crypto.subtle.importKey("raw", keyBuffer, { name: "AES-GCM" }, false, ["encrypt", "decrypt"]);
 }
 
@@ -35,17 +36,30 @@ async function encrypt(text: string): Promise<string> {
     }
 }
 
+async function decrypt(text: string): Promise<string> {
+  try {
+    const [ivHex, encryptedHex] = text.split(':');
+    if (!ivHex || !encryptedHex) throw new Error("Invalid encrypted format");
+    const key = await getCryptoKey();
+    const iv = new Uint8Array(ivHex.match(/.{1,2}/g)!.map(byte => parseInt(byte, 16)));
+    const encrypted = new Uint8Array(encryptedHex.match(/.{1,2}/g)!.map(byte => parseInt(byte, 16)));
+    const decrypted = await crypto.subtle.decrypt({ name: "AES-GCM", iv }, key, encrypted);
+    return new TextDecoder().decode(decrypted);
+  } catch (e) {
+    console.error("Decryption failed:", e);
+    throw new Error("Failed to decrypt token");
+  }
+}
+
 // --- Section 2: Integration Logic ---
 
-// קביעת כתובת הבסיס: מעדיף משתנה סביבה, אם לא קיים - משתמש בכתובת הפרודקשן הקבועה.
-// זה מאפשר גמישות (למשל ב-localhost) אך מבטיח תקינות בפרודקשן.
-const APP_BASE_URL = Deno.env.get("APP_BASE_URL") || "https://os.dwo.co.il";
+// הגדרת נתיב החזרה (Redirect URI)
+// 1. מנסה לקחת מ-Secret שנקרא APP_BASE_URL
+// 2. אם אין Secret, משתמש בברירת המחדל שציינת (dwo.base44.app)
+const BASE_URL = Deno.env.get("APP_BASE_URL") || "https://dwo.base44.app";
+const FINAL_REDIRECT_URI = `${BASE_URL}/Settings`;
 
-// נרמול ה-REDIRECT URI: תמיד משתמשים ב-APP_BASE_URL + /settings (lowercase)
-// זה מבטיח עקביות ומעלים את הבעיה של case mismatch.
-const FINAL_REDIRECT_URI = `${APP_BASE_URL}/settings`;
-
-console.log(`OAuth Configuration Loaded. Redirect URI: ${FINAL_REDIRECT_URI}`);
+console.log(`System Configured. Redirect URI set to: ${FINAL_REDIRECT_URI}`);
 
 const GOOGLE_CLIENT_ID = Deno.env.get("GOOGLE_CLIENT_ID");
 const GOOGLE_CLIENT_SECRET = Deno.env.get("GOOGLE_CLIENT_SECRET");
@@ -54,7 +68,7 @@ const DROPBOX_APP_KEY = Deno.env.get("DROPBOX_APP_KEY");
 const DROPBOX_APP_SECRET = Deno.env.get("DROPBOX_APP_SECRET");
 
 async function getAuthUrl(provider: string, state: string) {
-  console.log(`Generating Auth URL for ${provider}. Redirect URI: ${FINAL_REDIRECT_URI}`);
+  console.log(`Generating Auth URL for ${provider}. State: ${state}`);
 
   if (provider === 'google') {
     if (!GOOGLE_CLIENT_ID) throw new Error("Missing Google Config (GOOGLE_CLIENT_ID)");
@@ -93,7 +107,7 @@ async function getAuthUrl(provider: string, state: string) {
 }
 
 async function handleCallback(code: string, provider: string, userId: string, base44: any) {
-  console.log(`Handling callback for ${provider}. Code received. Using Redirect URI: ${FINAL_REDIRECT_URI}`);
+  console.log(`Handling callback for ${provider}...`);
   let tokens;
   
   if (provider === 'google') {
@@ -104,7 +118,7 @@ async function handleCallback(code: string, provider: string, userId: string, ba
         code,
         client_id: GOOGLE_CLIENT_ID!,
         client_secret: GOOGLE_CLIENT_SECRET!,
-        redirect_uri: FINAL_REDIRECT_URI, // חובה שיהיה זהה לחלוטין לזה שנשלח ב-getAuthUrl
+        redirect_uri: FINAL_REDIRECT_URI, // חייב להיות זהה למה שנשלח ב-getAuthUrl
         grant_type: 'authorization_code',
       }).toString(),
     });
@@ -120,7 +134,7 @@ async function handleCallback(code: string, provider: string, userId: string, ba
       body: new URLSearchParams({
         code,
         grant_type: 'authorization_code',
-        redirect_uri: FINAL_REDIRECT_URI, // חובה שיהיה זהה לחלוטין
+        redirect_uri: FINAL_REDIRECT_URI,
       }).toString(),
     });
     tokens = await res.json();
@@ -131,12 +145,12 @@ async function handleCallback(code: string, provider: string, userId: string, ba
     throw new Error(`Provider Error: ${tokens?.error_description || JSON.stringify(tokens)}`);
   }
 
-  console.log("Tokens received successfully. Encrypting and saving...");
-
+  // הצפנת הטוקנים
   const encryptedAccess = await encrypt(tokens.access_token);
   const encryptedRefresh = tokens.refresh_token ? await encrypt(tokens.refresh_token) : null;
   const expiresAt = Date.now() + ((tokens.expires_in || 3600) * 1000); 
 
+  // בדיקה אם קיים חיבור
   const existing = await base44.entities.IntegrationConnection.filter({ user_id: userId, provider });
 
   const data = {
@@ -151,6 +165,7 @@ async function handleCallback(code: string, provider: string, userId: string, ba
     Object.assign(data, { refresh_token: encryptedRefresh });
   }
 
+  // עדכון או יצירה
   if (existing.length > 0) {
     await base44.entities.IntegrationConnection.update(existing[0].id, data);
   } else {
@@ -159,11 +174,12 @@ async function handleCallback(code: string, provider: string, userId: string, ba
         refresh_token: encryptedRefresh || "MISSING_REFRESH_TOKEN"
     });
   }
-  console.log("Integration saved to DB.");
+  console.log(`Successfully connected ${provider} for user ${userId}`);
 }
 
 // === MAIN ENTRY POINT ===
 Deno.serve(async (req) => {
+    // CORS Headers - קריטי כדי שהדפדפן לא יחסום את הבקשה
     const headers = new Headers({
         "Access-Control-Allow-Origin": "*",
         "Access-Control-Allow-Methods": "POST, OPTIONS",
@@ -186,8 +202,7 @@ Deno.serve(async (req) => {
         const body = await req.json();
         const { action, provider, code, state } = body;
 
-        console.log(`Request received: action=${action}, provider=${provider}`);
-
+        // ניתוב הפעולות
         if (action === 'getAuthUrl') {
             const url = await getAuthUrl(provider, state || user.id);
             return new Response(JSON.stringify({ authUrl: url }), { status: 200, headers });
