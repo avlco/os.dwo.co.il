@@ -26,7 +26,6 @@ export default function IntegrationsTab() {
     };
     loadUser();
   }, []);
-  
   const [integrationSettings, setIntegrationSettings] = useState({
     googleSpreadsheetId: '',
   });
