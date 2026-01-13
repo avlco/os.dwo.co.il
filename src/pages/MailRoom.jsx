@@ -1,11 +1,11 @@
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query';
-// תיקון נתיב: שימוש בנתיב יחסי במקום @
+// שימוש בנתיבים יחסיים (..) כדי למנוע שגיאות עורך
 import { base44 } from '../api/base44Client';
 import { PageHeader } from "../components/ui/PageHeader";
 import { DataTable } from "../components/ui/DataTable";
 import { Button } from "../components/ui/button";
-import { Mail, RefreshCw, CheckCircle, Clock, Download, Loader2 } from 'lucide-react';
+import { Mail, RefreshCw, CheckCircle, Clock, CloudDownload, Loader2 } from 'lucide-react';
 import { createPageUrl } from '../utils';
 import { useNavigate } from 'react-router-dom';
 import { format } from 'date-fns';
@@ -24,6 +24,7 @@ export default function MailRoom() {
   const [activeTab, setActiveTab] = useState('inbox');
   const pageSize = 50;
 
+  // שליפת נתונים
   const { data, isLoading, refetch } = useQuery({
     queryKey: ['mails', activeTab, page],
     queryFn: async () => {
@@ -42,6 +43,7 @@ export default function MailRoom() {
     placeholderData: keepPreviousData
   });
 
+  // פעולת הסנכרון
   const syncMutation = useMutation({
     mutationFn: async () => {
         return await base44.functions.invoke('processIncomingMail', {});
@@ -53,7 +55,8 @@ export default function MailRoom() {
         setTimeout(() => refetch(), 1000);
     },
     onError: (err) => {
-        toast({ variant: "destructive", title: "שגיאה", description: err.message });
+        console.error("Sync failed:", err);
+        toast({ variant: "destructive", title: "שגיאה", description: "ודא שביצעת אינטגרציה בהגדרות." });
     }
   });
 
@@ -94,8 +97,9 @@ export default function MailRoom() {
 
   return (
     <div className="space-y-6">
-      <PageHeader title="חדר דואר" description="ניהול דואר נכנס." />
+      <PageHeader title="חדר דואר" description="ניהול ומיון דואר נכנס." />
       
+      {/* כפתורי פעולה מחוץ לכותרת כדי להבטיח נראות */}
       <div className="flex justify-end gap-2 p-2 bg-slate-50 dark:bg-slate-900 rounded-md border">
           <Button 
             className="bg-blue-600 hover:bg-blue-700 text-white" 
@@ -103,7 +107,7 @@ export default function MailRoom() {
             onClick={() => syncMutation.mutate()} 
             disabled={syncMutation.isPending}
           >
-            {syncMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin ml-2"/> : <Download className="w-4 h-4 ml-2"/>}
+            {syncMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin ml-2"/> : <CloudDownload className="w-4 h-4 ml-2"/>}
             סנכרן מ-Gmail
           </Button>
           
