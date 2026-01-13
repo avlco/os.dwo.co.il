@@ -107,12 +107,16 @@ async function getAuthUrl(provider: string, state: string, origin: string) {
 }
 
 async function handleCallback(code: string, provider: string, userId: string, base44: any, origin: string) {
-  const redirectUri = `${origin}/Settings`; 
-  console.log(`Handling callback for ${provider}. Redirect: ${redirectUri}`);
+  // Use the same redirect URIs as in getAuthUrl - they MUST match
+  const googleRedirect = GOOGLE_REDIRECT_URI || `${origin}/Settings`;
+  const dropboxRedirect = DROPBOX_REDIRECT_URI || `${origin}/Settings`;
+  
+  console.log(`Handling callback for ${provider}.`);
   
   let tokens;
   
   if (provider === 'google') {
+    console.log(`Google callback redirect URI: ${googleRedirect}`);
     const res = await fetch('https://oauth2.googleapis.com/token', {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -120,12 +124,13 @@ async function handleCallback(code: string, provider: string, userId: string, ba
         code,
         client_id: GOOGLE_CLIENT_ID!,
         client_secret: GOOGLE_CLIENT_SECRET!,
-        redirect_uri: redirectUri,
+        redirect_uri: googleRedirect,
         grant_type: 'authorization_code',
       }).toString(),
     });
     tokens = await res.json();
   } else if (provider === 'dropbox') {
+    console.log(`Dropbox callback redirect URI: ${dropboxRedirect}`);
     const credentials = btoa(`${DROPBOX_APP_KEY}:${DROPBOX_APP_SECRET}`);
     const res = await fetch('https://api.dropboxapi.com/oauth2/token', {
       method: 'POST',
@@ -136,7 +141,7 @@ async function handleCallback(code: string, provider: string, userId: string, ba
       body: new URLSearchParams({
         code,
         grant_type: 'authorization_code',
-        redirect_uri: redirectUri,
+        redirect_uri: dropboxRedirect,
       }).toString(),
     });
     tokens = await res.json();
