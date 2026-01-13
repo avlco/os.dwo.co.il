@@ -1,14 +1,14 @@
 // @ts-nocheck
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.6';
 
-// --- אותו מפתח קבוע בדיוק כמו ב-processIncomingMail ---
+// 1. מפתח קבוע - חובה שיהיה זהה בשני הקבצים
 const STATIC_KEY = "my-secret-key-1234567890123456";
 
-// הגדרת כתובת האתר בייצור
+// 2. הגדרות סביבה
 const APP_BASE_URL = "https://os.dwo.co.il"; 
-const FINAL_REDIRECT_URI = `${APP_BASE_URL}/settings`;
+// חשוב: נתיב זה חייב להיות זהה למה שהוגדר ב-Google Cloud Console
+const REDIRECT_URI = `${APP_BASE_URL}/settings`; 
 
-// מזהי אפליקציה (ודא שהם מוגדרים ב-Secrets של המערכת)
 const GOOGLE_CLIENT_ID = Deno.env.get("GOOGLE_CLIENT_ID");
 const GOOGLE_CLIENT_SECRET = Deno.env.get("GOOGLE_CLIENT_SECRET");
 const DROPBOX_APP_KEY = Deno.env.get("DROPBOX_APP_KEY");
@@ -21,39 +21,31 @@ async function getCryptoKey() {
 }
 
 async function encrypt(text) {
-  try {
-    const key = await getCryptoKey();
-    const iv = crypto.getRandomValues(new Uint8Array(12));
-    const encoded = new TextEncoder().encode(text);
-    const encrypted = await crypto.subtle.encrypt({ name: "AES-GCM", iv }, key, encoded);
-    
-    const ivHex = Array.from(iv).map(b => b.toString(16).padStart(2, '0')).join('');
-    const encryptedHex = Array.from(new Uint8Array(encrypted)).map(b => b.toString(16).padStart(2, '0')).join('');
-    return `${ivHex}:${encryptedHex}`;
-  } catch (e) {
-    console.error("Encryption failed:", e);
-    throw new Error("Failed to encrypt token");
-  }
+    try {
+        const key = await getCryptoKey();
+        const iv = crypto.getRandomValues(new Uint8Array(12));
+        const encoded = new TextEncoder().encode(text);
+        const encrypted = await crypto.subtle.encrypt({ name: "AES-GCM", iv }, key, encoded);
+        const ivHex = Array.from(iv).map(b => b.toString(16).padStart(2, '0')).join('');
+        const encryptedHex = Array.from(new Uint8Array(encrypted)).map(b => b.toString(16).padStart(2, '0')).join('');
+        return `${ivHex}:${encryptedHex}`;
+    } catch (e) {
+        console.error("Encryption failed:", e);
+        throw new Error("Failed to encrypt token");
+    }
 }
-
-// --- OAuth Logic ---
 
 async function getAuthUrl(provider, state) {
   console.log(`Generating Auth URL for ${provider}`);
 
   if (provider === 'google') {
-    if (!GOOGLE_CLIENT_ID) throw new Error("Missing Google Config (GOOGLE_CLIENT_ID)");
-    
+    if (!GOOGLE_CLIENT_ID) throw new Error("Missing Google Config");
     const params = new URLSearchParams({
       client_id: GOOGLE_CLIENT_ID,
-      redirect_uri: FINAL_REDIRECT_URI,
+      redirect_uri: REDIRECT_URI,
       response_type: 'code',
-      scope: [
-        'https://www.googleapis.com/auth/gmail.modify', // קריטי לקריאת מיילים
-        'https://www.googleapis.com/auth/calendar',
-        'https://www.googleapis.com/auth/drive.file'
-      ].join(' '),
-      access_type: 'offline', // חובה כדי לקבל Refresh Token
+      scope: 'https://www.googleapis.com/auth/gmail.modify https://www.googleapis.com/auth/calendar https://www.googleapis.com/auth/drive.file',
+      access_type: 'offline',
       prompt: 'consent',
       state: state,
       include_granted_scopes: 'true'
@@ -65,14 +57,13 @@ async function getAuthUrl(provider, state) {
     if (!DROPBOX_APP_KEY) throw new Error("Missing Dropbox Config");
     const params = new URLSearchParams({
       client_id: DROPBOX_APP_KEY,
-      redirect_uri: FINAL_REDIRECT_URI,
+      redirect_uri: REDIRECT_URI,
       response_type: 'code',
       token_access_type: 'offline',
       state: state
     });
     return `https://www.dropbox.com/oauth2/authorize?${params.toString()}`;
   }
-
   throw new Error(`Unsupported provider: ${provider}`);
 }
 
@@ -80,7 +71,6 @@ async function handleCallback(code, provider, userId, base44) {
   console.log(`Handling callback for ${provider}, user: ${userId}`);
   let tokens;
   
-  // 1. החלפת Code ב-Token מול הספק
   if (provider === 'google') {
     const res = await fetch('https://oauth2.googleapis.com/token', {
       method: 'POST',
@@ -89,7 +79,7 @@ async function handleCallback(code, provider, userId, base44) {
         code,
         client_id: GOOGLE_CLIENT_ID,
         client_secret: GOOGLE_CLIENT_SECRET,
-        redirect_uri: FINAL_REDIRECT_URI,
+        redirect_uri: REDIRECT_URI,
         grant_type: 'authorization_code',
       }).toString(),
     });
@@ -105,7 +95,7 @@ async function handleCallback(code, provider, userId, base44) {
       body: new URLSearchParams({
         code,
         grant_type: 'authorization_code',
-        redirect_uri: FINAL_REDIRECT_URI,
+        redirect_uri: REDIRECT_URI,
       }).toString(),
     });
     tokens = await res.json();
@@ -116,45 +106,33 @@ async function handleCallback(code, provider, userId, base44) {
     throw new Error(`Provider Error: ${tokens?.error_description || JSON.stringify(tokens)}`);
   }
 
-  // 2. הצפנת הטוקנים עם המפתח הקבוע
   const encryptedAccess = await encrypt(tokens.access_token);
-  // אם אין refresh token, ננסה להשתמש בקיים או נסמן כחסר
   const encryptedRefresh = tokens.refresh_token ? await encrypt(tokens.refresh_token) : null;
-  
   const expiresAt = Date.now() + ((tokens.expires_in || 3600) * 1000); 
 
-  // 3. שמירה/עדכון בבסיס הנתונים
-  // אנחנו מוחקים חיבורים ישנים כדי למנוע כפילויות ולנקות זבל
-  const existing = await base44.entities.IntegrationConnection.filter({ user_id: userId, provider });
-  
-  // הכנת הרשומה החדשה
-  const newRecord = {
+  // שימוש ב-ServiceRole כדי לעקוף בעיות הרשאה בכתיבה/קריאה
+  const existing = await base44.asServiceRole.entities.IntegrationConnection.filter({ user_id: userId, provider });
+
+  const data = {
     user_id: userId,
-    provider: provider, // 'google' (lowercase)
+    provider,
     access_token: encryptedAccess,
     expires_at: expiresAt, 
     metadata: { last_updated: new Date().toISOString() }
   };
 
-  if (encryptedRefresh) {
-    newRecord.refresh_token = encryptedRefresh;
-  } else if (existing.length > 0 && existing[0].refresh_token) {
-    // שמירת ה-refresh token הישן אם החדש לא הגיע
-    newRecord.refresh_token = existing[0].refresh_token;
-  } else {
-    newRecord.refresh_token = "MISSING"; // סימון לדיבוג
-  }
+  if (encryptedRefresh) data.refresh_token = encryptedRefresh;
 
   if (existing.length > 0) {
-    await base44.entities.IntegrationConnection.update(existing[0].id, newRecord);
-    console.log("Updated existing integration record");
+    await base44.asServiceRole.entities.IntegrationConnection.update(existing[0].id, data);
   } else {
-    await base44.entities.IntegrationConnection.create(newRecord);
-    console.log("Created new integration record");
+    await base44.asServiceRole.entities.IntegrationConnection.create({
+        ...data,
+        refresh_token: encryptedRefresh || "MISSING"
+    });
   }
 }
 
-// === MAIN ENTRY POINT ===
 Deno.serve(async (req) => {
     const headers = {
         "Access-Control-Allow-Origin": "*",
@@ -187,7 +165,7 @@ Deno.serve(async (req) => {
         return new Response(JSON.stringify({ error: 'Unknown action' }), { status: 400, headers });
 
     } catch (err) {
-        console.error("Integration Error:", err);
+        console.error("Function Error:", err);
         return new Response(JSON.stringify({ error: err.message || String(err) }), { status: 500, headers });
     }
 });
