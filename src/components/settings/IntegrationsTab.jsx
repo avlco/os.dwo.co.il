@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, CheckCircle, XCircle, RefreshCw, Cloud, AlertCircle } from "lucide-react";
+import { Loader2, CheckCircle, XCircle, RefreshCw, Cloud } from "lucide-react";
 import { base44 } from '@/api/base44Client';
 import { useToast } from "@/components/ui/use-toast";
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -11,163 +11,154 @@ export default function IntegrationsTab() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   
-  // State נפרד לכל ספק - מונע "הבהוב" של כל הכפתורים
-  const [connectingProvider, setConnectingProvider] = useState(null); 
+  // State נפרד לכל כפתור כדי למנוע הפעלה כפולה
+  const [loadingGoogle, setLoadingGoogle] = useState(false);
+  const [loadingDropbox, setLoadingDropbox] = useState(false);
 
-  // שליפת סטטוס חיבורים מהשרת
-  const { data: activeIntegrations = [], refetch, isLoading } = useQuery({
+  // שליפת סטטוס
+  const { data: activeIntegrations = [], refetch, isLoading: isFetchingStatus } = useQuery({
     queryKey: ['integrations'],
     queryFn: async () => {
       try {
         const res = await base44.entities.IntegrationConnection.list({ limit: 10 });
         return res.data ? res.data.map(i => i.provider.toLowerCase()) : [];
       } catch (e) {
-        console.error("Failed to fetch integrations status", e);
         return [];
       }
     }
   });
 
-  // Callback Handler - מאזין לחזרה מגוגל/דרופבוקס
+  // Callback Handler
   useEffect(() => {
     const handleCallback = async () => {
       const params = new URLSearchParams(window.location.search);
       const code = params.get('code');
-      const state = params.get('state'); // 'google' | 'dropbox'
+      const state = params.get('state'); 
       const error = params.get('error');
 
       if (!code && !error) return;
 
-      // ניקוי ה-URL
       window.history.replaceState({}, document.title, window.location.pathname);
 
       if (error) {
-        toast({ variant: "destructive", title: "התחברות בוטלה", description: "הפעולה נדחתה על ידי הספק." });
+        toast({ variant: "destructive", title: "שגיאה", description: "החיבור נדחה על ידי הספק." });
         return;
       }
 
-      // זיהוי הספק (ברירת מחדל לגוגל אם אין state)
       const provider = state || 'google';
-      setConnectingProvider(provider); 
-      
-      toast({ title: "מאמת חיבור...", description: "יוצר קשר מאובטח עם השרת..." });
+      if (provider === 'google') setLoadingGoogle(true);
+      else setLoadingDropbox(true);
+
+      toast({ title: "מאמת...", description: "שומר את החיבור בשרת." });
 
       try {
-        const res = await base44.functions.invoke('integrationAuth', {
+        // --- התיקון כאן: פירוק התשובה ל-data ו-error ---
+        const { data, error: apiError } = await base44.functions.invoke('integrationAuth', {
           action: 'handleCallback',
           provider: provider,
           code: code
         });
 
-        if (res && res.error) {
-            throw new Error(res.error);
-        }
+        if (apiError) throw new Error(apiError.message || "שגיאת שרת");
+        if (data && data.error) throw new Error(data.error);
 
         toast({ 
-          title: "החיבור הושלם בהצלחה!", 
-          description: "כעת ניתן להפעיל סנכרון אוטומטי.",
+          title: "מחובר בהצלחה!", 
+          description: `חשבון ${provider} חובר.`,
           className: "bg-green-50 border-green-200 text-green-900" 
         });
         
         await refetch();
 
       } catch (err) {
-        console.error("Callback Processing Error:", err);
-        toast({ 
-            variant: "destructive", 
-            title: "שגיאת חיבור", 
-            description: err.message || "אירעה שגיאה לא צפויה בתהליך." 
-        });
+        console.error("Callback Error:", err);
+        toast({ variant: "destructive", title: "שגיאת שמירה", description: err.message });
       } finally {
-        setConnectingProvider(null);
+        setLoadingGoogle(false);
+        setLoadingDropbox(false);
       }
     };
 
     handleCallback();
   }, []);
 
-  // התחלת תהליך (יציאה החוצה)
   const startAuth = async (provider) => {
+    if (provider === 'google') setLoadingGoogle(true);
+    else setLoadingDropbox(true);
+
     try {
-      setConnectingProvider(provider);
-      
-      const res = await base44.functions.invoke('integrationAuth', {
+      // --- התיקון כאן: שימוש ב-data ---
+      const { data, error } = await base44.functions.invoke('integrationAuth', {
         action: 'getAuthUrl',
         provider: provider,
         state: provider
       });
 
-      if (res.error) throw new Error(res.error);
+      console.log("Response:", { data, error }); // לוג לווידוא
 
-      if (res.authUrl) {
-        window.location.href = res.authUrl;
+      if (error) throw new Error(error.message || "שגיאת תקשורת");
+      if (data && data.error) throw new Error(data.error);
+
+      // בדיקה בתוך האובייקט data
+      if (data && data.authUrl) {
+        window.location.href = data.authUrl;
       } else {
-        throw new Error("התקבלה תשובה ריקה מהשרת.");
+        throw new Error("השרת החזיר תשובה תקינה אך ריקה (חסר authUrl)");
       }
+
     } catch (err) {
+      console.error("Start Auth Error:", err);
       toast({ 
           variant: "destructive", 
-          title: "שגיאת אתחול", 
+          title: "שגיאת התחלה", 
           description: err.message 
       });
-      setConnectingProvider(null);
+      // איפוס הכפתור רק במקרה שגיאה (בהצלחה הדף עובר לגוגל)
+      if (provider === 'google') setLoadingGoogle(false);
+      else setLoadingDropbox(false);
     }
   };
 
   const disconnect = async (provider) => {
-    if (!confirm(`האם לנתק את ${provider}?`)) return;
-    
+    if (!confirm("האם לנתק?")) return;
     try {
       const connections = await base44.entities.IntegrationConnection.list({ limit: 50 });
       const toDelete = connections.data.find(c => c.provider === provider);
       
       if (toDelete) {
         await base44.entities.IntegrationConnection.delete(toDelete.id);
-        toast({ description: "החיבור הוסר בהצלחה." });
+        toast({ description: "החיבור הוסר." });
         refetch();
       }
     } catch (err) {
-        toast({ variant: "destructive", title: "שגיאה בניתוק", description: err.message });
+        toast({ variant: "destructive", title: "שגיאה", description: err.message });
     }
   };
 
-  const renderIntegrationCard = (name, providerKey, icon) => {
-    const isConnected = activeIntegrations.includes(providerKey);
-    const isLoadingThis = connectingProvider === providerKey;
-    const isOtherLoading = connectingProvider !== null && !isLoadingThis;
-
+  const renderCard = (name, key, icon, isLoading) => {
+    const isConnected = activeIntegrations.includes(key);
+    
     return (
       <Card>
-        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+        <CardHeader className="flex flex-row items-center justify-between pb-2">
           <CardTitle className="text-lg font-medium flex items-center gap-2">
-            {icon}
-            {name}
+            {icon} {name}
           </CardTitle>
           {isConnected ? 
-            <Badge className="bg-green-100 text-green-800 hover:bg-green-100 gap-1"><CheckCircle className="w-3 h-3"/> מחובר</Badge> : 
-            <Badge variant="outline" className="text-gray-500">לא מחובר</Badge>
+            <Badge className="bg-green-100 text-green-800">מחובר</Badge> : 
+            <Badge variant="outline">לא מחובר</Badge>
           }
         </CardHeader>
         <CardContent>
-          <CardDescription className="mb-4">
-            {isConnected 
-              ? "החיבור פעיל. המערכת מסונכרנת."
-              : "נדרש חיבור ראשוני."
-            }
-          </CardDescription>
-          
-          <div className="flex justify-end">
+          <div className="flex justify-end mt-4">
             {isConnected ? (
-                <Button variant="outline" className="text-red-600 hover:text-red-700 hover:bg-red-50 border-red-200" onClick={() => disconnect(providerKey)}>
-                <XCircle className="w-4 h-4 mr-2" /> התנתק
+                <Button variant="outline" className="text-red-600" onClick={() => disconnect(key)}>
+                  <XCircle className="w-4 h-4 mr-2" /> התנתק
                 </Button>
             ) : (
-                <Button 
-                    onClick={() => startAuth(providerKey)} 
-                    disabled={isLoadingThis || isOtherLoading}
-                >
-                {isLoadingThis ? <Loader2 className="w-4 h-4 mr-2 animate-spin"/> : <Cloud className="w-4 h-4 mr-2"/>}
-                חבר חשבון {name}
+                <Button onClick={() => startAuth(key)} disabled={isLoading}>
+                  {isLoading ? <Loader2 className="w-4 h-4 mr-2 animate-spin"/> : <Cloud className="w-4 h-4 mr-2"/>}
+                  חבר חשבון
                 </Button>
             )}
           </div>
@@ -178,20 +169,15 @@ export default function IntegrationsTab() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h3 className="text-lg font-medium">אינטגרציות חיצוניות</h3>
-          <p className="text-sm text-muted-foreground">חיבור מאובטח לשירותי ענן (OAuth 2.0).</p>
-        </div>
-        <Button variant="ghost" size="sm" onClick={() => refetch()} disabled={isLoading}>
-            <RefreshCw className={`w-4 h-4 mr-2 ${isLoading ? 'animate-spin' : ''}`}/> 
-            רענן סטטוס
+      <div className="flex justify-between items-center">
+        <h3 className="text-lg font-medium">אינטגרציות</h3>
+        <Button variant="ghost" size="sm" onClick={() => refetch()} disabled={isFetchingStatus}>
+            <RefreshCw className={`w-4 h-4 mr-2 ${isFetchingStatus ? 'animate-spin' : ''}`}/> רענן
         </Button>
       </div>
-      
       <div className="grid gap-4 md:grid-cols-2">
-        {renderIntegrationCard("Google", "google", <span className="text-xl font-bold text-blue-500">G</span>)}
-        {renderIntegrationCard("Dropbox", "dropbox", <span className="text-xl font-bold text-blue-600">D</span>)}
+        {renderCard("Google", "google", <span className="text-xl font-bold text-blue-500">G</span>, loadingGoogle)}
+        {renderCard("Dropbox", "dropbox", <span className="text-xl font-bold text-blue-600">D</span>, loadingDropbox)}
       </div>
     </div>
   );
