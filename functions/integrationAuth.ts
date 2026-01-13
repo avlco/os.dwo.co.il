@@ -1,32 +1,28 @@
 // @ts-nocheck
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.6';
 
-// --- קונפיגורציה ואבטחה ---
-const STATIC_KEY = "my-secret-key-1234567890123456"; // חובה שיהיה זהה בכל המערכת
+const STATIC_KEY = "my-secret-key-1234567890123456";
 const APP_BASE_URL = "https://os.dwo.co.il"; 
+// תיקון: S גדולה, בדיוק כפי שנדרש במערכת שלך
 const REDIRECT_URI = `${APP_BASE_URL}/Settings`; 
 
-// פונקציית עזר לבדיקת תקינות הסביבה (Health Check)
-function validateEnv(provider) {
+// Helper: Validate Environment Variables
+function getProviderConfig(providerRaw) {
+    const provider = providerRaw.toLowerCase().trim();
+    
     if (provider === 'google') {
-        const id = Deno.env.get("GOOGLE_CLIENT_ID");
-        const secret = Deno.env.get("GOOGLE_CLIENT_SECRET");
-        if (!id || !secret) {
-            console.error("[Config Error] Missing Google Env Vars");
-            throw new Error("שרת לא מוגדר: חסרים מפתחות התחברות לגוגל (GOOGLE_CLIENT_ID/SECRET).");
-        }
-        return { clientId: id, clientSecret: secret };
+        const clientId = Deno.env.get("GOOGLE_CLIENT_ID");
+        const clientSecret = Deno.env.get("GOOGLE_CLIENT_SECRET");
+        if (!clientId || !clientSecret) throw new Error("Missing Google Credentials (CLIENT_ID/SECRET) in Server Env.");
+        return { clientId, clientSecret, type: 'google' };
     }
     if (provider === 'dropbox') {
         const key = Deno.env.get("DROPBOX_APP_KEY");
         const secret = Deno.env.get("DROPBOX_APP_SECRET");
-        if (!key || !secret) {
-            console.error("[Config Error] Missing Dropbox Env Vars");
-            throw new Error("שרת לא מוגדר: חסרים מפתחות התחברות לדרופבוקס.");
-        }
-        return { key, secret };
+        if (!key || !secret) throw new Error("Missing Dropbox Credentials (KEY/SECRET) in Server Env.");
+        return { key, secret, type: 'dropbox' };
     }
-    throw new Error(`ספק לא נתמך: ${provider}`);
+    throw new Error(`Unknown provider: ${providerRaw}`);
 }
 
 async function getCryptoKey() {
@@ -45,159 +41,142 @@ async function encrypt(text) {
         const encryptedHex = Array.from(new Uint8Array(encrypted)).map(b => b.toString(16).padStart(2, '0')).join('');
         return `${ivHex}:${encryptedHex}`;
     } catch (e) {
-        console.error("Encryption Logic Error:", e);
-        throw new Error("שגיאת אבטחה פנימית: נכשל תהליך הצפנת הטוקן.");
+        console.error("Encryption failed:", e);
+        throw new Error("Server Security Error: Encryption failed");
     }
 }
 
-// --- לוגיקה עסקית ---
+// Handler Logic
+async function handleRequest(req) {
+    // 1. Auth check FIRST
+    const base44 = createClientFromRequest(req);
+    const user = await base44.auth.me();
+    if (!user) throw new Error("Unauthorized: Please log in.");
 
-async function getAuthUrl(provider, state) {
-  console.log(`[OAuth Init] Provider: ${provider}`);
-  const config = validateEnv(provider); // יזרוק שגיאה אם חסר
+    // 2. Parse Body safely
+    let body;
+    try {
+        body = await req.json();
+    } catch (e) {
+        throw new Error("Invalid JSON body");
+    }
 
-  if (provider === 'google') {
-    const params = new URLSearchParams({
-      client_id: config.clientId,
-      redirect_uri: REDIRECT_URI,
-      response_type: 'code',
-      scope: 'https://www.googleapis.com/auth/gmail.modify https://www.googleapis.com/auth/calendar https://www.googleapis.com/auth/drive.file',
-      access_type: 'offline', // קריטי לקבלת Refresh Token
-      prompt: 'consent',
-      state: state,
-      include_granted_scopes: 'true'
-    });
-    return `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`;
-  } 
-  
-  if (provider === 'dropbox') {
-    const params = new URLSearchParams({
-      client_id: config.key,
-      redirect_uri: REDIRECT_URI,
-      response_type: 'code',
-      token_access_type: 'offline',
-      state: state
-    });
-    return `https://www.dropbox.com/oauth2/authorize?${params.toString()}`;
-  }
+    const { action, provider, code, state } = body;
+    console.log(`Processing: ${action} for ${provider}`);
+
+    // 3. Action Routing
+    if (action === 'getAuthUrl') {
+        const config = getProviderConfig(provider);
+        let url;
+        
+        if (config.type === 'google') {
+            const params = new URLSearchParams({
+                client_id: config.clientId,
+                redirect_uri: REDIRECT_URI,
+                response_type: 'code',
+                scope: 'https://www.googleapis.com/auth/gmail.modify https://www.googleapis.com/auth/calendar https://www.googleapis.com/auth/drive.file',
+                access_type: 'offline',
+                prompt: 'consent',
+                state: state,
+                include_granted_scopes: 'true'
+            });
+            url = `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`;
+        } else {
+            const params = new URLSearchParams({
+                client_id: config.key,
+                redirect_uri: REDIRECT_URI,
+                response_type: 'code',
+                token_access_type: 'offline',
+                state: state
+            });
+            url = `https://www.dropbox.com/oauth2/authorize?${params.toString()}`;
+        }
+        
+        console.log("Generated URL successfully.");
+        return { authUrl: url };
+    }
+
+    if (action === 'handleCallback') {
+        const config = getProviderConfig(provider);
+        console.log("Exchanging token...");
+        
+        let tokenRes;
+        if (config.type === 'google') {
+            tokenRes = await fetch('https://oauth2.googleapis.com/token', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: new URLSearchParams({
+                    code,
+                    client_id: config.clientId,
+                    client_secret: config.clientSecret,
+                    redirect_uri: REDIRECT_URI,
+                    grant_type: 'authorization_code',
+                }).toString(),
+            });
+        } else {
+            const creds = btoa(`${config.key}:${config.secret}`);
+            tokenRes = await fetch('https://api.dropboxapi.com/oauth2/token', {
+                method: 'POST',
+                headers: { 
+                    'Content-Type': 'application/x-www-form-urlencoded', 
+                    'Authorization': `Basic ${creds}` 
+                },
+                body: new URLSearchParams({
+                    code,
+                    grant_type: 'authorization_code',
+                    redirect_uri: REDIRECT_URI,
+                }).toString(),
+            });
+        }
+
+        const tokens = await tokenRes.json();
+        if (tokens.error) throw new Error(`Provider Error: ${JSON.stringify(tokens)}`);
+
+        // Save to DB (Using Service Role)
+        const encryptedAccess = await encrypt(tokens.access_token);
+        const encryptedRefresh = tokens.refresh_token ? await encrypt(tokens.refresh_token) : null;
+        
+        const db = base44.asServiceRole;
+        const existing = await db.entities.IntegrationConnection.filter({ user_id: user.id, provider: config.type });
+        
+        const record = {
+            user_id: user.id,
+            provider: config.type,
+            access_token: encryptedAccess,
+            metadata: { last_updated: new Date().toISOString() }
+        };
+        if (encryptedRefresh) record.refresh_token = encryptedRefresh;
+
+        if (existing.length > 0) {
+            await db.entities.IntegrationConnection.update(existing[0].id, record);
+        } else {
+            await db.entities.IntegrationConnection.create({
+                ...record,
+                refresh_token: encryptedRefresh || "MISSING"
+            });
+        }
+        
+        return { success: true };
+    }
+
+    throw new Error(`Unknown action: ${action}`);
 }
 
-async function handleCallback(code, provider, userId, base44) {
-  console.log(`[OAuth Callback] Processing for user ${userId}, provider ${provider}`);
-  const config = validateEnv(provider);
-  let tokens;
-  
-  try {
-      if (provider === 'google') {
-        const res = await fetch('https://oauth2.googleapis.com/token', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-          body: new URLSearchParams({
-            code,
-            client_id: config.clientId,
-            client_secret: config.clientSecret,
-            redirect_uri: REDIRECT_URI,
-            grant_type: 'authorization_code',
-          }).toString(),
-        });
-        tokens = await res.json();
-      } else if (provider === 'dropbox') {
-        const credentials = btoa(`${config.key}:${config.secret}`);
-        const res = await fetch('https://api.dropboxapi.com/oauth2/token', {
-          method: 'POST',
-          headers: { 
-            'Content-Type': 'application/x-www-form-urlencoded',
-            'Authorization': `Basic ${credentials}`
-          },
-          body: new URLSearchParams({
-            code,
-            grant_type: 'authorization_code',
-            redirect_uri: REDIRECT_URI,
-          }).toString(),
-        });
-        tokens = await res.json();
-      }
-  } catch (netErr) {
-      console.error("Network Error during token exchange:", netErr);
-      throw new Error("שגיאת תקשורת מול ספק האימות (Google/Dropbox). נסה שנית.");
-  }
-
-  if (!tokens || tokens.error) {
-    console.error("Provider Token Error:", tokens);
-    const errMsg = tokens?.error_description || tokens?.error || "תשובה לא תקינה מהספק";
-    throw new Error(`דחייה מצד הספק: ${errMsg}`);
-  }
-
-  // הצפנה ושמירה
-  const encryptedAccess = await encrypt(tokens.access_token);
-  const encryptedRefresh = tokens.refresh_token ? await encrypt(tokens.refresh_token) : null;
-  const expiresAt = Date.now() + ((tokens.expires_in || 3600) * 1000); 
-
-  try {
-      // שימוש ב-ServiceRole לעקיפת בעיות הרשאה (RLS)
-      const existing = await base44.asServiceRole.entities.IntegrationConnection.filter({ user_id: userId, provider });
-      
-      const data = {
-        user_id: userId,
-        provider,
-        access_token: encryptedAccess,
-        expires_at: expiresAt, 
-        metadata: { last_updated: new Date().toISOString() }
-      };
-
-      if (encryptedRefresh) data.refresh_token = encryptedRefresh;
-
-      if (existing.length > 0) {
-        await base44.asServiceRole.entities.IntegrationConnection.update(existing[0].id, data);
-        console.log("DB: Updated existing connection.");
-      } else {
-        await base44.asServiceRole.entities.IntegrationConnection.create({
-            ...data,
-            refresh_token: encryptedRefresh || "MISSING" // סימון לדיבוג אם לא התקבל refresh token
-        });
-        console.log("DB: Created new connection.");
-      }
-  } catch (dbErr) {
-      console.error("Database Save Error:", dbErr);
-      throw new Error("שגיאת מסד נתונים: לא ניתן לשמור את החיבור.");
-  }
-}
-
+// === Entry Point ===
 Deno.serve(async (req) => {
-    // CORS Headers חיוניים
-    const headers = {
-        "Access-Control-Allow-Origin": "*",
-        "Access-Control-Allow-Methods": "POST, OPTIONS",
+    const headers = { 
+        "Access-Control-Allow-Origin": "*", 
         "Access-Control-Allow-Headers": "Content-Type, Authorization",
         "Content-Type": "application/json"
     };
-
+    
     if (req.method === "OPTIONS") return new Response(null, { headers });
 
     try {
-        const base44 = createClientFromRequest(req);
-        const user = await base44.auth.me();
-        
-        if (!user) return new Response(JSON.stringify({ error: 'גישה נדחתה: עליך להתחבר למערכת.' }), { status: 401, headers });
-
-        const body = await req.json();
-        const { action, provider, code, state } = body;
-
-        if (action === 'getAuthUrl') {
-            const url = await getAuthUrl(provider, state || user.id);
-            return new Response(JSON.stringify({ authUrl: url }), { status: 200, headers });
-        }
-        
-        if (action === 'handleCallback') {
-            await handleCallback(code, provider, user.id, base44);
-            return new Response(JSON.stringify({ success: true }), { status: 200, headers });
-        }
-
-        return new Response(JSON.stringify({ error: `פעולה לא מזוהה: ${action}` }), { status: 400, headers });
-
+        const result = await handleRequest(req);
+        return new Response(JSON.stringify(result), { status: 200, headers });
     } catch (err) {
-        console.error("Critical Function Error:", err);
-        // מחזירים את הודעת השגיאה האמיתית למשתמש!
-        return new Response(JSON.stringify({ error: err.message || String(err) }), { status: 500, headers });
+        console.error("Handler Error:", err);
+        return new Response(JSON.stringify({ error: err.message }), { status: 500, headers });
     }
 });
