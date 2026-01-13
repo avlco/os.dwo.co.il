@@ -23,56 +23,39 @@ export default function MailRoom() {
   const [activeTab, setActiveTab] = useState('inbox');
   const pageSize = 50;
 
-  // 1. Fetch Mails Logic
+  // 1. Fetch Mails
   const { data, isLoading, refetch } = useQuery({
     queryKey: ['mails', activeTab, page],
     queryFn: async () => {
       let filter = {};
-      
-      // Filter mapping
       if (activeTab === 'inbox') filter = { processing_status: 'pending' };
       else if (activeTab === 'processed') filter = { processing_status: 'processed' };
       else if (activeTab === 'archived') filter = { processing_status: 'archived' };
 
-      // API Call
       return await base44.entities.Mail.list({
         ...filter,
         page: page,
         limit: pageSize,
-        sort: { received_at: -1 } // Sort by received date desc
+        sort: { received_at: -1 } 
       });
     },
     placeholderData: keepPreviousData
   });
 
-  // 2. Sync Logic (Manual Trigger)
+  // 2. Sync Mutation
   const syncMutation = useMutation({
     mutationFn: async () => {
-        // Calls the new backend function we created
         return await base44.functions.invoke('processIncomingMail', {});
     },
     onSuccess: (res) => {
         const count = res.synced || 0;
-        const total = res.total_fetched || 0;
-        
-        let msg = "הסנכרון הושלם.";
-        if (count > 0) msg = `נוספו ${count} מיילים חדשים למערכת.`;
-        else if (total > 0) msg = "לא נמצאו מיילים חדשים (כל המיילים כבר במערכת).";
-        else msg = "תיבת הדואר הנכנס ריקה.";
-
-        toast({ title: "סנכרון מ-Gmail", description: msg });
-        
-        // Refresh the table data immediately
+        toast({ title: "סנכרון הושלם", description: `נוספו ${count} מיילים חדשים.` });
         queryClient.invalidateQueries(['mails']);
-        setTimeout(() => refetch(), 500); 
+        setTimeout(() => refetch(), 1000);
     },
     onError: (err) => {
-        console.error("Sync failed:", err);
-        toast({ 
-            variant: "destructive", 
-            title: "שגיאת סנכרון", 
-            description: "ודא שחיברת חשבון Google בהגדרות. " + (err.message || "")
-        });
+        console.error(err);
+        toast({ variant: "destructive", title: "שגיאת סנכרון", description: err.message });
     }
   });
 
@@ -117,19 +100,25 @@ export default function MailRoom() {
 
   return (
     <div className="space-y-6">
-      <PageHeader title="חדר דואר" description="ניהול ומיון דואר נכנס, סריקת מסמכים וניתוב לתיקים.">
-        <div className="flex gap-2">
-          {/* SYNC BUTTON */}
-          <Button variant="default" size="sm" onClick={() => syncMutation.mutate()} disabled={syncMutation.isPending}>
+      <PageHeader title="חדר דואר" description="ניהול ומיון דואר נכנס, סריקת מסמכים וניתוב לתיקים." />
+      
+      {/* --- Action Bar (Moved outside PageHeader for visibility) --- */}
+      <div className="flex justify-end gap-2 p-2 bg-slate-50 dark:bg-slate-900 rounded-md border">
+          <Button 
+            className="bg-blue-600 hover:bg-blue-700 text-white" 
+            size="sm" 
+            onClick={() => syncMutation.mutate()} 
+            disabled={syncMutation.isPending}
+          >
             {syncMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin ml-2"/> : <CloudDownload className="w-4 h-4 ml-2"/>}
             סנכרן מ-Gmail
           </Button>
           
           <Button variant="outline" size="sm" onClick={() => refetch()}>
-            <RefreshCw className="w-4 h-4 ml-2" /> רענן
+            <RefreshCw className="w-4 h-4 ml-2" /> רענן טבלה
           </Button>
-        </div>
-      </PageHeader>
+      </div>
+      {/* ----------------------------------------------------------- */}
 
       <div className="grid gap-4 md:grid-cols-3">
         <Card className="dark:bg-slate-800">
@@ -137,7 +126,7 @@ export default function MailRoom() {
             <CardTitle className="text-sm font-medium">דואר נכנס (חדש)</CardTitle>
             <Mail className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
-          <CardContent><div className="text-2xl font-bold">--</div></CardContent>
+          <CardContent><div className="text-2xl font-bold">{data?.data?.length || 0}</div></CardContent>
         </Card>
         <Card className="dark:bg-slate-800">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
