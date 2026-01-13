@@ -11,9 +11,10 @@ export default function IntegrationsTab() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   
-  // ניהול State חכם: שומר את שם הספק שכרגע בתהליך, או null אם פנוי
+  // State נפרד לכל ספק - מונע "הבהוב" של כל הכפתורים
   const [connectingProvider, setConnectingProvider] = useState(null); 
 
+  // שליפת סטטוס חיבורים מהשרת
   const { data: activeIntegrations = [], refetch, isLoading } = useQuery({
     queryKey: ['integrations'],
     queryFn: async () => {
@@ -21,13 +22,13 @@ export default function IntegrationsTab() {
         const res = await base44.entities.IntegrationConnection.list({ limit: 10 });
         return res.data ? res.data.map(i => i.provider.toLowerCase()) : [];
       } catch (e) {
-        console.error("Failed to fetch integrations", e);
+        console.error("Failed to fetch integrations status", e);
         return [];
       }
     }
   });
 
-  // Callback Handler
+  // Callback Handler - מאזין לחזרה מגוגל/דרופבוקס
   useEffect(() => {
     const handleCallback = async () => {
       const params = new URLSearchParams(window.location.search);
@@ -37,19 +38,19 @@ export default function IntegrationsTab() {
 
       if (!code && !error) return;
 
-      // Clean URL
+      // ניקוי ה-URL
       window.history.replaceState({}, document.title, window.location.pathname);
 
       if (error) {
-        toast({ variant: "destructive", title: "התחברות בוטלה", description: "הספק דחה את הבקשה." });
+        toast({ variant: "destructive", title: "התחברות בוטלה", description: "הפעולה נדחתה על ידי הספק." });
         return;
       }
 
-      // זיהוי ספק מתוך ה-state או ברירת מחדל
+      // זיהוי הספק (ברירת מחדל לגוגל אם אין state)
       const provider = state || 'google';
-      setConnectingProvider(provider); // הפעלת ספינר לכפתור הרלוונטי
+      setConnectingProvider(provider); 
       
-      toast({ title: "מאמת חיבור...", description: "מתקשר עם השרת לשמירת המפתח." });
+      toast({ title: "מאמת חיבור...", description: "יוצר קשר מאובטח עם השרת..." });
 
       try {
         const res = await base44.functions.invoke('integrationAuth', {
@@ -63,32 +64,32 @@ export default function IntegrationsTab() {
         }
 
         toast({ 
-          title: "החיבור הושלם!", 
-          description: "ניתן להתחיל בעבודה.",
-          className: "bg-green-50 border-green-200 text-green-800" 
+          title: "החיבור הושלם בהצלחה!", 
+          description: "כעת ניתן להפעיל סנכרון אוטומטי.",
+          className: "bg-green-50 border-green-200 text-green-900" 
         });
         
         await refetch();
 
       } catch (err) {
-        console.error("Callback Error:", err);
-        // הצגת השגיאה האמיתית מהשרת למשתמש
+        console.error("Callback Processing Error:", err);
         toast({ 
             variant: "destructive", 
             title: "שגיאת חיבור", 
-            description: err.message || "שגיאה לא ידועה בשרת." 
+            description: err.message || "אירעה שגיאה לא צפויה בתהליך." 
         });
       } finally {
-        setConnectingProvider(null); // שחרור הכפתור
+        setConnectingProvider(null);
       }
     };
 
     handleCallback();
   }, []);
 
+  // התחלת תהליך (יציאה החוצה)
   const startAuth = async (provider) => {
     try {
-      setConnectingProvider(provider); // נעל רק את הכפתור הזה
+      setConnectingProvider(provider);
       
       const res = await base44.functions.invoke('integrationAuth', {
         action: 'getAuthUrl',
@@ -96,21 +97,17 @@ export default function IntegrationsTab() {
         state: provider
       });
 
-      // בדיקת שגיאה מהשרת לפני שמתקדמים
-      if (res.error) {
-          throw new Error(res.error);
-      }
+      if (res.error) throw new Error(res.error);
 
       if (res.authUrl) {
         window.location.href = res.authUrl;
       } else {
-        throw new Error("השרת לא החזיר קישור (תגובה ריקה).");
+        throw new Error("התקבלה תשובה ריקה מהשרת.");
       }
     } catch (err) {
-      // כאן המשתמש יראה בדיוק מה קרה (למשל: "Missing Google Credentials")
       toast({ 
           variant: "destructive", 
-          title: "שגיאת התחלה", 
+          title: "שגיאת אתחול", 
           description: err.message 
       });
       setConnectingProvider(null);
@@ -126,18 +123,18 @@ export default function IntegrationsTab() {
       
       if (toDelete) {
         await base44.entities.IntegrationConnection.delete(toDelete.id);
-        toast({ description: "החיבור הוסר." });
+        toast({ description: "החיבור הוסר בהצלחה." });
         refetch();
       }
     } catch (err) {
-        toast({ variant: "destructive", title: "שגיאה", description: err.message });
+        toast({ variant: "destructive", title: "שגיאה בניתוק", description: err.message });
     }
   };
 
   const renderIntegrationCard = (name, providerKey, icon) => {
     const isConnected = activeIntegrations.includes(providerKey);
-    const isLoadingThis = connectingProvider === providerKey; // האם הכפתור הזה ספציפית בעבודה?
-    const isOtherLoading = connectingProvider !== null && !isLoadingThis; // האם מישהו אחר עובד?
+    const isLoadingThis = connectingProvider === providerKey;
+    const isOtherLoading = connectingProvider !== null && !isLoadingThis;
 
     return (
       <Card>
@@ -154,20 +151,20 @@ export default function IntegrationsTab() {
         <CardContent>
           <CardDescription className="mb-4">
             {isConnected 
-              ? "החיבור פעיל ותקין."
-              : "נדרש חיבור כדי לאפשר סנכרון אוטומטי."
+              ? "החיבור פעיל. המערכת מסונכרנת."
+              : "נדרש חיבור ראשוני."
             }
           </CardDescription>
           
           <div className="flex justify-end">
             {isConnected ? (
-                <Button variant="outline" className="text-red-600 hover:text-red-700 hover:bg-red-50" onClick={() => disconnect(providerKey)}>
+                <Button variant="outline" className="text-red-600 hover:text-red-700 hover:bg-red-50 border-red-200" onClick={() => disconnect(providerKey)}>
                 <XCircle className="w-4 h-4 mr-2" /> התנתק
                 </Button>
             ) : (
                 <Button 
                     onClick={() => startAuth(providerKey)} 
-                    disabled={isLoadingThis || isOtherLoading} // נעל אם עובדים
+                    disabled={isLoadingThis || isOtherLoading}
                 >
                 {isLoadingThis ? <Loader2 className="w-4 h-4 mr-2 animate-spin"/> : <Cloud className="w-4 h-4 mr-2"/>}
                 חבר חשבון {name}
@@ -184,7 +181,7 @@ export default function IntegrationsTab() {
       <div className="flex items-center justify-between">
         <div>
           <h3 className="text-lg font-medium">אינטגרציות חיצוניות</h3>
-          <p className="text-sm text-muted-foreground">ניהול חיבורים לשירותי ענן.</p>
+          <p className="text-sm text-muted-foreground">חיבור מאובטח לשירותי ענן (OAuth 2.0).</p>
         </div>
         <Button variant="ghost" size="sm" onClick={() => refetch()} disabled={isLoading}>
             <RefreshCw className={`w-4 h-4 mr-2 ${isLoading ? 'animate-spin' : ''}`}/> 
