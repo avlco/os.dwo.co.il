@@ -12,6 +12,7 @@ import { he } from 'date-fns/locale';
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { toast } from "sonner";
 
 export default function MailRoom() {
   const queryClient = useQueryClient();
