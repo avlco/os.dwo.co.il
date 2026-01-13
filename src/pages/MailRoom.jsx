@@ -21,7 +21,7 @@ export default function MailRoom() {
   const [activeTab, setActiveTab] = useState('inbox');
   const pageSize = 50;
 
-  const { data, isLoading } = useQuery({
+  const { data: mails = [], isLoading } = useQuery({
     queryKey: ['mails', activeTab, page],
     queryFn: async () => {
       let filter = {};
@@ -29,12 +29,8 @@ export default function MailRoom() {
       else if (activeTab === 'processed') filter = { processing_status: 'processed' };
       else if (activeTab === 'archived') filter = { processing_status: 'archived' };
 
-      return await base44.entities.Mail.list({
-        ...filter,
-        page: page,
-        limit: pageSize,
-        sort: { created_at: -1 } 
-      });
+      // Use correct API syntax: filter(query, sort, limit)
+      return await base44.entities.Mail.filter(filter, '-received_at', pageSize);
     },
     placeholderData: keepPreviousData 
   });
