@@ -25,9 +25,9 @@ export default function MailRoom() {
     queryKey: ['mails', activeTab, page],
     queryFn: async () => {
       let filter = {};
-      if (activeTab === 'inbox') filter = { status: 'new' };
-      else if (activeTab === 'processed') filter = { status: 'processed' };
-      else if (activeTab === 'archived') filter = { status: 'archived' };
+      if (activeTab === 'inbox') filter = { processing_status: 'pending' };
+      else if (activeTab === 'processed') filter = { processing_status: 'processed' };
+      else if (activeTab === 'archived') filter = { processing_status: 'archived' };
 
       return await base44.entities.Mail.list({
         ...filter,
@@ -41,22 +41,36 @@ export default function MailRoom() {
 
   const columns = [
     {
-      accessorKey: "received_date",
+      accessorKey: "received_at",
       header: "תאריך קבלה",
       cell: ({ row }) => {
-        const date = row.getValue("received_date");
+        const date = row.getValue("received_at");
         return date ? format(new Date(date), 'dd/MM/yyyy HH:mm', { locale: he }) : '-';
       },
     },
     { accessorKey: "sender_email", header: "שולח" },
     { accessorKey: "subject", header: "נושא", cell: ({ row }) => <span className="font-medium">{row.getValue("subject")}</span> },
     {
-      accessorKey: "status",
+      accessorKey: "processing_status",
       header: "סטטוס",
       cell: ({ row }) => {
-        const status = row.getValue("status");
-        const colors = { new: "bg-blue-100 text-blue-800", processed: "bg-green-100 text-green-800", archived: "bg-gray-100 text-gray-800" };
-        const labels = { new: "חדש", processed: "טופל", archived: "בארכיון" };
+        const status = row.getValue("processing_status");
+        const colors = { 
+          pending: "bg-blue-100 text-blue-800", 
+          processing: "bg-yellow-100 text-yellow-800",
+          triaged: "bg-purple-100 text-purple-800",
+          processed: "bg-green-100 text-green-800", 
+          archived: "bg-gray-100 text-gray-800",
+          error: "bg-red-100 text-red-800"
+        };
+        const labels = { 
+          pending: "ממתין", 
+          processing: "בעיבוד",
+          triaged: "מוין",
+          processed: "טופל", 
+          archived: "בארכיון",
+          error: "שגיאה"
+        };
         return <Badge variant="secondary" className={colors[status] || ""}>{labels[status] || status}</Badge>;
       },
     },
