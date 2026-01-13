@@ -53,29 +53,24 @@ async function decrypt(text: string): Promise<string> {
 
 // --- Section 2: Integration Logic ---
 
-// הגדרת נתיב החזרה (Redirect URI)
-// 1. מנסה לקחת מ-Secret שנקרא APP_BASE_URL
-// 2. אם אין Secret, משתמש בברירת המחדל שציינת (dwo.base44.app)
-const BASE_URL = Deno.env.get("APP_BASE_URL") || "https://dwo.base44.app";
-const FINAL_REDIRECT_URI = `${BASE_URL}/Settings`;
-
-console.log(`System Configured. Redirect URI set to: ${FINAL_REDIRECT_URI}`);
-
 const GOOGLE_CLIENT_ID = Deno.env.get("GOOGLE_CLIENT_ID");
 const GOOGLE_CLIENT_SECRET = Deno.env.get("GOOGLE_CLIENT_SECRET");
 
 const DROPBOX_APP_KEY = Deno.env.get("DROPBOX_APP_KEY");
 const DROPBOX_APP_SECRET = Deno.env.get("DROPBOX_APP_SECRET");
 
-async function getAuthUrl(provider: string, state: string) {
-  console.log(`Generating Auth URL for ${provider}. State: ${state}`);
+async function getAuthUrl(provider: string, state: string, origin: string) {
+  // בניית ה-Redirect URI באופן דינמי לפי הכתובת שהתקבלה מהלקוח
+  const redirectUri = `${origin}/Settings`;
+  
+  console.log(`Generating Auth URL for ${provider}. State: ${state}, Redirect: ${redirectUri}`);
 
   if (provider === 'google') {
     if (!GOOGLE_CLIENT_ID) throw new Error("Missing Google Config (GOOGLE_CLIENT_ID)");
     
     const params = new URLSearchParams({
       client_id: GOOGLE_CLIENT_ID,
-      redirect_uri: FINAL_REDIRECT_URI,
+      redirect_uri: redirectUri,
       response_type: 'code',
       scope: [
         'https://www.googleapis.com/auth/gmail.modify',
@@ -95,7 +90,7 @@ async function getAuthUrl(provider: string, state: string) {
     if (!DROPBOX_APP_KEY) throw new Error("Missing Dropbox Config (DROPBOX_APP_KEY)");
     const params = new URLSearchParams({
       client_id: DROPBOX_APP_KEY,
-      redirect_uri: FINAL_REDIRECT_URI,
+      redirect_uri: redirectUri,
       response_type: 'code',
       token_access_type: 'offline',
       state: state
@@ -106,8 +101,11 @@ async function getAuthUrl(provider: string, state: string) {
   throw new Error(`Unsupported provider: ${provider}`);
 }
 
-async function handleCallback(code: string, provider: string, userId: string, base44: any) {
-  console.log(`Handling callback for ${provider}...`);
+async function handleCallback(code: string, provider: string, userId: string, base44: any, origin: string) {
+  // חובה שתהיה זהה לזו שנשלחה ב-getAuthUrl
+  const redirectUri = `${origin}/Settings`; 
+  console.log(`Handling callback for ${provider}. Redirect: ${redirectUri}`);
+  
   let tokens;
   
   if (provider === 'google') {
@@ -118,7 +116,7 @@ async function handleCallback(code: string, provider: string, userId: string, ba
         code,
         client_id: GOOGLE_CLIENT_ID!,
         client_secret: GOOGLE_CLIENT_SECRET!,
-        redirect_uri: FINAL_REDIRECT_URI, // חייב להיות זהה למה שנשלח ב-getAuthUrl
+        redirect_uri: redirectUri,
         grant_type: 'authorization_code',
       }).toString(),
     });
@@ -134,7 +132,7 @@ async function handleCallback(code: string, provider: string, userId: string, ba
       body: new URLSearchParams({
         code,
         grant_type: 'authorization_code',
-        redirect_uri: FINAL_REDIRECT_URI,
+        redirect_uri: redirectUri,
       }).toString(),
     });
     tokens = await res.json();
@@ -179,7 +177,7 @@ async function handleCallback(code: string, provider: string, userId: string, ba
 
 // === MAIN ENTRY POINT ===
 Deno.serve(async (req) => {
-    // CORS Headers - קריטי כדי שהדפדפן לא יחסום את הבקשה
+    // CORS Headers
     const headers = new Headers({
         "Access-Control-Allow-Origin": "*",
         "Access-Control-Allow-Methods": "POST, OPTIONS",
@@ -200,16 +198,20 @@ Deno.serve(async (req) => {
         }
 
         const body = await req.json();
-        const { action, provider, code, state } = body;
+        // חילוץ ה-origin שהגיע מהקליינט
+        const { action, provider, code, state, origin } = body;
+        
+        // Fallback למקרה שאין origin בבקשה (למשל גרסה ישנה בקאש), נשתמש במשתנה הסביבה
+        const effectiveOrigin = origin || Deno.env.get("APP_BASE_URL") || "https://dwo.base44.app";
 
-        // ניתוב הפעולות
+        // ניתוב הפעולות עם העברת ה-Origin
         if (action === 'getAuthUrl') {
-            const url = await getAuthUrl(provider, state || user.id);
+            const url = await getAuthUrl(provider, state || user.id, effectiveOrigin);
             return new Response(JSON.stringify({ authUrl: url }), { status: 200, headers });
         }
         
         if (action === 'handleCallback') {
-            await handleCallback(code, provider, user.id, base44);
+            await handleCallback(code, provider, user.id, base44, effectiveOrigin);
             return new Response(JSON.stringify({ success: true }), { status: 200, headers });
         }
 
