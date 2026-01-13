@@ -1,12 +1,11 @@
-import { createClientFromRequest } from '@base44/sdk';
+import { createClientFromRequest } from 'npm:@base44/sdk@0.8.6';
 
-// --- Section 1: Inlined Crypto Logic (No external imports!) ---
-// זה מחליף את הצורך ב-utils/crypto.ts שגורם לקריסה
+// --- Section 1: Inlined Crypto Logic ---
+// פונקציות הצפנה פנימיות למניעת תלות בקבצים חיצוניים
 
 async function getCryptoKey() {
   const keyString = Deno.env.get("ENCRYPTION_KEY");
   if (!keyString) {
-      // Fallback key for development if env var is missing (Remove in strict prod)
       console.warn("Missing ENCRYPTION_KEY, using fallback (NOT SECURE for production)");
       return await crypto.subtle.generateKey(
         { name: "AES-GCM", length: 256 },
@@ -15,8 +14,8 @@ async function getCryptoKey() {
       );
   }
   
-  // Pad or truncate key to 32 bytes (256 bits)
   const encoder = new TextEncoder();
+  // חיתוך או ריפוד המפתח ל-32 תווים בדיוק
   const keyBuffer = encoder.encode(keyString.padEnd(32, '0').slice(0, 32));
   
   return await crypto.subtle.importKey(
@@ -63,19 +62,22 @@ async function decrypt(text: string): Promise<string> {
 
 // --- Section 2: Integration Logic ---
 
+// קריטי: הגדרת כתובת האתר בייצור כדי למנוע חזרה ל-localhost
+const APP_BASE_URL = "https://os.dwo.co.il"; 
+
 const GOOGLE_CLIENT_ID = Deno.env.get("GOOGLE_CLIENT_ID");
 const GOOGLE_CLIENT_SECRET = Deno.env.get("GOOGLE_CLIENT_SECRET");
-const GOOGLE_REDIRECT_URI = Deno.env.get("GOOGLE_REDIRECT_URI");
+const GOOGLE_REDIRECT_URI = `${APP_BASE_URL}/Settings`; // נתיב מלא ותקין
 
 const DROPBOX_APP_KEY = Deno.env.get("DROPBOX_APP_KEY");
 const DROPBOX_APP_SECRET = Deno.env.get("DROPBOX_APP_SECRET");
-const DROPBOX_REDIRECT_URI = Deno.env.get("DROPBOX_REDIRECT_URI");
+const DROPBOX_REDIRECT_URI = `${APP_BASE_URL}/Settings`; // נתיב מלא ותקין
 
 async function getAuthUrl(provider: string, state: string) {
-  console.log(`Generating Auth URL for ${provider} with secure state`);
+  console.log(`Generating Auth URL for ${provider} with state ${state}`);
 
   if (provider === 'google') {
-    if (!GOOGLE_CLIENT_ID || !GOOGLE_REDIRECT_URI) throw new Error("Missing Google Config");
+    if (!GOOGLE_CLIENT_ID) throw new Error("Missing Google Config (GOOGLE_CLIENT_ID)");
     
     const params = new URLSearchParams({
       client_id: GOOGLE_CLIENT_ID,
@@ -89,14 +91,14 @@ async function getAuthUrl(provider: string, state: string) {
       ].join(' '),
       access_type: 'offline',
       prompt: 'consent',
-      state: state,
+      state: state, // העברת ה-Nonce לאבטחה
       include_granted_scopes: 'true'
     });
     return `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`;
   } 
   
   if (provider === 'dropbox') {
-    if (!DROPBOX_APP_KEY || !DROPBOX_REDIRECT_URI) throw new Error("Missing Dropbox Config");
+    if (!DROPBOX_APP_KEY) throw new Error("Missing Dropbox Config (DROPBOX_APP_KEY)");
     const params = new URLSearchParams({
       client_id: DROPBOX_APP_KEY,
       redirect_uri: DROPBOX_REDIRECT_URI,
@@ -122,7 +124,7 @@ async function handleCallback(code: string, provider: string, userId: string, ba
         code,
         client_id: GOOGLE_CLIENT_ID!,
         client_secret: GOOGLE_CLIENT_SECRET!,
-        redirect_uri: GOOGLE_REDIRECT_URI!,
+        redirect_uri: GOOGLE_REDIRECT_URI, // חייב להיות זהה ל-URI שנשלח בבקשה הראשונה
         grant_type: 'authorization_code',
       }).toString(),
     });
@@ -138,7 +140,7 @@ async function handleCallback(code: string, provider: string, userId: string, ba
       body: new URLSearchParams({
         code,
         grant_type: 'authorization_code',
-        redirect_uri: DROPBOX_REDIRECT_URI!,
+        redirect_uri: DROPBOX_REDIRECT_URI, // חייב להיות זהה
       }).toString(),
     });
     tokens = await res.json();
@@ -149,15 +151,14 @@ async function handleCallback(code: string, provider: string, userId: string, ba
     throw new Error(`Provider Error: ${tokens?.error_description || JSON.stringify(tokens)}`);
   }
 
-  // שימוש בפונקציות ההצפנה הפנימיות (ללא crypto.encrypt החיצוני)
+  // הצפנת הטוקנים לפני השמירה
   const encryptedAccess = await encrypt(tokens.access_token);
   const encryptedRefresh = tokens.refresh_token ? await encrypt(tokens.refresh_token) : null;
   
-  // המרת זמן תפוגה ל-Epoch Milliseconds (התאמה לשדה בדאטה בייס)
-  // גוגל מחזירים expires_in בשניות
+  // חישוב זמן תפוגה
   const expiresAt = Date.now() + ((tokens.expires_in || 3600) * 1000); 
 
-  // שימוש בלקוח המשתמש (ולא admin) שומר על ה-RLS
+  // שמירה במסד הנתונים
   const existing = await base44.entities.IntegrationConnection.filter({ user_id: userId, provider });
 
   const data = {
@@ -184,7 +185,7 @@ async function handleCallback(code: string, provider: string, userId: string, ba
 
 // === MAIN ENTRY POINT (Deno.serve) ===
 Deno.serve(async (req) => {
-    // CORS Headers - חובה כדי שהדפדפן לא יחסום
+    // CORS Headers - חובה לתקשורת תקינה מהדפדפן
     const headers = new Headers({
         "Access-Control-Allow-Origin": "*",
         "Access-Control-Allow-Methods": "POST, OPTIONS",
@@ -205,17 +206,14 @@ Deno.serve(async (req) => {
         }
 
         const body = await req.json();
-        const { action, provider, code } = body;
+        const { action, provider, code, state } = body;
 
         console.log(`Action received: ${action}, Provider: ${provider}, User: ${user.id}`);
 
         if (action === 'getAuthUrl') {
-          const { state } = body;
-          if (!state) {
-            return new Response(JSON.stringify({ error: 'Missing state parameter' }), { status: 400, headers });
-          }
-          const url = await getAuthUrl(provider, state);
-          return new Response(JSON.stringify({ authUrl: url }), { status: 200, headers });
+            // מעביר את ה-state שהתקבל מה-Frontend (מכיל Nonce)
+            const url = await getAuthUrl(provider, state || user.id);
+            return new Response(JSON.stringify({ authUrl: url }), { status: 200, headers });
         }
         
         if (action === 'handleCallback') {
