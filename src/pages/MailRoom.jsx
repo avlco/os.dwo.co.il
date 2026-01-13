@@ -1,18 +1,19 @@
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query';
-import { base44 } from '@/api/base44Client';
-import { PageHeader } from "@/components/ui/PageHeader";
-import { DataTable } from "@/components/ui/DataTable";
-import { Button } from "@/components/ui/button";
-import { Mail, RefreshCw, CheckCircle, Clock, CloudDownload, Loader2 } from 'lucide-react';
+// תיקון נתיב: שימוש בנתיב יחסי במקום @
+import { base44 } from '../api/base44Client';
+import { PageHeader } from "../components/ui/PageHeader";
+import { DataTable } from "../components/ui/DataTable";
+import { Button } from "../components/ui/button";
+import { Mail, RefreshCw, CheckCircle, Clock, Download, Loader2 } from 'lucide-react';
 import { createPageUrl } from '../utils';
 import { useNavigate } from 'react-router-dom';
 import { format } from 'date-fns';
 import { he } from 'date-fns/locale';
-import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { useToast } from "@/components/ui/use-toast";
+import { Badge } from "../components/ui/badge";
+import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "../components/ui/tabs";
+import { useToast } from "../components/ui/use-toast";
 
 export default function MailRoom() {
   const queryClient = useQueryClient();
@@ -23,7 +24,6 @@ export default function MailRoom() {
   const [activeTab, setActiveTab] = useState('inbox');
   const pageSize = 50;
 
-  // 1. Fetch Mails
   const { data, isLoading, refetch } = useQuery({
     queryKey: ['mails', activeTab, page],
     queryFn: async () => {
@@ -42,7 +42,6 @@ export default function MailRoom() {
     placeholderData: keepPreviousData
   });
 
-  // 2. Sync Mutation
   const syncMutation = useMutation({
     mutationFn: async () => {
         return await base44.functions.invoke('processIncomingMail', {});
@@ -54,8 +53,7 @@ export default function MailRoom() {
         setTimeout(() => refetch(), 1000);
     },
     onError: (err) => {
-        console.error(err);
-        toast({ variant: "destructive", title: "שגיאת סנכרון", description: err.message });
+        toast({ variant: "destructive", title: "שגיאה", description: err.message });
     }
   });
 
@@ -84,11 +82,7 @@ export default function MailRoom() {
             processed: "bg-green-100 text-green-800", 
             archived: "bg-gray-100 text-gray-800"
         };
-        const labels = { 
-            pending: "חדש", 
-            processed: "טופל", 
-            archived: "בארכיון"
-        };
+        const labels = { pending: "חדש", processed: "טופל", archived: "בארכיון" };
         return <Badge variant="secondary" className={colors[status] || ""}>{labels[status] || status}</Badge>;
       },
     },
@@ -100,9 +94,8 @@ export default function MailRoom() {
 
   return (
     <div className="space-y-6">
-      <PageHeader title="חדר דואר" description="ניהול ומיון דואר נכנס, סריקת מסמכים וניתוב לתיקים." />
+      <PageHeader title="חדר דואר" description="ניהול דואר נכנס." />
       
-      {/* --- Action Bar (Moved outside PageHeader for visibility) --- */}
       <div className="flex justify-end gap-2 p-2 bg-slate-50 dark:bg-slate-900 rounded-md border">
           <Button 
             className="bg-blue-600 hover:bg-blue-700 text-white" 
@@ -110,20 +103,19 @@ export default function MailRoom() {
             onClick={() => syncMutation.mutate()} 
             disabled={syncMutation.isPending}
           >
-            {syncMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin ml-2"/> : <CloudDownload className="w-4 h-4 ml-2"/>}
+            {syncMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin ml-2"/> : <Download className="w-4 h-4 ml-2"/>}
             סנכרן מ-Gmail
           </Button>
           
           <Button variant="outline" size="sm" onClick={() => refetch()}>
-            <RefreshCw className="w-4 h-4 ml-2" /> רענן טבלה
+            <RefreshCw className="w-4 h-4 ml-2" /> רענן
           </Button>
       </div>
-      {/* ----------------------------------------------------------- */}
 
       <div className="grid gap-4 md:grid-cols-3">
         <Card className="dark:bg-slate-800">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">דואר נכנס (חדש)</CardTitle>
+            <CardTitle className="text-sm font-medium">דואר נכנס</CardTitle>
             <Mail className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent><div className="text-2xl font-bold">{data?.data?.length || 0}</div></CardContent>
@@ -137,7 +129,7 @@ export default function MailRoom() {
         </Card>
         <Card className="dark:bg-slate-800">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">זמן טיפול ממוצע</CardTitle>
+            <CardTitle className="text-sm font-medium">זמן טיפול</CardTitle>
             <Clock className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent><div className="text-2xl font-bold">--</div></CardContent>
