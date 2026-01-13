@@ -122,11 +122,11 @@ export default function MailRoom() {
               <CardContent className="p-0">
                 <DataTable 
                   columns={columns} 
-                  data={data?.data || []} 
+                  data={mails || []} 
                   searchKey="subject"
                   onRowClick={(row) => navigate(createPageUrl(`MailView?id=${row.id}`))}
                   page={page}
-                  totalPages={data?.totalPages || 1}
+                  totalPages={1}
                   onPageChange={setPage}
                   isLoading={isLoading}
                 />
