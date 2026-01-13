@@ -46,7 +46,6 @@ async function fetchGmailMessages(accessToken, limit = 10) {
     if (!listData.messages) return [];
 
     const emails = [];
-    
     for (const msg of listData.messages) {
         try {
             const detailRes = await fetch(`https://gmail.googleapis.com/gmail/v1/users/me/messages/${msg.id}`, {
@@ -97,26 +96,30 @@ Deno.serve(async (req) => {
         
         if (!user) return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers });
 
-        // --- תיקון: שימוש ב-asServiceRole לקריאת הנתונים ---
-        // זה עוקף את ה-RLS ומוודא שנמצא את החיבור אם הוא קיים בבסיס הנתונים
+        // === תיקון קריטי: שימוש ב-asServiceRole כדי לקרוא את הנתונים ===
+        // הפונקציה הקודמת השתמשה ב-base44.entities (ללא asServiceRole) ולכן נכשלה בקריאה
         const allConnections = await base44.asServiceRole.entities.IntegrationConnection.filter({ user_id: user.id });
         
+        // חיפוש גמיש יותר
         const connection = allConnections.find(c => c.provider && c.provider.toLowerCase() === 'google');
 
         if (!connection) {
+            const foundProviders = allConnections.map(c => c.provider).join(', ') || "None";
             return new Response(JSON.stringify({ 
-                error: `Connection not found in DB. User: ${user.id}` 
+                error: `Integrations found in DB: [${foundProviders}]. Expected 'google'. Please reconnect in Settings.` 
             }), { status: 404, headers });
         }
 
         const accessToken = await decrypt(connection.access_token);
+        if (!accessToken) throw new Error("Token decryption failed. Please reconnect Google.");
+
         const newEmails = await fetchGmailMessages(accessToken);
         
         let savedCount = 0;
         for (const mail of newEmails) {
+            // === תיקון קריטי: שימוש ב-asServiceRole גם לשמירת המיילים ===
             const exists = await base44.asServiceRole.entities.Mail.filter({ external_id: mail.external_id });
             if (exists.length === 0) {
-                // שימוש ב-ServiceRole גם לשמירה כדי למנוע בעיות הרשאה
                 await base44.asServiceRole.entities.Mail.create({ ...mail, user_id: user.id });
                 savedCount++;
             }
