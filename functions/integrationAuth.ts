@@ -50,7 +50,7 @@ async function encrypt(text) {
 // --- לוגיקה עסקית ---
 
 async function handleRequest(req) {
-    // 1. זיהוי המשתמש (User Context) - וידוא שהמשתמש מחובר
+    // 1. זיהוי המשתמש (User Context)
     const userClient = createClientFromRequest(req);
     const user = await userClient.auth.me();
     
@@ -100,6 +100,7 @@ async function handleRequest(req) {
 
     // === Action: טיפול בחזרה מהספק ושמירת הטוקן ===
     if (action === 'handleCallback') {
+        console.log(`[DEBUG] Handling callback for provider: ${provider}`);
         const config = getProviderConfig(provider);
         
         let tokenRes;
@@ -141,23 +142,35 @@ async function handleRequest(req) {
         const encryptedAccess = await encrypt(tokens.access_token);
         const encryptedRefresh = tokens.refresh_token ? await encrypt(tokens.refresh_token) : null;
         
-        // --- תיקון: חישוב expires_at ---
-        // tokens.expires_in מגיע בשניות. נמיר למילישניות ונוסיף לזמן הנוכחי.
-        // אם לא התקבל (נדיר), ניתן דיפולט של שעה.
+        // חישוב expires_at
         const expiresInSeconds = tokens.expires_in || 3600; 
         const expiresAt = Date.now() + (expiresInSeconds * 1000);
 
-        // שימוש בקליינט אדמין לחיפוש ושמירה
-        const existing = await adminBase44.entities.IntegrationConnection.filter({ 
+        // שימוש בקליינט אדמין לחיפוש
+        const existingResponse = await adminBase44.entities.IntegrationConnection.filter({ 
             user_id: user.id, 
             provider: config.type 
         });
+        
+        // --- מנגנון הגנה: נרמול התוצאה ---
+        // Base44 SDK עשוי להחזיר מערך או אובייקט { data: [...] }
+        let existingItems = [];
+        if (Array.isArray(existingResponse)) {
+            existingItems = existingResponse;
+        } else if (existingResponse && Array.isArray(existingResponse.data)) {
+            existingItems = existingResponse.data;
+        }
+        
+        console.log(`[DEBUG] Found ${existingItems.length} existing connections`);
+        if (existingItems.length > 0) {
+             console.log(`[DEBUG] First item ID: ${existingItems[0]?.id}`);
+        }
         
         const record = {
             user_id: user.id,
             provider: config.type,
             access_token_encrypted: encryptedAccess,
-            expires_at: expiresAt, // חובה לפי ה-Schema
+            expires_at: expiresAt, 
             metadata: { last_updated: new Date().toISOString() }
         };
 
@@ -165,9 +178,14 @@ async function handleRequest(req) {
             record.refresh_token_encrypted = encryptedRefresh;
         }
 
-        if (existing.length > 0) {
-            await adminBase44.entities.IntegrationConnection.update(existing[0].id, record);
+        // בחירת הפעולה הנכונה
+        const itemToUpdate = existingItems[0];
+        
+        if (itemToUpdate && itemToUpdate.id) {
+            console.log(`[DEBUG] Updating connection ${itemToUpdate.id}`);
+            await adminBase44.entities.IntegrationConnection.update(itemToUpdate.id, record);
         } else {
+            console.log(`[DEBUG] Creating new connection`);
             await adminBase44.entities.IntegrationConnection.create({
                 ...record,
                 refresh_token_encrypted: encryptedRefresh || "MISSING",
