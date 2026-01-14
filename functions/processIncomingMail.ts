@@ -1,10 +1,7 @@
 // @ts-nocheck
 import { createClient, createClientFromRequest } from 'npm:@base44/sdk@0.8.6';
 
-const APP_BASE_URL = "https://dwo.base44.app"; 
-const REDIRECT_URI = `${APP_BASE_URL}/Settings`; 
-
-// פונקציית עזר לקבלת הקונפיגורציה (נדרשת עבור ה-Refresh)
+// --- עזרים ---
 function getProviderConfig(providerRaw) {
     const provider = providerRaw.toLowerCase().trim();
     if (provider === 'google') {
@@ -13,7 +10,7 @@ function getProviderConfig(providerRaw) {
         if (!clientId || !clientSecret) throw new Error("Missing GOOGLE env vars");
         return { clientId, clientSecret, type: 'google' };
     }
-    throw new Error(`Provider ${providerRaw} not supported for refresh in this context`);
+    throw new Error(`Provider ${providerRaw} not supported for refresh`);
 }
 
 async function getCryptoKey() {
@@ -54,13 +51,14 @@ async function decrypt(text) {
     return new TextDecoder().decode(decrypted);
   } catch (e) {
     console.error("Decryption warning:", e);
-    throw new Error("Failed to decrypt token");
+    throw new Error("Failed to decrypt access token");
   }
 }
 
-// === פונקציה חדשה: חידוש טוקן מול גוגל ===
+// --- לוגיקה ---
+
 async function refreshGoogleToken(refreshToken, connectionId, adminBase44) {
-    console.log("[DEBUG] Token expired. Attempting refresh...");
+    console.log("[DEBUG] Refreshing Google Token...");
     const config = getProviderConfig('google');
     
     const res = await fetch('https://oauth2.googleapis.com/token', {
@@ -76,27 +74,28 @@ async function refreshGoogleToken(refreshToken, connectionId, adminBase44) {
 
     const data = await res.json();
     if (data.error) {
+        console.error("Refresh failed:", data);
         throw new Error(`Failed to refresh token: ${JSON.stringify(data)}`);
     }
 
-    // הצפנת הטוקן החדש ושמירה ב-DB
     const newAccessToken = data.access_token;
     const encryptedAccess = await encrypt(newAccessToken);
     const expiresAt = Date.now() + ((data.expires_in || 3600) * 1000);
 
+    // עדכון ב-DB
     await adminBase44.entities.IntegrationConnection.update(connectionId, {
         access_token_encrypted: encryptedAccess,
         expires_at: expiresAt,
-        metadata: { last_updated: new Date().toISOString(), last_refresh: "success" }
+        metadata: { last_updated: new Date().toISOString(), last_refresh: "success" },
+        is_active: true
     });
 
-    console.log("[DEBUG] Token refreshed and DB updated successfully.");
+    console.log("[DEBUG] Token refreshed successfully.");
     return newAccessToken;
 }
 
-// פונקציית משיכת המיילים עם לוגיקת Retry
-async function fetchGmailMessages(accessToken, refreshToken, connectionId, adminBase44, limit = 10) {
-    console.log("[DEBUG] Fetching Gmail messages...");
+async function fetchGmailMessages(accessToken, refreshToken, connectionId, adminBase44, limit = 20) {
+    console.log("[DEBUG] Fetching from Gmail...");
     const listUrl = `https://gmail.googleapis.com/gmail/v1/users/me/messages?maxResults=${limit}&q=in:inbox`;
     
     let currentToken = accessToken;
@@ -104,14 +103,12 @@ async function fetchGmailMessages(accessToken, refreshToken, connectionId, admin
         headers: { Authorization: `Bearer ${currentToken}` }
     });
     
-    // זיהוי פג תוקף וניסיון חידוש
+    // ניסיון רענון אם פג תוקף
     if (listRes.status === 401) {
         if (!refreshToken || refreshToken === "MISSING") {
-            throw new Error("Token expired and no refresh token available. Please reconnect.");
+            throw new Error("Token expired and no refresh token available.");
         }
-        // ביצוע Refresh
         currentToken = await refreshGoogleToken(refreshToken, connectionId, adminBase44);
-        // ניסיון שני עם הטוקן החדש
         listRes = await fetch(listUrl, {
             headers: { Authorization: `Bearer ${currentToken}` }
         });
@@ -124,11 +121,11 @@ async function fetchGmailMessages(accessToken, refreshToken, connectionId, admin
 
     const listData = await listRes.json();
     if (!listData.messages || listData.messages.length === 0) {
-        console.log("[DEBUG] No messages found");
+        console.log("[DEBUG] No messages found.");
         return [];
     }
 
-    console.log(`[DEBUG] Found ${listData.messages.length} messages`);
+    console.log(`[DEBUG] Processing ${listData.messages.length} messages...`);
     const emails = [];
     
     for (const msg of listData.messages) {
@@ -160,7 +157,7 @@ async function fetchGmailMessages(accessToken, refreshToken, connectionId, admin
                 body_plain: detailData.snippet 
             });
         } catch (e) {
-            console.error(`[WARN] Failed processing message ${msg.id}`, e);
+            console.error(`[WARN] Failed msg ${msg.id}`, e);
         }
     }
     return emails;
@@ -177,36 +174,35 @@ Deno.serve(async (req) => {
     if (req.method === "OPTIONS") return new Response(null, { headers });
 
     try {
-        const base44 = createClientFromRequest(req);
-        const user = await base44.auth.me();
+        // אימות המשתמש (מי לחץ על הכפתור)
+        const userClient = createClientFromRequest(req);
+        const user = await userClient.auth.me();
         if (!user) return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers });
 
-        // יש צורך ב-Service Client עבור פעולת עדכון ה-DB (Refresh Token Write)
-        // מכיוון שמשתמש רגיל לא יכול לעדכן את ה-IntegrationConnection
+        // === התיקון הקריטי: שימוש ב-Service Client לכל התהליך ===
+        // זה מונע את שגיאת ה-Invalid ID ואת בעיות ההרשאה
         const adminBase44 = createClient({ useServiceRole: true });
 
-        console.log("[DEBUG] Finding system connection...");
-        // שליפה בטוחה (ללא פילטרים בשרת)
-        const allConnections = await adminBase44.entities.IntegrationConnection.list();
+        console.log("[DEBUG] Looking for system google connection...");
+        const allConnections = await adminBase44.entities.IntegrationConnection.list({ limit: 100 });
         const items = Array.isArray(allConnections) ? allConnections : (allConnections.data || []);
         
         const connection = items.find(c => c.provider === 'google' && c.is_active !== false);
 
         if (!connection) {
             return new Response(JSON.stringify({ 
-                error: `No System Google Account connected. An admin must connect it in Settings > Integrations.` 
+                error: `System connection not found. Please connect Google via Settings (Admin).` 
             }), { status: 404, headers });
         }
 
-        console.log("[DEBUG] Connection found. Preparing tokens...");
+        console.log("[DEBUG] Decrypting tokens...");
         const accessToken = await decrypt(connection.access_token_encrypted);
         const refreshToken = connection.refresh_token_encrypted ? await decrypt(connection.refresh_token_encrypted) : null;
         
-        // שליחת כל המידע לפונקציה שיודעת לעשות Refresh
         const newEmails = await fetchGmailMessages(accessToken, refreshToken, connection.id, adminBase44);
         
         let savedCount = 0;
-        // שימוש ב-Service Client גם לשמירת המיילים כדי למנוע בעיות הרשאה
+        // שימוש ב-Service Client לשמירה - עוקף בעיות הרשאה בטבלת Mail
         const allExistingMails = await adminBase44.entities.Mail.list({ limit: 1000 });
         const existingMailItems = Array.isArray(allExistingMails) ? allExistingMails : (allExistingMails.data || []);
         const existingIds = new Set(existingMailItems.map(m => m.external_id));
@@ -215,7 +211,7 @@ Deno.serve(async (req) => {
             if (!existingIds.has(mail.external_id)) {
                 await adminBase44.entities.Mail.create({ 
                     ...mail, 
-                    user_id: user.id 
+                    user_id: user.id // המשתמש שיזם את הסנכרון הוא ה"בעלים" של המייל החדש
                 });
                 savedCount++;
             }
@@ -229,6 +225,6 @@ Deno.serve(async (req) => {
 
     } catch (err) {
         console.error("Sync Error:", err);
-        return new Response(JSON.stringify({ error: err.message }), { status: 500, headers });
+        return new Response(JSON.stringify({ error: err.message || String(err) }), { status: 500, headers });
     }
 });
