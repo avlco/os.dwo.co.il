@@ -1,5 +1,5 @@
 // @ts-nocheck
-import { createClientFromRequest } from 'npm:@base44/sdk@0.8.6';
+import { createClient, createClientFromRequest } from 'npm:@base44/sdk@0.8.6';
 
 async function getCryptoKey() {
   const envKey = Deno.env.get("ENCRYPTION_KEY");
@@ -39,7 +39,7 @@ async function fetchGmailMessages(accessToken, limit = 10) {
     
     if (!listRes.ok) {
         const txt = await listRes.text();
-        if (listRes.status === 401) throw new Error("Google Token Expired. Please reconnect in Settings.");
+        if (listRes.status === 401) throw new Error("Google Token Expired. Please reconnect.");
         throw new Error(`Gmail API Error: ${listRes.status} - ${txt}`);
     }
 
@@ -98,21 +98,20 @@ Deno.serve(async (req) => {
     if (req.method === "OPTIONS") return new Response(null, { headers });
 
     try {
-        // שימוש בקליינט הסטנדרטי
         const base44 = createClientFromRequest(req);
         const user = await base44.auth.me();
         if (!user) return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers });
 
-        console.log("[DEBUG] Fetching system connection...");
-        const allConnections = await base44.entities.IntegrationConnection.list();
+        // === תיקון קריטי: שליפה עם LIMIT ===
+        const allConnections = await base44.entities.IntegrationConnection.list({ limit: 100 });
         const items = Array.isArray(allConnections) ? allConnections : (allConnections.data || []);
         
-        // חיפוש החיבור המערכתי של גוגל
+        // חיפוש חיבור גוגל פעיל (ללא תלות ביוזר)
         const connection = items.find(c => c.provider === 'google' && c.is_active !== false);
 
         if (!connection) {
             return new Response(JSON.stringify({ 
-                error: `No System Google Account connected. An admin must connect it in Settings.` 
+                error: `No System Google Account connected. Admin must connect it.` 
             }), { status: 404, headers });
         }
 
@@ -121,12 +120,12 @@ Deno.serve(async (req) => {
         
         const newEmails = await fetchGmailMessages(accessToken);
         
-        let savedCount = 0;
-        // בדיקת כפילויות בזיכרון
-        const allExistingMails = await base44.entities.Mail.list();
+        // שליפת מיילים קיימים עם LIMIT
+        const allExistingMails = await base44.entities.Mail.list({ limit: 1000 });
         const existingMailItems = Array.isArray(allExistingMails) ? allExistingMails : (allExistingMails.data || []);
         const existingIds = new Set(existingMailItems.map(m => m.external_id));
 
+        let savedCount = 0;
         for (const mail of newEmails) {
             if (!existingIds.has(mail.external_id)) {
                 await base44.entities.Mail.create({ 
