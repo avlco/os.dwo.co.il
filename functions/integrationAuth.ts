@@ -45,7 +45,7 @@ async function encrypt(text) {
 }
 
 async function handleRequest(req) {
-    // 1. זיהוי המשתמש
+    // 1. זיהוי משתמש
     const userClient = createClientFromRequest(req);
     const user = await userClient.auth.me();
     
@@ -56,7 +56,7 @@ async function handleRequest(req) {
         throw new Error("Access Denied: Only admins can manage integrations.");
     }
 
-    // 2. קליינט שרת לעקיפת הרשאות כתיבה
+    // 2. קליינט שרת
     const adminBase44 = createClient({ useServiceRole: true });
 
     let body;
@@ -132,17 +132,20 @@ async function handleRequest(req) {
         const encryptedRefresh = tokens.refresh_token ? await encrypt(tokens.refresh_token) : null;
         const expiresAt = Date.now() + ((tokens.expires_in || 3600) * 1000);
 
-        // חיפוש חיבור קיים של הספק (ללא סינון לפי יוזר - חיבור אחד למערכת)
-        const existingResponse = await adminBase44.entities.IntegrationConnection.list({ 
-            where: { provider: config.type },
-            limit: 1 
+        // === שימוש ב-FILTER (התיקון) ===
+        console.log(`[DEBUG] Searching for existing connection...`);
+        const existingResponse = await adminBase44.entities.IntegrationConnection.filter({ 
+            provider: config.type 
         });
 
+        // נרמול התוצאה
         const existingItems = Array.isArray(existingResponse) ? existingResponse : (existingResponse.data || []);
+        console.log(`[DEBUG] Found ${existingItems.length} items`);
+        
         const itemToUpdate = existingItems[0];
 
         const record = {
-            user_id: user.id, // משייך לאדמין שביצע את הפעולה
+            user_id: user.id, 
             provider: config.type,
             access_token_encrypted: encryptedAccess,
             expires_at: expiresAt,
@@ -154,8 +157,10 @@ async function handleRequest(req) {
         }
 
         if (itemToUpdate && itemToUpdate.id) {
+            console.log(`[DEBUG] Updating item ${itemToUpdate.id}`);
             await adminBase44.entities.IntegrationConnection.update(itemToUpdate.id, record);
         } else {
+            console.log(`[DEBUG] Creating new item`);
             await adminBase44.entities.IntegrationConnection.create({
                 ...record,
                 refresh_token_encrypted: encryptedRefresh || "MISSING",
