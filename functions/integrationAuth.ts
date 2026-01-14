@@ -1,23 +1,21 @@
 // @ts-nocheck
-import { createClientFromRequest } from 'npm:@base44/sdk@0.8.6';
+import { createClient, createClientFromRequest } from 'npm:@base44/sdk@0.8.6';
 
-// --- הגדרות ---
 const APP_BASE_URL = "https://dwo.base44.app"; 
 const REDIRECT_URI = `${APP_BASE_URL}/Settings`; 
 
-// --- עזרי אבטחה ---
 function getProviderConfig(providerRaw) {
     const provider = providerRaw.toLowerCase().trim();
     if (provider === 'google') {
         const clientId = Deno.env.get("GOOGLE_CLIENT_ID");
         const clientSecret = Deno.env.get("GOOGLE_CLIENT_SECRET");
-        if (!clientId || !clientSecret) throw new Error("Missing GOOGLE_CLIENT_ID or GOOGLE_CLIENT_SECRET");
+        if (!clientId || !clientSecret) throw new Error("Missing GOOGLE env vars");
         return { clientId, clientSecret, type: 'google' };
     }
     if (provider === 'dropbox') {
         const key = Deno.env.get("DROPBOX_APP_KEY");
         const secret = Deno.env.get("DROPBOX_APP_SECRET");
-        if (!key || !secret) throw new Error("Missing DROPBOX_APP_KEY or DROPBOX_APP_SECRET");
+        if (!key || !secret) throw new Error("Missing DROPBOX env vars");
         return { key, secret, type: 'dropbox' };
     }
     throw new Error(`Unknown provider: ${providerRaw}`);
@@ -38,7 +36,6 @@ async function encrypt(text) {
         const iv = crypto.getRandomValues(new Uint8Array(12));
         const encoded = new TextEncoder().encode(text);
         const encrypted = await crypto.subtle.encrypt({ name: "AES-GCM", iv }, key, encoded);
-        
         const ivHex = Array.from(iv).map(b => b.toString(16).padStart(2, '0')).join('');
         const encryptedHex = Array.from(new Uint8Array(encrypted)).map(b => b.toString(16).padStart(2, '0')).join('');
         return `${ivHex}:${encryptedHex}`;
@@ -47,25 +44,26 @@ async function encrypt(text) {
     }
 }
 
-// --- לוגיקה עסקית ---
-
 async function handleRequest(req) {
-    // 1. שימוש בקליינט משתמש רגיל (מבוסס על ההרשאות החדשות ב-JSON)
-    const base44 = createClientFromRequest(req);
-    const user = await base44.auth.me();
+    // 1. זיהוי המשתמש
+    const userClient = createClientFromRequest(req);
+    const user = await userClient.auth.me();
     
-    if (!user) throw new Error("Unauthorized: Please log in.");
+    if (!user) throw new Error("Unauthorized");
+
+    // אכיפת הרשאת אדמין
+    if (user.role !== 'admin') {
+        throw new Error("Access Denied: Only admins can manage integrations.");
+    }
+
+    // 2. קליינט שרת לעקיפת הרשאות כתיבה
+    const adminBase44 = createClient({ useServiceRole: true });
 
     let body;
-    try {
-        body = await req.json();
-    } catch (e) {
-        throw new Error("Invalid JSON body");
-    }
+    try { body = await req.json(); } catch (e) { throw new Error("Invalid JSON body"); }
 
     const { action, provider, code, state } = body;
 
-    // === Action: Get Auth URL ===
     if (action === 'getAuthUrl') {
         const config = getProviderConfig(provider);
         let url;
@@ -94,11 +92,10 @@ async function handleRequest(req) {
         return { authUrl: url };
     }
 
-    // === Action: Handle Callback ===
     if (action === 'handleCallback') {
         const config = getProviderConfig(provider);
-        console.log(`[DEBUG] Handling callback for ${provider}`);
-        
+        console.log(`[DEBUG] Callback for ${provider}`);
+
         let tokenRes;
         if (config.type === 'google') {
             tokenRes = await fetch('https://oauth2.googleapis.com/token', {
@@ -129,31 +126,23 @@ async function handleRequest(req) {
         }
 
         const tokens = await tokenRes.json();
-        if (tokens.error) {
-            console.error("Provider Error:", tokens);
-            throw new Error(`Provider Error: ${JSON.stringify(tokens)}`);
-        }
+        if (tokens.error) throw new Error(`Provider Error: ${JSON.stringify(tokens)}`);
 
         const encryptedAccess = await encrypt(tokens.access_token);
         const encryptedRefresh = tokens.refresh_token ? await encrypt(tokens.refresh_token) : null;
-        
-        // חישוב expires_at (חובה)
-        const expiresInSeconds = tokens.expires_in || 3600; 
-        const expiresAt = Date.now() + (expiresInSeconds * 1000);
+        const expiresAt = Date.now() + ((tokens.expires_in || 3600) * 1000);
 
-        // שימוש ב-list לנרמול התוצאות
-        const existingResponse = await base44.entities.IntegrationConnection.list({ 
-            where: { user_id: user.id, provider: config.type } 
+        // חיפוש חיבור קיים של הספק (ללא סינון לפי יוזר - חיבור אחד למערכת)
+        const existingResponse = await adminBase44.entities.IntegrationConnection.list({ 
+            where: { provider: config.type },
+            limit: 1 
         });
-        
-        // נרמול בטוח של התשובה
-        const existingItems = Array.isArray(existingResponse) ? existingResponse : (existingResponse.data || []);
-        console.log(`[DEBUG] Found ${existingItems.length} existing items`);
 
+        const existingItems = Array.isArray(existingResponse) ? existingResponse : (existingResponse.data || []);
         const itemToUpdate = existingItems[0];
 
         const record = {
-            user_id: user.id,
+            user_id: user.id, // משייך לאדמין שביצע את הפעולה
             provider: config.type,
             access_token_encrypted: encryptedAccess,
             expires_at: expiresAt,
@@ -165,11 +154,9 @@ async function handleRequest(req) {
         }
 
         if (itemToUpdate && itemToUpdate.id) {
-            console.log(`[DEBUG] Updating ${itemToUpdate.id}`);
-            await base44.entities.IntegrationConnection.update(itemToUpdate.id, record);
+            await adminBase44.entities.IntegrationConnection.update(itemToUpdate.id, record);
         } else {
-            console.log(`[DEBUG] Creating new connection`);
-            await base44.entities.IntegrationConnection.create({
+            await adminBase44.entities.IntegrationConnection.create({
                 ...record,
                 refresh_token_encrypted: encryptedRefresh || "MISSING",
                 is_active: true
