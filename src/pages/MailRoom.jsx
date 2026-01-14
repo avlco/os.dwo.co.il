@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query';
-import { base44 } from '../api/base44Client'; // נתיב מתוקן
+import { base44 } from '../api/base44Client';
 import { PageHeader } from "../components/ui/PageHeader";
 import { DataTable } from "../components/ui/DataTable";
 import { Button } from "../components/ui/button";
@@ -23,23 +23,32 @@ export default function MailRoom() {
   const [activeTab, setActiveTab] = useState('inbox');
   const pageSize = 50;
 
-  // שליפת נתונים
+  // === שליפת נתונים (תוקן לראייה מערכתית) ===
   const { data, isLoading, isRefetching, refetch } = useQuery({
     queryKey: ['mails', activeTab, page],
     queryFn: async () => {
-      let filter = {};
-      if (activeTab === 'inbox') filter = { processing_status: 'pending' };
-      else if (activeTab === 'processed') filter = { processing_status: 'processed' };
-      else if (activeTab === 'archived') filter = { processing_status: 'archived' };
+      // מיפוי הטאב לסטטוס ב-DB
+      const statusMap = {
+        'inbox': 'pending',
+        'processed': 'processed',
+        'archived': 'archived'
+      };
 
-      return await base44.entities.Mail.list({
-        ...filter,
+      // שליפה עם פרמטרים מפורשים כדי למנוע סינונים נסתרים
+      const response = await base44.entities.Mail.list({
+        where: { 
+            processing_status: statusMap[activeTab] 
+            // הערה: לא מוסיפים כאן user_id כדי לראות את כל המיילים המשרדיים
+        },
         page: page,
         limit: pageSize,
-        sort: { received_at: -1 } 
+        order: { received_at: 'desc' } // חדש ביותר למעלה
       });
+      
+      return response;
     },
-    placeholderData: keepPreviousData
+    placeholderData: keepPreviousData,
+    staleTime: 1000 * 60 * 1, // Cache ל-1 דקה
   });
 
   // פעולת הרענן הידנית
@@ -48,27 +57,34 @@ export default function MailRoom() {
       toast({ description: "הטבלה רועננה בהצלחה" });
   };
 
-  // פעולת הסנכרון
+  // === פעולת הסנכרון (מפעילה את ה-Function בשרת) ===
   const syncMutation = useMutation({
     mutationFn: async () => {
         const res = await base44.functions.invoke('processIncomingMail', {});
-        // בדיקה ידנית אם חזרה שגיאה מהשרת (גם בסטטוס 200 לפעמים)
-        if (res && res.error) throw new Error(res.error);
-        return res;
+        
+        // טיפול בשגיאות שמגיעות בתוך אובייקט ה-data או ה-error
+        if (res.error) throw new Error(res.error.message || "Unknown error");
+        if (res.data && res.data.error) throw new Error(res.data.error);
+        
+        return res.data;
     },
-    onSuccess: (res) => {
-        const count = res.synced || 0;
-        toast({ title: "סנכרון הושלם", description: `נוספו ${count} מיילים חדשים.` });
+    onSuccess: (data) => {
+        const count = data?.synced || 0;
+        toast({ 
+            title: "סנכרון הושלם", 
+            description: count > 0 ? `נוספו ${count} מיילים חדשים.` : "לא נמצאו מיילים חדשים." 
+        });
+        
+        // רענון הנתונים בטבלה
         queryClient.invalidateQueries(['mails']);
-        setTimeout(() => refetch(), 1000);
+        setTimeout(() => refetch(), 500);
     },
     onError: (err) => {
         console.error("Sync failed:", err);
-        // הצגת השגיאה האמיתית מהשרת
         toast({ 
             variant: "destructive", 
             title: "שגיאת סנכרון", 
-            description: err.message || "שגיאה לא ידועה"
+            description: err.message || "אנא וודא שהמערכת מחוברת לגוגל בהגדרות."
         });
     }
   });
@@ -135,13 +151,19 @@ export default function MailRoom() {
           </Button>
       </div>
 
+      {/* סטטיסטיקה */}
       <div className="grid gap-4 md:grid-cols-3">
         <Card className="dark:bg-slate-800">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">דואר נכנס</CardTitle>
+            <CardTitle className="text-sm font-medium">דואר נכנס (ממתין)</CardTitle>
             <Mail className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
-          <CardContent><div className="text-2xl font-bold">{data?.data?.length || 0}</div></CardContent>
+          <CardContent>
+              {/* מציג את סך כל הרשומות בטאב הנוכחי אם הוא inbox */}
+              <div className="text-2xl font-bold">
+                  {activeTab === 'inbox' ? (data?.total || data?.data?.length || 0) : '--'}
+              </div>
+          </CardContent>
         </Card>
         <Card className="dark:bg-slate-800">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -152,7 +174,7 @@ export default function MailRoom() {
         </Card>
         <Card className="dark:bg-slate-800">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">זמן טיפול</CardTitle>
+            <CardTitle className="text-sm font-medium">זמן טיפול ממוצע</CardTitle>
             <Clock className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent><div className="text-2xl font-bold">--</div></CardContent>
