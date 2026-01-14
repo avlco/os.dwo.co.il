@@ -11,13 +11,13 @@ function getProviderConfig(providerRaw) {
     if (provider === 'google') {
         const clientId = Deno.env.get("GOOGLE_CLIENT_ID");
         const clientSecret = Deno.env.get("GOOGLE_CLIENT_SECRET");
-        if (!clientId || !clientSecret) throw new Error("Missing GOOGLE environment variables.");
+        if (!clientId || !clientSecret) throw new Error("Missing GOOGLE_CLIENT_ID or GOOGLE_CLIENT_SECRET");
         return { clientId, clientSecret, type: 'google' };
     }
     if (provider === 'dropbox') {
         const key = Deno.env.get("DROPBOX_APP_KEY");
         const secret = Deno.env.get("DROPBOX_APP_SECRET");
-        if (!key || !secret) throw new Error("Missing DROPBOX environment variables.");
+        if (!key || !secret) throw new Error("Missing DROPBOX_APP_KEY or DROPBOX_APP_SECRET");
         return { key, secret, type: 'dropbox' };
     }
     throw new Error(`Unknown provider: ${providerRaw}`);
@@ -25,7 +25,7 @@ function getProviderConfig(providerRaw) {
 
 async function getCryptoKey() {
   const envKey = Deno.env.get("ENCRYPTION_KEY");
-  if (!envKey) throw new Error("ENCRYPTION_KEY is missing in environment variables.");
+  if (!envKey) throw new Error("ENCRYPTION_KEY is missing");
   const encoder = new TextEncoder();
   const keyString = envKey.padEnd(32, '0').slice(0, 32);
   const keyBuffer = encoder.encode(keyString);
@@ -50,19 +50,22 @@ async function encrypt(text) {
 // --- לוגיקה עסקית ---
 
 async function handleRequest(req) {
-    // 1. קליינט משתמש לצורך זיהוי ראשוני
-    const base44User = createClientFromRequest(req);
-    const user = await base44User.auth.me();
+    // 1. שימוש בקליינט משתמש רגיל (מבוסס על ההרשאות החדשות ב-JSON)
+    const base44 = createClientFromRequest(req);
+    const user = await base44.auth.me();
+    
     if (!user) throw new Error("Unauthorized: Please log in.");
 
-    // 2. קליינט מערכת לביצוע פעולות DB (עוקף חסימות)
-    const db = base44User.asServiceRole;
-
     let body;
-    try { body = await req.json(); } catch (e) { throw new Error("Invalid JSON body"); }
+    try {
+        body = await req.json();
+    } catch (e) {
+        throw new Error("Invalid JSON body");
+    }
 
     const { action, provider, code, state } = body;
 
+    // === Action: Get Auth URL ===
     if (action === 'getAuthUrl') {
         const config = getProviderConfig(provider);
         let url;
@@ -91,10 +94,11 @@ async function handleRequest(req) {
         return { authUrl: url };
     }
 
+    // === Action: Handle Callback ===
     if (action === 'handleCallback') {
         const config = getProviderConfig(provider);
         console.log(`[DEBUG] Handling callback for ${provider}`);
-
+        
         let tokenRes;
         if (config.type === 'google') {
             tokenRes = await fetch('https://oauth2.googleapis.com/token', {
@@ -125,23 +129,27 @@ async function handleRequest(req) {
         }
 
         const tokens = await tokenRes.json();
-        if (tokens.error) throw new Error(`Provider Error: ${JSON.stringify(tokens)}`);
+        if (tokens.error) {
+            console.error("Provider Error:", tokens);
+            throw new Error(`Provider Error: ${JSON.stringify(tokens)}`);
+        }
 
         const encryptedAccess = await encrypt(tokens.access_token);
         const encryptedRefresh = tokens.refresh_token ? await encrypt(tokens.refresh_token) : null;
         
-        // חישוב חובה של expires_at
+        // חישוב expires_at (חובה)
         const expiresInSeconds = tokens.expires_in || 3600; 
         const expiresAt = Date.now() + (expiresInSeconds * 1000);
 
-        // חיפוש רשומה קיימת (באמצעות Service Role למניעת TypeError של RLS)
-        const existingResponse = await db.entities.IntegrationConnection.list({ 
-            limit: 1,
-            // שימוש בפרמטרים של list במקום filter ישיר
-            where: { user_id: user.id, provider: config.type }
+        // שימוש ב-list לנרמול התוצאות
+        const existingResponse = await base44.entities.IntegrationConnection.list({ 
+            where: { user_id: user.id, provider: config.type } 
         });
-
+        
+        // נרמול בטוח של התשובה
         const existingItems = Array.isArray(existingResponse) ? existingResponse : (existingResponse.data || []);
+        console.log(`[DEBUG] Found ${existingItems.length} existing items`);
+
         const itemToUpdate = existingItems[0];
 
         const record = {
@@ -157,13 +165,13 @@ async function handleRequest(req) {
         }
 
         if (itemToUpdate && itemToUpdate.id) {
-            console.log(`[DEBUG] Updating connection: ${itemToUpdate.id}`);
-            await db.entities.IntegrationConnection.update(itemToUpdate.id, record);
+            console.log(`[DEBUG] Updating ${itemToUpdate.id}`);
+            await base44.entities.IntegrationConnection.update(itemToUpdate.id, record);
         } else {
-            console.log(`[DEBUG] Creating new connection for user ${user.id}`);
-            await db.entities.IntegrationConnection.create({
+            console.log(`[DEBUG] Creating new connection`);
+            await base44.entities.IntegrationConnection.create({
                 ...record,
-                refresh_token_encrypted: encryptedRefresh || "NONE",
+                refresh_token_encrypted: encryptedRefresh || "MISSING",
                 is_active: true
             });
         }
