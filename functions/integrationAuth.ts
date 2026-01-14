@@ -5,7 +5,7 @@ import { createClient, createClientFromRequest } from 'npm:@base44/sdk@0.8.6';
 const APP_BASE_URL = "https://dwo.base44.app"; 
 const REDIRECT_URI = `${APP_BASE_URL}/Settings`; 
 
-// --- עזרי אבטחה (נשאר זהה) ---
+// --- עזרי אבטחה ---
 function getProviderConfig(providerRaw) {
     const provider = providerRaw.toLowerCase().trim();
     if (provider === 'google') {
@@ -50,20 +50,14 @@ async function encrypt(text) {
 // --- לוגיקה עסקית ---
 
 async function handleRequest(req) {
-    // 1. זיהוי המשתמש (רק לצורך קבלת ה-ID שלו)
-    // אנחנו משתמשים בקליינט הרגיל רק כדי להבין "מי מבקש"
+    // 1. זיהוי המשתמש (User Context) - וידוא שהמשתמש מחובר
     const userClient = createClientFromRequest(req);
     const user = await userClient.auth.me();
     
     if (!user) throw new Error("Unauthorized: Please log in.");
 
-    // 2. יצירת קליינט מערכת (Service Client)
-    // קליינט זה הוא "כל יכול", מנותק מהמשתמש, ועוקף את כל הרשאות ה-JSON
+    // 2. יצירת קליינט מערכת (Service Context) - לעקיפת הרשאות ושמירה בטוחה
     const adminBase44 = createClient({ useServiceRole: true });
-    
-    // נקודת כשל אפשרית: וודא ש-useServiceRole נתמך בגרסה 0.8.6. 
-    // אם זה זורק שגיאה, נסה: const adminBase44 = userClient.asServiceRole; 
-    // אבל השימוש ב-createClient החדש הוא הנקי ביותר.
 
     let body;
     try {
@@ -74,10 +68,11 @@ async function handleRequest(req) {
 
     const { action, provider, code, state } = body;
 
-    // ... (חלק ה-getAuthUrl נשאר זהה) ...
+    // === Action: קבלת לינק להתחברות ===
     if (action === 'getAuthUrl') {
         const config = getProviderConfig(provider);
         let url;
+        
         if (config.type === 'google') {
             const params = new URLSearchParams({
                 client_id: config.clientId,
@@ -103,6 +98,7 @@ async function handleRequest(req) {
         return { authUrl: url };
     }
 
+    // === Action: טיפול בחזרה מהספק ושמירת הטוקן ===
     if (action === 'handleCallback') {
         const config = getProviderConfig(provider);
         
@@ -141,12 +137,17 @@ async function handleRequest(req) {
             throw new Error(`Provider Error: ${JSON.stringify(tokens)}`);
         }
 
+        // הצפנת הטוקנים
         const encryptedAccess = await encrypt(tokens.access_token);
         const encryptedRefresh = tokens.refresh_token ? await encrypt(tokens.refresh_token) : null;
         
-        // --- השינוי החשוב: שימוש ב-adminBase44 לשמירה ---
-        
-        // 1. חיפוש קיים (כאדמין)
+        // --- תיקון: חישוב expires_at ---
+        // tokens.expires_in מגיע בשניות. נמיר למילישניות ונוסיף לזמן הנוכחי.
+        // אם לא התקבל (נדיר), ניתן דיפולט של שעה.
+        const expiresInSeconds = tokens.expires_in || 3600; 
+        const expiresAt = Date.now() + (expiresInSeconds * 1000);
+
+        // שימוש בקליינט אדמין לחיפוש ושמירה
         const existing = await adminBase44.entities.IntegrationConnection.filter({ 
             user_id: user.id, 
             provider: config.type 
@@ -155,20 +156,18 @@ async function handleRequest(req) {
         const record = {
             user_id: user.id,
             provider: config.type,
-            access_token: encryptedAccess, // שים לב: שיניתי את השם בקובץ שלך זה היה access_token וב-Entity זה אולי access_token_encrypted? תוודא התאמה
-            // לפי ה-Schema שנתת לי קודם: access_token_encrypted
-            access_token_encrypted: encryptedAccess, 
+            access_token_encrypted: encryptedAccess,
+            expires_at: expiresAt, // חובה לפי ה-Schema
             metadata: { last_updated: new Date().toISOString() }
         };
+
         if (encryptedRefresh) {
             record.refresh_token_encrypted = encryptedRefresh;
         }
 
-        // 2. עדכון או יצירה (כאדמין)
         if (existing.length > 0) {
             await adminBase44.entities.IntegrationConnection.update(existing[0].id, record);
         } else {
-            // ביצירה חייבים לספק את כל שדות החובה
             await adminBase44.entities.IntegrationConnection.create({
                 ...record,
                 refresh_token_encrypted: encryptedRefresh || "MISSING",
@@ -188,6 +187,7 @@ Deno.serve(async (req) => {
         "Access-Control-Allow-Headers": "Content-Type, Authorization",
         "Content-Type": "application/json"
     };
+    
     if (req.method === "OPTIONS") return new Response(null, { headers });
 
     try {
