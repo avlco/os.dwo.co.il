@@ -5,26 +5,25 @@ import { Badge } from "@/components/ui/badge";
 import { Loader2, XCircle, RefreshCw, Cloud } from "lucide-react";
 import { base44 } from '@/api/base44Client';
 import { useToast } from "@/components/ui/use-toast";
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query'; // Import useQueryClient
 
 export default function IntegrationsTab() {
   const { toast } = useToast();
+  const queryClient = useQueryClient(); // For immediate refetch
   
   const [loadingGoogle, setLoadingGoogle] = useState(false);
   const [loadingDropbox, setLoadingDropbox] = useState(false);
 
-  // === בדיקת סטטוס מערכתית ===
+  // בדיקה מערכתית (System-wide check)
   const { data: activeIntegrations = [], refetch, isLoading: isFetchingStatus } = useQuery({
     queryKey: ['integrations'],
     queryFn: async () => {
       try {
-        // שליפה של כל החיבורים (מערכתיים)
         const res = await base44.entities.IntegrationConnection.list({ limit: 100 });
         const items = res.data || [];
-        
-        // החזרת רשימת הספקים שיש להם חיבור פעיל כלשהו
+        // הצג כמחובר אם יש לפחות חיבור אחד פעיל לספק הזה
         return items
-          .filter(i => i.is_active !== false)
+          .filter(i => i.is_active === true)
           .map(i => i.provider.toLowerCase());
       } catch (e) {
         console.error("Failed to fetch integrations", e);
@@ -44,8 +43,7 @@ export default function IntegrationsTab() {
   }, []);
 
   const handleCallback = async (code, state) => {
-    const provider = state; // גוגל או דרופבוקס
-    
+    const provider = state;
     if (provider === 'google') setLoadingGoogle(true);
     else setLoadingDropbox(true);
 
@@ -60,9 +58,11 @@ export default function IntegrationsTab() {
       if (data && data.error) throw new Error(data.error);
 
       toast({ title: "Success", description: `${provider} connected successfully!` });
-      refetch(); // רענון הסטטוס מיד אחרי חיבור
       
-      // ניקוי ה-URL
+      // === קריטי: עדכון הממשק מיידית ===
+      await queryClient.invalidateQueries(['integrations']);
+      refetch(); 
+      
       window.history.replaceState({}, document.title, window.location.pathname);
 
     } catch (err) {
@@ -98,7 +98,7 @@ export default function IntegrationsTab() {
   };
 
   const disconnect = async (provider) => {
-    if (!confirm("Are you sure? This will disconnect the system integration.")) return;
+    if (!confirm("Are you sure? This will disconnect the integration for the entire office.")) return;
     try {
       const res = await base44.entities.IntegrationConnection.list({ limit: 100 });
       const items = res.data || [];
@@ -107,6 +107,7 @@ export default function IntegrationsTab() {
       if (toDelete) {
         await base44.entities.IntegrationConnection.delete(toDelete.id);
         toast({ description: "Disconnected successfully." });
+        queryClient.invalidateQueries(['integrations']);
         refetch();
       }
     } catch (err) {
@@ -149,9 +150,9 @@ export default function IntegrationsTab() {
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
-        <h3 className="text-lg font-medium">אינטגרציות מערכת</h3>
+        <h3 className="text-lg font-medium">System Integrations</h3>
         <Button variant="ghost" size="sm" onClick={() => refetch()} disabled={isFetchingStatus}>
-            <RefreshCw className={`w-4 h-4 mr-2 ${isFetchingStatus ? 'animate-spin' : ''}`}/> רענן סטטוס
+            <RefreshCw className={`w-4 h-4 mr-2 ${isFetchingStatus ? 'animate-spin' : ''}`}/> Refresh Status
         </Button>
       </div>
       <div className="grid gap-4 md:grid-cols-2">
