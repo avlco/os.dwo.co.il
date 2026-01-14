@@ -48,8 +48,9 @@ async function handleRequest(req) {
     // 1. זיהוי המשתמש
     const userClient = createClientFromRequest(req);
     const user = await userClient.auth.me();
-    
     if (!user) throw new Error("Unauthorized");
+    
+    // בדיקת אדמין (כפי שביקשת)
     if (user.role !== 'admin') throw new Error("Access Denied: Admin only.");
 
     // 2. קליינט שרת
@@ -128,20 +129,19 @@ async function handleRequest(req) {
         const encryptedRefresh = tokens.refresh_token ? await encrypt(tokens.refresh_token) : null;
         const expiresAt = Date.now() + ((tokens.expires_in || 3600) * 1000);
 
-        // === התיקון הקריטי: List All + Memory Filter ===
-        console.log(`[DEBUG] Listing all connections...`);
-        // שליפה ללא פרמטרים כדי למנוע קריסה ב-Backend
+        // === התיקון הקריטי: שליפה ללא שום תנאי (List All) ===
+        console.log(`[DEBUG] Fetching ALL connections to avoid filter bug...`);
         const allConnections = await adminBase44.entities.IntegrationConnection.list();
         
-        // נרמול
+        // נרמול התוצאה למערך שטוח
         const items = Array.isArray(allConnections) ? allConnections : (allConnections.data || []);
-        console.log(`[DEBUG] Fetched ${items.length} total items. Filtering for ${config.type}...`);
+        console.log(`[DEBUG] Fetched ${items.length} total connections`);
 
-        // סינון ידני בזיכרון
+        // סינון ידני ב-JavaScript (בטוח ב-100%)
         const itemToUpdate = items.find(c => c.provider === config.type);
 
         const record = {
-            user_id: user.id, 
+            user_id: user.id, // משייך לאדמין
             provider: config.type,
             access_token_encrypted: encryptedAccess,
             expires_at: expiresAt,
@@ -153,10 +153,10 @@ async function handleRequest(req) {
         }
 
         if (itemToUpdate && itemToUpdate.id) {
-            console.log(`[DEBUG] Updating item ${itemToUpdate.id}`);
+            console.log(`[DEBUG] Updating existing ID: ${itemToUpdate.id}`);
             await adminBase44.entities.IntegrationConnection.update(itemToUpdate.id, record);
         } else {
-            console.log(`[DEBUG] Creating new item`);
+            console.log(`[DEBUG] Creating NEW connection`);
             await adminBase44.entities.IntegrationConnection.create({
                 ...record,
                 refresh_token_encrypted: encryptedRefresh || "MISSING",
