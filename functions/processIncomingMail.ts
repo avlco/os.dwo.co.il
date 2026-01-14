@@ -102,21 +102,19 @@ Deno.serve(async (req) => {
         const user = await userClient.auth.me();
         if (!user) return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers });
 
-        // שימוש בקליינט המערכת כדי לקרוא את הטוקן הגלובלי
         const adminBase44 = createClient({ useServiceRole: true });
 
-        // === חיפוש חיבור מערכתי ===
-        // הסרנו את user_id: user.id מהשאילתה!
-        const connectionsResponse = await adminBase44.entities.IntegrationConnection.list({ 
-            where: { provider: 'google', is_active: true },
-            limit: 1
+        // === שימוש ב-FILTER במקום LIST ===
+        // מחפשים חיבור של גוגל שפעיל
+        const connectionsResponse = await adminBase44.entities.IntegrationConnection.filter({ 
+            provider: 'google', 
+            is_active: true 
         });
         
         const connections = Array.isArray(connectionsResponse) ? connectionsResponse : (connectionsResponse.data || []);
         const connection = connections[0];
 
         if (!connection) {
-            // הודעת שגיאה ברורה למשתמש
             return new Response(JSON.stringify({ 
                 error: `No System Google Account connected. An admin must connect it in Settings > Integrations.` 
             }), { status: 404, headers });
@@ -129,17 +127,16 @@ Deno.serve(async (req) => {
         
         let savedCount = 0;
         for (const mail of newEmails) {
-            // בדיקה אם קיים כבר
-            const existsResponse = await adminBase44.entities.Mail.list({ 
-                where: { external_id: mail.external_id },
-                limit: 1
+            // שימוש ב-filter גם כאן
+            const existsResponse = await adminBase44.entities.Mail.filter({ 
+                external_id: mail.external_id 
             });
             const exists = Array.isArray(existsResponse) ? existsResponse : (existsResponse.data || []);
 
             if (exists.length === 0) {
                 await adminBase44.entities.Mail.create({ 
                     ...mail, 
-                    user_id: user.id // מי שלחץ על סנכרון נרשם כיוצר, או שאפשר לשים null
+                    user_id: user.id 
                 });
                 savedCount++;
             }
