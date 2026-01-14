@@ -1,5 +1,5 @@
 // @ts-nocheck
-import { createClientFromRequest } from 'npm:@base44/sdk@0.8.6';
+import { createClient, createClientFromRequest } from 'npm:@base44/sdk@0.8.6';
 
 const APP_BASE_URL = "https://dwo.base44.app"; 
 const REDIRECT_URI = `${APP_BASE_URL}/Settings`; 
@@ -45,14 +45,11 @@ async function encrypt(text) {
 }
 
 async function handleRequest(req) {
-    // 1. שימוש בקליינט הסטנדרטי והיציב
     const base44 = createClientFromRequest(req);
     const user = await base44.auth.me();
     
     if (!user) throw new Error("Unauthorized");
-    
-    // בדיקת אדמין (כפי שביקשת)
-    if (user.role !== 'admin') throw new Error("Access Denied: Admin only.");
+    if (user.role !== 'admin') throw new Error("Access Denied: Only admins can manage integrations.");
 
     let body;
     try { body = await req.json(); } catch (e) { throw new Error("Invalid JSON body"); }
@@ -127,13 +124,12 @@ async function handleRequest(req) {
         const encryptedRefresh = tokens.refresh_token ? await encrypt(tokens.refresh_token) : null;
         const expiresAt = Date.now() + ((tokens.expires_in || 3600) * 1000);
 
-        // שימוש בקליינט הרגיל לשליפה (עכשיו מותר לו כי read: authenticated)
-        console.log(`[DEBUG] Fetching connections with standard client...`);
-        const allConnections = await base44.entities.IntegrationConnection.list();
-        
+        // === התיקון הקריטי: LIMIT 100 ===
+        // שימוש בקליינט רגיל, עם limit כדי למנוע קריסה
+        const allConnections = await base44.entities.IntegrationConnection.list({ limit: 100 });
         const items = Array.isArray(allConnections) ? allConnections : (allConnections.data || []);
-        console.log(`[DEBUG] Fetched ${items.length} items successfully`);
-
+        
+        // חיפוש בזיכרון
         const itemToUpdate = items.find(c => c.provider === config.type);
 
         const record = {
@@ -141,7 +137,8 @@ async function handleRequest(req) {
             provider: config.type,
             access_token_encrypted: encryptedAccess,
             expires_at: expiresAt,
-            metadata: { last_updated: new Date().toISOString() }
+            metadata: { last_updated: new Date().toISOString() },
+            is_active: true // חובה לאכוף פעיל
         };
 
         if (encryptedRefresh) {
@@ -155,8 +152,7 @@ async function handleRequest(req) {
             console.log(`[DEBUG] Creating new`);
             await base44.entities.IntegrationConnection.create({
                 ...record,
-                refresh_token_encrypted: encryptedRefresh || "MISSING",
-                is_active: true
+                refresh_token_encrypted: encryptedRefresh || "MISSING"
             });
         }
         
