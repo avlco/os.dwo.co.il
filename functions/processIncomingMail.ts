@@ -1,8 +1,6 @@
 // @ts-nocheck
 import { createClient, createClientFromRequest } from 'npm:@base44/sdk@0.8.6';
 
-// --- עזרי אבטחה (זהים ל-integrationAuth) ---
-
 async function getCryptoKey() {
   const envKey = Deno.env.get("ENCRYPTION_KEY");
   if (!envKey) throw new Error("ENCRYPTION_KEY is missing");
@@ -16,7 +14,7 @@ async function decrypt(text) {
   try {
     if (!text) return null;
     const parts = text.split(':');
-    if (parts.length !== 2) return text; // מניעת קריסה אם הטוקן לא מוצפן
+    if (parts.length !== 2) return text;
     
     const [ivHex, encryptedHex] = parts;
     const key = await getCryptoKey();
@@ -32,8 +30,7 @@ async function decrypt(text) {
 }
 
 async function fetchGmailMessages(accessToken, limit = 10) {
-    console.log("[DEBUG] Fetching from Gmail API...");
-    // הוספת q=in:inbox כדי למשוך רק מהדואר הנכנס
+    console.log("[DEBUG] Fetching Gmail messages...");
     const listUrl = `https://gmail.googleapis.com/gmail/v1/users/me/messages?maxResults=${limit}&q=in:inbox`;
     
     const listRes = await fetch(listUrl, {
@@ -42,17 +39,17 @@ async function fetchGmailMessages(accessToken, limit = 10) {
     
     if (!listRes.ok) {
         const txt = await listRes.text();
-        if (listRes.status === 401) throw new Error("Google Token Expired. Please reconnect.");
+        if (listRes.status === 401) throw new Error("Google Token Expired. Please reconnect in Settings.");
         throw new Error(`Gmail API Error: ${listRes.status} - ${txt}`);
     }
 
     const listData = await listRes.json();
     if (!listData.messages || listData.messages.length === 0) {
-        console.log("[DEBUG] No new messages found in Gmail.");
+        console.log("[DEBUG] No messages found");
         return [];
     }
 
-    console.log(`[DEBUG] Found ${listData.messages.length} messages headers. Fetching details...`);
+    console.log(`[DEBUG] Found ${listData.messages.length} messages`);
     const emails = [];
     
     for (const msg of listData.messages) {
@@ -81,11 +78,10 @@ async function fetchGmailMessages(accessToken, limit = 10) {
                 external_id: msg.id,
                 processing_status: 'pending',
                 source: 'gmail',
-                // שומרים גם את התוכן הגולמי אם צריך אותו לעתיד
                 body_plain: detailData.snippet 
             });
         } catch (e) {
-            console.error(`[WARN] Failed to fetch message ${msg.id}`, e);
+            console.error(`[WARN] Failed processing message ${msg.id}`, e);
         }
     }
     return emails;
@@ -102,41 +98,38 @@ Deno.serve(async (req) => {
     if (req.method === "OPTIONS") return new Response(null, { headers });
 
     try {
-        // 1. זיהוי המשתמש
         const userClient = createClientFromRequest(req);
         const user = await userClient.auth.me();
         if (!user) return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers });
 
-        // 2. שימוש ב-Service Client לעבודה מול ה-DB
+        // שימוש בקליינט המערכת כדי לקרוא את הטוקן הגלובלי
         const adminBase44 = createClient({ useServiceRole: true });
 
-        // 3. שליפת פרטי החיבור
+        // === חיפוש חיבור מערכתי ===
+        // הסרנו את user_id: user.id מהשאילתה!
         const connectionsResponse = await adminBase44.entities.IntegrationConnection.list({ 
-            where: { user_id: user.id, provider: 'google' },
+            where: { provider: 'google', is_active: true },
             limit: 1
         });
         
-        // נרמול התוצאה (כמו שעשינו ב-integrationAuth)
         const connections = Array.isArray(connectionsResponse) ? connectionsResponse : (connectionsResponse.data || []);
         const connection = connections[0];
 
         if (!connection) {
+            // הודעת שגיאה ברורה למשתמש
             return new Response(JSON.stringify({ 
-                error: `No Google integration found. Please connect in Settings.` 
+                error: `No System Google Account connected. An admin must connect it in Settings > Integrations.` 
             }), { status: 404, headers });
         }
 
-        // 4. פענוח הטוקן
-        console.log("[DEBUG] Decrypting access token...");
+        console.log("[DEBUG] Decrypting token...");
         const accessToken = await decrypt(connection.access_token_encrypted);
         
-        // 5. משיכת מיילים מגוגל
         const newEmails = await fetchGmailMessages(accessToken);
         
-        // 6. שמירה ל-DB (רק מה שלא קיים)
         let savedCount = 0;
         for (const mail of newEmails) {
-            // בדיקה אם המייל כבר קיים במערכת
+            // בדיקה אם קיים כבר
             const existsResponse = await adminBase44.entities.Mail.list({ 
                 where: { external_id: mail.external_id },
                 limit: 1
@@ -146,13 +139,12 @@ Deno.serve(async (req) => {
             if (exists.length === 0) {
                 await adminBase44.entities.Mail.create({ 
                     ...mail, 
-                    user_id: user.id 
+                    user_id: user.id // מי שלחץ על סנכרון נרשם כיוצר, או שאפשר לשים null
                 });
                 savedCount++;
             }
         }
 
-        console.log(`[DEBUG] Sync complete. Saved ${savedCount} new emails.`);
         return new Response(JSON.stringify({ 
             success: true, 
             synced: savedCount, 
@@ -160,7 +152,7 @@ Deno.serve(async (req) => {
         }), { status: 200, headers });
 
     } catch (err) {
-        console.error("Sync Process Error:", err);
-        return new Response(JSON.stringify({ error: err.message || String(err) }), { status: 500, headers });
+        console.error("Sync Error:", err);
+        return new Response(JSON.stringify({ error: err.message }), { status: 500, headers });
     }
 });
