@@ -1,23 +1,23 @@
 // @ts-nocheck
-import { createClient, createClientFromRequest } from 'npm:@base44/sdk@0.8.6';
+import { createClientFromRequest } from 'npm:@base44/sdk@0.8.6';
 
 // --- הגדרות ---
 const APP_BASE_URL = "https://dwo.base44.app"; 
 const REDIRECT_URI = `${APP_BASE_URL}/Settings`; 
 
-// --- עזרי אבטחה ---
+// --- עזרי אבטחה (ללא שינוי) ---
 function getProviderConfig(providerRaw) {
     const provider = providerRaw.toLowerCase().trim();
     if (provider === 'google') {
         const clientId = Deno.env.get("GOOGLE_CLIENT_ID");
         const clientSecret = Deno.env.get("GOOGLE_CLIENT_SECRET");
-        if (!clientId || !clientSecret) throw new Error("Missing GOOGLE_CLIENT_ID or GOOGLE_CLIENT_SECRET");
+        if (!clientId || !clientSecret) throw new Error("Missing GOOGLE env vars");
         return { clientId, clientSecret, type: 'google' };
     }
     if (provider === 'dropbox') {
         const key = Deno.env.get("DROPBOX_APP_KEY");
         const secret = Deno.env.get("DROPBOX_APP_SECRET");
-        if (!key || !secret) throw new Error("Missing DROPBOX_APP_KEY or DROPBOX_APP_SECRET");
+        if (!key || !secret) throw new Error("Missing DROPBOX env vars");
         return { key, secret, type: 'dropbox' };
     }
     throw new Error(`Unknown provider: ${providerRaw}`);
@@ -38,7 +38,6 @@ async function encrypt(text) {
         const iv = crypto.getRandomValues(new Uint8Array(12));
         const encoded = new TextEncoder().encode(text);
         const encrypted = await crypto.subtle.encrypt({ name: "AES-GCM", iv }, key, encoded);
-        
         const ivHex = Array.from(iv).map(b => b.toString(16).padStart(2, '0')).join('');
         const encryptedHex = Array.from(new Uint8Array(encrypted)).map(b => b.toString(16).padStart(2, '0')).join('');
         return `${ivHex}:${encryptedHex}`;
@@ -50,14 +49,11 @@ async function encrypt(text) {
 // --- לוגיקה עסקית ---
 
 async function handleRequest(req) {
-    // 1. זיהוי המשתמש (User Context)
-    const userClient = createClientFromRequest(req);
-    const user = await userClient.auth.me();
+    // 1. שימוש בקליינט משתמש רגיל (זה שעובד בוודאות)
+    const base44 = createClientFromRequest(req);
+    const user = await base44.auth.me();
     
     if (!user) throw new Error("Unauthorized: Please log in.");
-
-    // 2. יצירת קליינט מערכת (Service Context) - לעקיפת הרשאות ושמירה בטוחה
-    const adminBase44 = createClient({ useServiceRole: true });
 
     let body;
     try {
@@ -68,11 +64,10 @@ async function handleRequest(req) {
 
     const { action, provider, code, state } = body;
 
-    // === Action: קבלת לינק להתחברות ===
+    // === Action: Get Auth URL ===
     if (action === 'getAuthUrl') {
         const config = getProviderConfig(provider);
         let url;
-        
         if (config.type === 'google') {
             const params = new URLSearchParams({
                 client_id: config.clientId,
@@ -98,11 +93,11 @@ async function handleRequest(req) {
         return { authUrl: url };
     }
 
-    // === Action: טיפול בחזרה מהספק ושמירת הטוקן ===
+    // === Action: Handle Callback ===
     if (action === 'handleCallback') {
-        console.log(`[DEBUG] Handling callback for provider: ${provider}`);
         const config = getProviderConfig(provider);
-        
+        console.log(`[DEBUG] Processing callback for ${provider}`);
+
         let tokenRes;
         if (config.type === 'google') {
             tokenRes = await fetch('https://oauth2.googleapis.com/token', {
@@ -138,39 +133,28 @@ async function handleRequest(req) {
             throw new Error(`Provider Error: ${JSON.stringify(tokens)}`);
         }
 
-        // הצפנת הטוקנים
         const encryptedAccess = await encrypt(tokens.access_token);
         const encryptedRefresh = tokens.refresh_token ? await encrypt(tokens.refresh_token) : null;
         
-        // חישוב expires_at
+        // תיקון: חישוב שדה expires_at (חובה!)
         const expiresInSeconds = tokens.expires_in || 3600; 
         const expiresAt = Date.now() + (expiresInSeconds * 1000);
 
-        // שימוש בקליינט אדמין לחיפוש
-        const existingResponse = await adminBase44.entities.IntegrationConnection.filter({ 
+        // שימוש בקליינט המשתמש לחיפוש (עכשיו מותר לו בגלל ה-JSON)
+        const existingResponse = await base44.entities.IntegrationConnection.filter({ 
             user_id: user.id, 
             provider: config.type 
         });
-        
-        // --- מנגנון הגנה: נרמול התוצאה ---
-        // Base44 SDK עשוי להחזיר מערך או אובייקט { data: [...] }
-        let existingItems = [];
-        if (Array.isArray(existingResponse)) {
-            existingItems = existingResponse;
-        } else if (existingResponse && Array.isArray(existingResponse.data)) {
-            existingItems = existingResponse.data;
-        }
-        
-        console.log(`[DEBUG] Found ${existingItems.length} existing connections`);
-        if (existingItems.length > 0) {
-             console.log(`[DEBUG] First item ID: ${existingItems[0]?.id}`);
-        }
-        
+
+        // נרמול התוצאה למערך
+        const existingItems = Array.isArray(existingResponse) ? existingResponse : (existingResponse.data || []);
+        const itemToUpdate = existingItems[0];
+
         const record = {
             user_id: user.id,
             provider: config.type,
             access_token_encrypted: encryptedAccess,
-            expires_at: expiresAt, 
+            expires_at: expiresAt,
             metadata: { last_updated: new Date().toISOString() }
         };
 
@@ -178,15 +162,12 @@ async function handleRequest(req) {
             record.refresh_token_encrypted = encryptedRefresh;
         }
 
-        // בחירת הפעולה הנכונה
-        const itemToUpdate = existingItems[0];
-        
         if (itemToUpdate && itemToUpdate.id) {
-            console.log(`[DEBUG] Updating connection ${itemToUpdate.id}`);
-            await adminBase44.entities.IntegrationConnection.update(itemToUpdate.id, record);
+            console.log(`[DEBUG] Updating existing connection ${itemToUpdate.id}`);
+            await base44.entities.IntegrationConnection.update(itemToUpdate.id, record);
         } else {
             console.log(`[DEBUG] Creating new connection`);
-            await adminBase44.entities.IntegrationConnection.create({
+            await base44.entities.IntegrationConnection.create({
                 ...record,
                 refresh_token_encrypted: encryptedRefresh || "MISSING",
                 is_active: true
@@ -205,7 +186,6 @@ Deno.serve(async (req) => {
         "Access-Control-Allow-Headers": "Content-Type, Authorization",
         "Content-Type": "application/json"
     };
-    
     if (req.method === "OPTIONS") return new Response(null, { headers });
 
     try {
