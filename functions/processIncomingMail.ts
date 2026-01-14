@@ -104,15 +104,12 @@ Deno.serve(async (req) => {
 
         const adminBase44 = createClient({ useServiceRole: true });
 
-        // === שימוש ב-FILTER במקום LIST ===
-        // מחפשים חיבור של גוגל שפעיל
-        const connectionsResponse = await adminBase44.entities.IntegrationConnection.filter({ 
-            provider: 'google', 
-            is_active: true 
-        });
+        // === התיקון: List All + Memory Filter ===
+        const allConnections = await adminBase44.entities.IntegrationConnection.list();
+        const items = Array.isArray(allConnections) ? allConnections : (allConnections.data || []);
         
-        const connections = Array.isArray(connectionsResponse) ? connectionsResponse : (connectionsResponse.data || []);
-        const connection = connections[0];
+        // מציאת החיבור הפעיל של גוגל
+        const connection = items.find(c => c.provider === 'google' && c.is_active !== false);
 
         if (!connection) {
             return new Response(JSON.stringify({ 
@@ -127,13 +124,12 @@ Deno.serve(async (req) => {
         
         let savedCount = 0;
         for (const mail of newEmails) {
-            // שימוש ב-filter גם כאן
-            const existsResponse = await adminBase44.entities.Mail.filter({ 
-                external_id: mail.external_id 
-            });
-            const exists = Array.isArray(existsResponse) ? existsResponse : (existsResponse.data || []);
+            // בדיקה ידנית אם המייל קיים
+            const existingMails = await adminBase44.entities.Mail.list();
+            const mailItems = Array.isArray(existingMails) ? existingMails : (existingMails.data || []);
+            const exists = mailItems.some(m => m.external_id === mail.external_id);
 
-            if (exists.length === 0) {
+            if (!exists) {
                 await adminBase44.entities.Mail.create({ 
                     ...mail, 
                     user_id: user.id 
