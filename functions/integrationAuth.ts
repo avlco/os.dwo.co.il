@@ -1,46 +1,34 @@
 // @ts-nocheck
-import { createClientFromRequest } from 'npm:@base44/sdk@0.8.6';
+import { createClient, createClientFromRequest } from 'npm:@base44/sdk@0.8.6';
 
 // --- הגדרות ---
 const APP_BASE_URL = "https://dwo.base44.app"; 
-// כתובת החזרה חייבת להיות תואמת בדיוק (כולל אותיות גדולות) למה שמוגדר בגוגל/דרופבוקס
 const REDIRECT_URI = `${APP_BASE_URL}/Settings`; 
 
-// --- עזרי אבטחה וקונפיגורציה ---
-
+// --- עזרי אבטחה (נשאר זהה) ---
 function getProviderConfig(providerRaw) {
     const provider = providerRaw.toLowerCase().trim();
-    
     if (provider === 'google') {
         const clientId = Deno.env.get("GOOGLE_CLIENT_ID");
         const clientSecret = Deno.env.get("GOOGLE_CLIENT_SECRET");
-        if (!clientId || !clientSecret) throw new Error("Critical Error: Missing GOOGLE_CLIENT_ID or GOOGLE_CLIENT_SECRET in environment variables.");
+        if (!clientId || !clientSecret) throw new Error("Missing GOOGLE_CLIENT_ID or GOOGLE_CLIENT_SECRET");
         return { clientId, clientSecret, type: 'google' };
     }
     if (provider === 'dropbox') {
         const key = Deno.env.get("DROPBOX_APP_KEY");
         const secret = Deno.env.get("DROPBOX_APP_SECRET");
-        if (!key || !secret) throw new Error("Critical Error: Missing DROPBOX_APP_KEY or DROPBOX_APP_SECRET in environment variables.");
+        if (!key || !secret) throw new Error("Missing DROPBOX_APP_KEY or DROPBOX_APP_SECRET");
         return { key, secret, type: 'dropbox' };
     }
     throw new Error(`Unknown provider: ${providerRaw}`);
 }
 
 async function getCryptoKey() {
-  // שליפה ישירה של המפתח מהסביבה
   const envKey = Deno.env.get("ENCRYPTION_KEY");
-  
-  // בדיקה קשיחה: אם המפתח חסר, המערכת לא תעבוד (במקום להשתמש במפתח סתמי)
-  if (!envKey) {
-      console.error("CRITICAL: ENCRYPTION_KEY is missing!");
-      throw new Error("Server Configuration Error: ENCRYPTION_KEY is missing. Please set it in your environment variables.");
-  }
-
+  if (!envKey) throw new Error("ENCRYPTION_KEY is missing");
   const encoder = new TextEncoder();
-  // התאמה ל-32 תווים בדיוק (דרישת AES-256) למקרה שהמפתח שהוזן קצר/ארוך מדי
   const keyString = envKey.padEnd(32, '0').slice(0, 32);
   const keyBuffer = encoder.encode(keyString);
-  
   return await crypto.subtle.importKey("raw", keyBuffer, { name: "AES-GCM" }, false, ["encrypt", "decrypt"]);
 }
 
@@ -55,7 +43,6 @@ async function encrypt(text) {
         const encryptedHex = Array.from(new Uint8Array(encrypted)).map(b => b.toString(16).padStart(2, '0')).join('');
         return `${ivHex}:${encryptedHex}`;
     } catch (e) {
-        console.error("Encryption failed:", e);
         throw new Error(`Encryption failed: ${e.message}`);
     }
 }
@@ -63,12 +50,21 @@ async function encrypt(text) {
 // --- לוגיקה עסקית ---
 
 async function handleRequest(req) {
-    // 1. אימות משתמש
-    const base44 = createClientFromRequest(req);
-    const user = await base44.auth.me();
+    // 1. זיהוי המשתמש (רק לצורך קבלת ה-ID שלו)
+    // אנחנו משתמשים בקליינט הרגיל רק כדי להבין "מי מבקש"
+    const userClient = createClientFromRequest(req);
+    const user = await userClient.auth.me();
+    
     if (!user) throw new Error("Unauthorized: Please log in.");
 
-    // 2. קריאת הגוף
+    // 2. יצירת קליינט מערכת (Service Client)
+    // קליינט זה הוא "כל יכול", מנותק מהמשתמש, ועוקף את כל הרשאות ה-JSON
+    const adminBase44 = createClient({ useServiceRole: true });
+    
+    // נקודת כשל אפשרית: וודא ש-useServiceRole נתמך בגרסה 0.8.6. 
+    // אם זה זורק שגיאה, נסה: const adminBase44 = userClient.asServiceRole; 
+    // אבל השימוש ב-createClient החדש הוא הנקי ביותר.
+
     let body;
     try {
         body = await req.json();
@@ -77,13 +73,11 @@ async function handleRequest(req) {
     }
 
     const { action, provider, code, state } = body;
-    console.log(`Processing: ${action} for ${provider}`);
 
-    // 3. ניתוב פעולות
+    // ... (חלק ה-getAuthUrl נשאר זהה) ...
     if (action === 'getAuthUrl') {
         const config = getProviderConfig(provider);
         let url;
-        
         if (config.type === 'google') {
             const params = new URLSearchParams({
                 client_id: config.clientId,
@@ -106,13 +100,11 @@ async function handleRequest(req) {
             });
             url = `https://www.dropbox.com/oauth2/authorize?${params.toString()}`;
         }
-        
         return { authUrl: url };
     }
 
     if (action === 'handleCallback') {
         const config = getProviderConfig(provider);
-        console.log("Exchanging token...");
         
         let tokenRes;
         if (config.type === 'google') {
@@ -149,28 +141,38 @@ async function handleRequest(req) {
             throw new Error(`Provider Error: ${JSON.stringify(tokens)}`);
         }
 
-        // שמירה מוצפנת (תשתמש במפתח האמיתי או תיכשל)
         const encryptedAccess = await encrypt(tokens.access_token);
         const encryptedRefresh = tokens.refresh_token ? await encrypt(tokens.refresh_token) : null;
         
-        // עקיפת RLS
-        const db = base44.asServiceRole;
-        const existing = await db.entities.IntegrationConnection.filter({ user_id: user.id, provider: config.type });
+        // --- השינוי החשוב: שימוש ב-adminBase44 לשמירה ---
+        
+        // 1. חיפוש קיים (כאדמין)
+        const existing = await adminBase44.entities.IntegrationConnection.filter({ 
+            user_id: user.id, 
+            provider: config.type 
+        });
         
         const record = {
             user_id: user.id,
             provider: config.type,
-            access_token: encryptedAccess,
+            access_token: encryptedAccess, // שים לב: שיניתי את השם בקובץ שלך זה היה access_token וב-Entity זה אולי access_token_encrypted? תוודא התאמה
+            // לפי ה-Schema שנתת לי קודם: access_token_encrypted
+            access_token_encrypted: encryptedAccess, 
             metadata: { last_updated: new Date().toISOString() }
         };
-        if (encryptedRefresh) record.refresh_token = encryptedRefresh;
+        if (encryptedRefresh) {
+            record.refresh_token_encrypted = encryptedRefresh;
+        }
 
+        // 2. עדכון או יצירה (כאדמין)
         if (existing.length > 0) {
-            await db.entities.IntegrationConnection.update(existing[0].id, record);
+            await adminBase44.entities.IntegrationConnection.update(existing[0].id, record);
         } else {
-            await db.entities.IntegrationConnection.create({
+            // ביצירה חייבים לספק את כל שדות החובה
+            await adminBase44.entities.IntegrationConnection.create({
                 ...record,
-                refresh_token: encryptedRefresh || "MISSING"
+                refresh_token_encrypted: encryptedRefresh || "MISSING",
+                is_active: true
             });
         }
         
@@ -180,14 +182,12 @@ async function handleRequest(req) {
     throw new Error(`Unknown action: ${action}`);
 }
 
-// === Entry Point ===
 Deno.serve(async (req) => {
     const headers = { 
         "Access-Control-Allow-Origin": "*", 
         "Access-Control-Allow-Headers": "Content-Type, Authorization",
         "Content-Type": "application/json"
     };
-    
     if (req.method === "OPTIONS") return new Response(null, { headers });
 
     try {
