@@ -1,5 +1,5 @@
 // @ts-nocheck
-import { createClient, createClientFromRequest } from 'npm:@base44/sdk@0.8.6';
+import { createClientFromRequest } from 'npm:@base44/sdk@0.8.6';
 
 const APP_BASE_URL = "https://dwo.base44.app"; 
 const REDIRECT_URI = `${APP_BASE_URL}/Settings`; 
@@ -45,14 +45,16 @@ async function encrypt(text) {
 }
 
 async function handleRequest(req) {
-    const userClient = createClientFromRequest(req);
-    const user = await userClient.auth.me();
+    // שימוש בקליינט משתמש בלבד - הכי יציב
+    const base44 = createClientFromRequest(req);
+    const user = await base44.auth.me();
     
     if (!user) throw new Error("Unauthorized");
-    if (user.role !== 'admin') throw new Error("Access Denied: Admin only.");
-
-    // שימוש ב-Service Client לכתיבה בטוחה ללא תלות ביוזר
-    const adminBase44 = createClient({ useServiceRole: true });
+    
+    // בדיקת אדמין קריטית
+    if (user.role !== 'admin') {
+        throw new Error("Access Denied: Only admins can manage integrations.");
+    }
 
     let body;
     try { body = await req.json(); } catch (e) { throw new Error("Invalid JSON body"); }
@@ -127,9 +129,9 @@ async function handleRequest(req) {
         const encryptedRefresh = tokens.refresh_token ? await encrypt(tokens.refresh_token) : null;
         const expiresAt = Date.now() + ((tokens.expires_in || 3600) * 1000);
 
-        // שליפה מערכתית
-        console.log(`[DEBUG] Fetching system connections...`);
-        const allConnections = await adminBase44.entities.IntegrationConnection.list({ limit: 100 });
+        // שימוש בקליינט הרגיל לשליפה - זה עובד בוודאות!
+        console.log(`[DEBUG] Fetching existing connections (User Client)...`);
+        const allConnections = await base44.entities.IntegrationConnection.list({ limit: 100 });
         const items = Array.isArray(allConnections) ? allConnections : (allConnections.data || []);
         
         const itemToUpdate = items.find(c => c.provider === config.type);
@@ -149,10 +151,10 @@ async function handleRequest(req) {
 
         if (itemToUpdate && itemToUpdate.id) {
             console.log(`[DEBUG] Updating ID: ${itemToUpdate.id}`);
-            await adminBase44.entities.IntegrationConnection.update(itemToUpdate.id, record);
+            await base44.entities.IntegrationConnection.update(itemToUpdate.id, record);
         } else {
             console.log(`[DEBUG] Creating NEW connection`);
-            await adminBase44.entities.IntegrationConnection.create({
+            await base44.entities.IntegrationConnection.create({
                 ...record,
                 refresh_token_encrypted: encryptedRefresh || "MISSING"
             });
