@@ -1,5 +1,20 @@
 // @ts-nocheck
-import { createClientFromRequest } from 'npm:@base44/sdk@0.8.6';
+import { createClient, createClientFromRequest } from 'npm:@base44/sdk@0.8.6';
+
+const APP_BASE_URL = "https://dwo.base44.app"; 
+const REDIRECT_URI = `${APP_BASE_URL}/Settings`; 
+
+// פונקציית עזר לקבלת הקונפיגורציה (נדרשת עבור ה-Refresh)
+function getProviderConfig(providerRaw) {
+    const provider = providerRaw.toLowerCase().trim();
+    if (provider === 'google') {
+        const clientId = Deno.env.get("GOOGLE_CLIENT_ID");
+        const clientSecret = Deno.env.get("GOOGLE_CLIENT_SECRET");
+        if (!clientId || !clientSecret) throw new Error("Missing GOOGLE env vars");
+        return { clientId, clientSecret, type: 'google' };
+    }
+    throw new Error(`Provider ${providerRaw} not supported for refresh in this context`);
+}
 
 async function getCryptoKey() {
   const envKey = Deno.env.get("ENCRYPTION_KEY");
@@ -8,6 +23,20 @@ async function getCryptoKey() {
   const keyString = envKey.padEnd(32, '0').slice(0, 32);
   const keyBuffer = encoder.encode(keyString);
   return await crypto.subtle.importKey("raw", keyBuffer, { name: "AES-GCM" }, false, ["encrypt", "decrypt"]);
+}
+
+async function encrypt(text) {
+    try {
+        const key = await getCryptoKey();
+        const iv = crypto.getRandomValues(new Uint8Array(12));
+        const encoded = new TextEncoder().encode(text);
+        const encrypted = await crypto.subtle.encrypt({ name: "AES-GCM", iv }, key, encoded);
+        const ivHex = Array.from(iv).map(b => b.toString(16).padStart(2, '0')).join('');
+        const encryptedHex = Array.from(new Uint8Array(encrypted)).map(b => b.toString(16).padStart(2, '0')).join('');
+        return `${ivHex}:${encryptedHex}`;
+    } catch (e) {
+        throw new Error(`Encryption failed: ${e.message}`);
+    }
 }
 
 async function decrypt(text) {
@@ -25,21 +54,71 @@ async function decrypt(text) {
     return new TextDecoder().decode(decrypted);
   } catch (e) {
     console.error("Decryption warning:", e);
-    throw new Error("Failed to decrypt access token");
+    throw new Error("Failed to decrypt token");
   }
 }
 
-async function fetchGmailMessages(accessToken, limit = 10) {
+// === פונקציה חדשה: חידוש טוקן מול גוגל ===
+async function refreshGoogleToken(refreshToken, connectionId, adminBase44) {
+    console.log("[DEBUG] Token expired. Attempting refresh...");
+    const config = getProviderConfig('google');
+    
+    const res = await fetch('https://oauth2.googleapis.com/token', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({
+            client_id: config.clientId,
+            client_secret: config.clientSecret,
+            refresh_token: refreshToken,
+            grant_type: 'refresh_token',
+        }).toString(),
+    });
+
+    const data = await res.json();
+    if (data.error) {
+        throw new Error(`Failed to refresh token: ${JSON.stringify(data)}`);
+    }
+
+    // הצפנת הטוקן החדש ושמירה ב-DB
+    const newAccessToken = data.access_token;
+    const encryptedAccess = await encrypt(newAccessToken);
+    const expiresAt = Date.now() + ((data.expires_in || 3600) * 1000);
+
+    await adminBase44.entities.IntegrationConnection.update(connectionId, {
+        access_token_encrypted: encryptedAccess,
+        expires_at: expiresAt,
+        metadata: { last_updated: new Date().toISOString(), last_refresh: "success" }
+    });
+
+    console.log("[DEBUG] Token refreshed and DB updated successfully.");
+    return newAccessToken;
+}
+
+// פונקציית משיכת המיילים עם לוגיקת Retry
+async function fetchGmailMessages(accessToken, refreshToken, connectionId, adminBase44, limit = 10) {
     console.log("[DEBUG] Fetching Gmail messages...");
     const listUrl = `https://gmail.googleapis.com/gmail/v1/users/me/messages?maxResults=${limit}&q=in:inbox`;
     
-    const listRes = await fetch(listUrl, {
-        headers: { Authorization: `Bearer ${accessToken}` }
+    let currentToken = accessToken;
+    let listRes = await fetch(listUrl, {
+        headers: { Authorization: `Bearer ${currentToken}` }
     });
     
+    // זיהוי פג תוקף וניסיון חידוש
+    if (listRes.status === 401) {
+        if (!refreshToken || refreshToken === "MISSING") {
+            throw new Error("Token expired and no refresh token available. Please reconnect.");
+        }
+        // ביצוע Refresh
+        currentToken = await refreshGoogleToken(refreshToken, connectionId, adminBase44);
+        // ניסיון שני עם הטוקן החדש
+        listRes = await fetch(listUrl, {
+            headers: { Authorization: `Bearer ${currentToken}` }
+        });
+    }
+
     if (!listRes.ok) {
         const txt = await listRes.text();
-        if (listRes.status === 401) throw new Error("Google Token Expired. Please reconnect in Settings.");
         throw new Error(`Gmail API Error: ${listRes.status} - ${txt}`);
     }
 
@@ -55,7 +134,7 @@ async function fetchGmailMessages(accessToken, limit = 10) {
     for (const msg of listData.messages) {
         try {
             const detailRes = await fetch(`https://gmail.googleapis.com/gmail/v1/users/me/messages/${msg.id}`, {
-                headers: { Authorization: `Bearer ${accessToken}` }
+                headers: { Authorization: `Bearer ${currentToken}` }
             });
             const detailData = await detailRes.json();
             const headers = detailData.payload.headers;
@@ -102,11 +181,15 @@ Deno.serve(async (req) => {
         const user = await base44.auth.me();
         if (!user) return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers });
 
+        // יש צורך ב-Service Client עבור פעולת עדכון ה-DB (Refresh Token Write)
+        // מכיוון שמשתמש רגיל לא יכול לעדכן את ה-IntegrationConnection
+        const adminBase44 = createClient({ useServiceRole: true });
+
         console.log("[DEBUG] Finding system connection...");
-        const allConnections = await base44.entities.IntegrationConnection.list({ limit: 100 });
+        // שליפה בטוחה (ללא פילטרים בשרת)
+        const allConnections = await adminBase44.entities.IntegrationConnection.list();
         const items = Array.isArray(allConnections) ? allConnections : (allConnections.data || []);
         
-        // חיפוש החיבור המערכתי (ללא תלות במשתמש)
         const connection = items.find(c => c.provider === 'google' && c.is_active !== false);
 
         if (!connection) {
@@ -115,20 +198,22 @@ Deno.serve(async (req) => {
             }), { status: 404, headers });
         }
 
-        console.log("[DEBUG] Connection found. Decrypting token...");
+        console.log("[DEBUG] Connection found. Preparing tokens...");
         const accessToken = await decrypt(connection.access_token_encrypted);
+        const refreshToken = connection.refresh_token_encrypted ? await decrypt(connection.refresh_token_encrypted) : null;
         
-        const newEmails = await fetchGmailMessages(accessToken);
+        // שליחת כל המידע לפונקציה שיודעת לעשות Refresh
+        const newEmails = await fetchGmailMessages(accessToken, refreshToken, connection.id, adminBase44);
         
-        // שמירת מיילים ללא כפילויות
         let savedCount = 0;
-        const allExistingMails = await base44.entities.Mail.list({ limit: 1000 });
+        // שימוש ב-Service Client גם לשמירת המיילים כדי למנוע בעיות הרשאה
+        const allExistingMails = await adminBase44.entities.Mail.list({ limit: 1000 });
         const existingMailItems = Array.isArray(allExistingMails) ? allExistingMails : (allExistingMails.data || []);
         const existingIds = new Set(existingMailItems.map(m => m.external_id));
 
         for (const mail of newEmails) {
             if (!existingIds.has(mail.external_id)) {
-                await base44.entities.Mail.create({ 
+                await adminBase44.entities.Mail.create({ 
                     ...mail, 
                     user_id: user.id 
                 });
