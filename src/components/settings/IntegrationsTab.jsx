@@ -13,16 +13,16 @@ export default function IntegrationsTab() {
   const [loadingGoogle, setLoadingGoogle] = useState(false);
   const [loadingDropbox, setLoadingDropbox] = useState(false);
 
-  // === תיקון התצוגה: בדיקת חיבור מערכתי ===
+  // === בדיקת סטטוס מערכתית ===
   const { data: activeIntegrations = [], refetch, isLoading: isFetchingStatus } = useQuery({
     queryKey: ['integrations'],
     queryFn: async () => {
       try {
-        // שליפה עם limit גבוה כדי למצוא את החיבור
+        // שליפה של כל החיבורים (מערכתיים)
         const res = await base44.entities.IntegrationConnection.list({ limit: 100 });
         const items = res.data || [];
         
-        // אנחנו מחוברים אם יש חיבור פעיל, לא משנה של מי
+        // החזרת רשימת הספקים שיש להם חיבור פעיל כלשהו
         return items
           .filter(i => i.is_active !== false)
           .map(i => i.provider.toLowerCase());
@@ -33,10 +33,45 @@ export default function IntegrationsTab() {
     }
   });
 
-  // (שאר הקוד של useEffect לטיפול ב-callback נשאר זהה לקוד המקורי שלך, אין צורך לשנות)
-  // ... (העתק את ה-useEffect מהקובץ המקורי שלך לכאן אם צריך, או השאר אותו כפי שהוא)
-  
-  // הוספתי רק את הפונקציות ההכרחיות לחיבור/ניתוק:
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const code = params.get('code');
+    const state = params.get('state');
+
+    if (code && state) {
+      handleCallback(code, state);
+    }
+  }, []);
+
+  const handleCallback = async (code, state) => {
+    const provider = state; // גוגל או דרופבוקס
+    
+    if (provider === 'google') setLoadingGoogle(true);
+    else setLoadingDropbox(true);
+
+    try {
+      const { data, error } = await base44.functions.invoke('integrationAuth', {
+        action: 'handleCallback',
+        provider,
+        code
+      });
+
+      if (error) throw new Error(error.message);
+      if (data && data.error) throw new Error(data.error);
+
+      toast({ title: "Success", description: `${provider} connected successfully!` });
+      refetch(); // רענון הסטטוס מיד אחרי חיבור
+      
+      // ניקוי ה-URL
+      window.history.replaceState({}, document.title, window.location.pathname);
+
+    } catch (err) {
+      toast({ variant: "destructive", title: "Connection Failed", description: err.message });
+    } finally {
+      setLoadingGoogle(false);
+      setLoadingDropbox(false);
+    }
+  };
 
   const startAuth = async (provider) => {
     if (provider === 'google') setLoadingGoogle(true);
@@ -63,7 +98,7 @@ export default function IntegrationsTab() {
   };
 
   const disconnect = async (provider) => {
-    if (!confirm("Are you sure? This will affect the whole office.")) return;
+    if (!confirm("Are you sure? This will disconnect the system integration.")) return;
     try {
       const res = await base44.entities.IntegrationConnection.list({ limit: 100 });
       const items = res.data || [];
@@ -114,9 +149,9 @@ export default function IntegrationsTab() {
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
-        <h3 className="text-lg font-medium">אינטגרציות</h3>
+        <h3 className="text-lg font-medium">אינטגרציות מערכת</h3>
         <Button variant="ghost" size="sm" onClick={() => refetch()} disabled={isFetchingStatus}>
-            <RefreshCw className={`w-4 h-4 mr-2 ${isFetchingStatus ? 'animate-spin' : ''}`}/> רענן
+            <RefreshCw className={`w-4 h-4 mr-2 ${isFetchingStatus ? 'animate-spin' : ''}`}/> רענן סטטוס
         </Button>
       </div>
       <div className="grid gap-4 md:grid-cols-2">
