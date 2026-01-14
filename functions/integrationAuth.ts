@@ -45,22 +45,18 @@ async function encrypt(text) {
 }
 
 async function handleRequest(req) {
-    // שימוש בקליינט המשתמש הסטנדרטי
     const base44 = createClientFromRequest(req);
     const user = await base44.auth.me();
     
     if (!user) throw new Error("Unauthorized");
-    
-    // הגנה לוגית: רק אדמין רשאי לבצע פעולות ניהול
-    if (user.role !== 'admin') {
-        throw new Error("Access Denied: Only admins can manage integrations.");
-    }
+    if (user.role !== 'admin') throw new Error("Access Denied: Only admins can manage integrations.");
 
     let body;
     try { body = await req.json(); } catch (e) { throw new Error("Invalid JSON body"); }
 
     const { action, provider, code, state } = body;
 
+    // --- Action: Get Auth URL ---
     if (action === 'getAuthUrl') {
         const config = getProviderConfig(provider);
         let url;
@@ -89,9 +85,10 @@ async function handleRequest(req) {
         return { authUrl: url };
     }
 
+    // --- Action: Handle Callback ---
     if (action === 'handleCallback') {
         const config = getProviderConfig(provider);
-        console.log(`[DEBUG] Callback for ${provider}`);
+        console.log(`[DEBUG] Callback received for ${provider}`);
 
         let tokenRes;
         if (config.type === 'google') {
@@ -123,28 +120,29 @@ async function handleRequest(req) {
         }
 
         const tokens = await tokenRes.json();
-        if (tokens.error) throw new Error(`Provider Error: ${JSON.stringify(tokens)}`);
+        if (tokens.error) {
+            console.error("Provider Token Error:", tokens);
+            throw new Error(`Provider Error: ${JSON.stringify(tokens)}`);
+        }
 
         const encryptedAccess = await encrypt(tokens.access_token);
         const encryptedRefresh = tokens.refresh_token ? await encrypt(tokens.refresh_token) : null;
         const expiresAt = Date.now() + ((tokens.expires_in || 3600) * 1000);
 
-        // שליפה בטוחה: הבא הכל (עד 100) וסנן בזיכרון
-        // זה עוקף את הבאג של ה-Service Client Filter
-        console.log(`[DEBUG] Listing connections safely...`);
+        // Fetch ALL to be safe
+        console.log(`[DEBUG] Fetching existing connections list...`);
         const allConnections = await base44.entities.IntegrationConnection.list({ limit: 100 });
         const items = Array.isArray(allConnections) ? allConnections : (allConnections.data || []);
         
-        // חיפוש חיבור קיים של הספק (Global Search)
         const itemToUpdate = items.find(c => c.provider === config.type);
 
         const record = {
-            user_id: user.id, // משייך לאדמין המבצע
+            user_id: user.id,
             provider: config.type,
             access_token_encrypted: encryptedAccess,
             expires_at: expiresAt,
             metadata: { last_updated: new Date().toISOString() },
-            is_active: true
+            is_active: true // Force active on every update
         };
 
         if (encryptedRefresh) {
@@ -152,10 +150,10 @@ async function handleRequest(req) {
         }
 
         if (itemToUpdate && itemToUpdate.id) {
-            console.log(`[DEBUG] Updating connection ${itemToUpdate.id}`);
+            console.log(`[DEBUG] Updating ID: ${itemToUpdate.id}. Setting is_active=true.`);
             await base44.entities.IntegrationConnection.update(itemToUpdate.id, record);
         } else {
-            console.log(`[DEBUG] Creating new connection`);
+            console.log(`[DEBUG] Creating NEW connection record.`);
             await base44.entities.IntegrationConnection.create({
                 ...record,
                 refresh_token_encrypted: encryptedRefresh || "MISSING"
