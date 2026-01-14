@@ -2,7 +2,7 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.6';
 
 // --- הגדרות ---
-const APP_BASE_URL = "https://os.dwo.co.il"; 
+const APP_BASE_URL = "https://dwo.base44.app/"; 
 // כתובת החזרה חייבת להיות תואמת בדיוק (כולל אותיות גדולות) למה שמוגדר בגוגל/דרופבוקס
 const REDIRECT_URI = `${APP_BASE_URL}/Settings`; 
 
