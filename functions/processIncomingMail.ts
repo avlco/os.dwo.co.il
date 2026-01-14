@@ -1,5 +1,5 @@
 // @ts-nocheck
-import { createClient, createClientFromRequest } from 'npm:@base44/sdk@0.8.6';
+import { createClientFromRequest } from 'npm:@base44/sdk@0.8.6';
 
 async function getCryptoKey() {
   const envKey = Deno.env.get("ENCRYPTION_KEY");
@@ -98,23 +98,21 @@ Deno.serve(async (req) => {
     if (req.method === "OPTIONS") return new Response(null, { headers });
 
     try {
-        const userClient = createClientFromRequest(req);
-        const user = await userClient.auth.me();
+        // שימוש בקליינט הסטנדרטי
+        const base44 = createClientFromRequest(req);
+        const user = await base44.auth.me();
         if (!user) return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers });
 
-        const adminBase44 = createClient({ useServiceRole: true });
-
-        // === התיקון: List All + Memory Filter ===
-        console.log("[DEBUG] Listing all connections to find system google account...");
-        const allConnections = await adminBase44.entities.IntegrationConnection.list();
+        console.log("[DEBUG] Fetching system connection...");
+        const allConnections = await base44.entities.IntegrationConnection.list();
         const items = Array.isArray(allConnections) ? allConnections : (allConnections.data || []);
         
-        // מציאת החיבור של גוגל (ללא תנאי סינון בצד שרת)
+        // חיפוש החיבור המערכתי של גוגל
         const connection = items.find(c => c.provider === 'google' && c.is_active !== false);
 
         if (!connection) {
             return new Response(JSON.stringify({ 
-                error: `No System Google Account connected. An admin must connect it in Settings > Integrations.` 
+                error: `No System Google Account connected. An admin must connect it in Settings.` 
             }), { status: 404, headers });
         }
 
@@ -124,14 +122,14 @@ Deno.serve(async (req) => {
         const newEmails = await fetchGmailMessages(accessToken);
         
         let savedCount = 0;
-        // שליפת כל המיילים הקיימים כדי למנוע כפילויות (שוב, list all למניעת באגים)
-        const allExistingMails = await adminBase44.entities.Mail.list();
+        // בדיקת כפילויות בזיכרון
+        const allExistingMails = await base44.entities.Mail.list();
         const existingMailItems = Array.isArray(allExistingMails) ? allExistingMails : (allExistingMails.data || []);
         const existingIds = new Set(existingMailItems.map(m => m.external_id));
 
         for (const mail of newEmails) {
             if (!existingIds.has(mail.external_id)) {
-                await adminBase44.entities.Mail.create({ 
+                await base44.entities.Mail.create({ 
                     ...mail, 
                     user_id: user.id 
                 });
