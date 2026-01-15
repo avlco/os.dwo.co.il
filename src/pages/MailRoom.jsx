@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query';
 import { base44 } from '../api/base44Client';
 import { PageHeader } from "../components/ui/PageHeader";
@@ -21,20 +21,18 @@ export default function MailRoom() {
   
   const [page, setPage] = useState(1);
   const [activeTab, setActiveTab] = useState('inbox');
+  const [lastSyncTime, setLastSyncTime] = useState(null);
+  const [nextSyncIn, setNextSyncIn] = useState(300); // 5 דקות בשניות
   const pageSize = 50;
 
-  // ✅ שליפת נתונים - גרסה מתוקנת
+  // ✅ שליפת נתונים
   const { data, isLoading, isRefetching, refetch } = useQuery({
     queryKey: ['mails', activeTab, page],
     queryFn: async () => {
       try {
-        // שליפת כל המיילים (Base44 SDK תקני)
         const allMails = await base44.entities.Mail.list('-received_at', 1000);
-        
-        // המרה למערך
         const mailsArray = Array.isArray(allMails) ? allMails : (allMails.data || []);
         
-        // סינון לפי סטטוס
         const statusMap = {
           'inbox': 'pending',
           'processed': 'processed',
@@ -45,7 +43,6 @@ export default function MailRoom() {
           mail => mail.processing_status === statusMap[activeTab]
         );
         
-        // Pagination בצד קליינט
         const startIndex = (page - 1) * pageSize;
         const endIndex = startIndex + pageSize;
         const paginatedMails = filteredMails.slice(startIndex, endIndex);
@@ -74,7 +71,7 @@ export default function MailRoom() {
     toast({ description: "הטבלה רועננה בהצלחה" });
   };
 
-  // ✅ פעולת סנכרון - גרסה מתוקנת
+  // ✅ פעולת סנכרון מלא
   const syncMutation = useMutation({
     mutationFn: async () => {
       const res = await base44.functions.invoke('processIncomingMail', {});
@@ -91,6 +88,9 @@ export default function MailRoom() {
         description: count > 0 ? `נוספו ${count} מיילים חדשים.` : "לא נמצאו מיילים חדשים." 
       });
       
+      setLastSyncTime(new Date());
+      setNextSyncIn(300); // איפוס הטיימר
+      
       queryClient.invalidateQueries(['mails']);
       setTimeout(() => refetch(), 500);
     },
@@ -103,6 +103,40 @@ export default function MailRoom() {
       });
     }
   });
+
+  // ✅ סנכרון אוטומטי כל 5 דקות
+  useEffect(() => {
+    // סנכרון ראשוני כשהעמוד נטען
+    console.log('[MailRoom] Initial auto-sync on page load');
+    syncMutation.mutate();
+
+    // סנכרון מחזורי כל 5 דקות
+    const syncInterval = setInterval(() => {
+      console.log('[MailRoom] Auto-syncing from Gmail...');
+      syncMutation.mutate();
+    }, 5 * 60 * 1000); // 5 דקות
+
+    return () => clearInterval(syncInterval);
+  }, []); // ריק - רק בטעינה ראשונה
+
+  // ✅ טיימר חזותי - ספירה לאחור
+  useEffect(() => {
+    const countdown = setInterval(() => {
+      setNextSyncIn(prev => {
+        if (prev <= 1) return 300; // איפוס ל-5 דקות
+        return prev - 1;
+      });
+    }, 1000); // כל שנייה
+
+    return () => clearInterval(countdown);
+  }, []);
+
+  // פורמט הטיימר (MM:SS)
+  const formatCountdown = (seconds) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
+  };
 
   const columns = [
     {
@@ -154,27 +188,59 @@ export default function MailRoom() {
     <div className="space-y-6">
       <PageHeader title="חדר דואר" description="ניהול ומיון דואר נכנס." />
       
-      {/* כפתורי פעולה */}
-      <div className="flex justify-end gap-2 p-2 bg-slate-50 dark:bg-slate-900 rounded-md border">
-        <Button 
-          className="bg-blue-600 hover:bg-blue-700 text-white" 
-          size="sm" 
-          onClick={() => syncMutation.mutate()} 
-          disabled={syncMutation.isPending}
-        >
-          {syncMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin ml-2"/> : <Download className="w-4 h-4 ml-2"/>}
-          סנכרן מ-Gmail
-        </Button>
-        
-        <Button 
-          variant="outline" 
-          size="sm" 
-          onClick={handleRefresh}
-          disabled={isLoading || isRefetching}
-        >
-          {(isLoading || isRefetching) ? <Loader2 className="w-4 h-4 ml-2 animate-spin" /> : <RefreshCw className="w-4 h-4 ml-2" />}
-          רענן טבלה
-        </Button>
+      {/* כפתורי פעולה + אינדיקטור סנכרון */}
+      <div className="flex justify-between items-center p-4 bg-slate-50 dark:bg-slate-900 rounded-md border">
+        <div className="flex items-center gap-3">
+          {/* אינדיקטור סנכרון */}
+          <div className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-400">
+            <Clock className="w-4 h-4" />
+            <span>
+              {syncMutation.isPending ? (
+                <span className="text-blue-600 font-medium">מסנכרן...</span>
+              ) : (
+                <>
+                  סנכרון הבא בעוד: <span className="font-mono font-bold">{formatCountdown(nextSyncIn)}</span>
+                </>
+              )}
+            </span>
+          </div>
+          
+          {lastSyncTime && (
+            <span className="text-xs text-slate-500">
+              סנכרון אחרון: {format(lastSyncTime, 'HH:mm', { locale: he })}
+            </span>
+          )}
+        </div>
+
+        <div className="flex gap-2">
+          <Button 
+            className="bg-blue-600 hover:bg-blue-700 text-white" 
+            size="sm" 
+            onClick={() => syncMutation.mutate()} 
+            disabled={syncMutation.isPending}
+          >
+            {syncMutation.isPending ? (
+              <Loader2 className="w-4 h-4 animate-spin ml-2"/>
+            ) : (
+              <Download className="w-4 h-4 ml-2"/>
+            )}
+            סנכרן עכשיו
+          </Button>
+          
+          <Button 
+            variant="outline" 
+            size="sm" 
+            onClick={handleRefresh}
+            disabled={isLoading || isRefetching}
+          >
+            {(isLoading || isRefetching) ? (
+              <Loader2 className="w-4 h-4 ml-2 animate-spin" />
+            ) : (
+              <RefreshCw className="w-4 h-4 ml-2" />
+            )}
+            רענן טבלה
+          </Button>
+        </div>
       </div>
 
       {/* סטטיסטיקה */}
