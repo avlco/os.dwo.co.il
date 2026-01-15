@@ -1,7 +1,7 @@
 // @ts-nocheck
 import { createClient, createClientFromRequest } from 'npm:@base44/sdk@0.8.6';
 
-// ===== פונקציות הצפנה (ללא שינוי) =====
+// ===== פונקציות הצפנה =====
 async function getCryptoKey() {
   const envKey = Deno.env.get("ENCRYPTION_KEY");
   if (!envKey) throw new Error("ENCRYPTION_KEY is missing");
@@ -56,7 +56,12 @@ function getProviderConfig(providerRaw) {
 }
 
 async function refreshGoogleToken(refreshToken, connectionId, adminBase44) {
-  console.log("[Refresh] Starting token refresh...");
+  // ✅ הוספת בדיקה
+  if (!connectionId) {
+    throw new Error("connectionId is required for token refresh");
+  }
+  
+  console.log(`[Refresh] Starting token refresh for connection ${connectionId}...`);
   const config = getProviderConfig('google');
   
   const res = await fetch('https://oauth2.googleapis.com/token', {
@@ -133,7 +138,6 @@ function extractEmailBody(payload) {
   };
 }
 
-// ✅ תיקון: הוספת URL להורדת קבצים
 function extractAttachments(payload, messageId) {
   const attachments = [];
   
@@ -144,7 +148,6 @@ function extractAttachments(payload, messageId) {
         mimeType: part.mimeType || 'application/octet-stream',
         size: part.body.size || 0,
         attachmentId: part.body.attachmentId,
-        // ✅ שמירת messageId כדי לבנות URL מאוחר יותר
         messageId: messageId
       });
     }
@@ -160,6 +163,7 @@ function extractAttachments(payload, messageId) {
   return attachments;
 }
 
+// ✅ תיקון: הוספת connectionId בחתימת הפונקציה
 async function fetchGmailMessages(accessToken, refreshToken, connectionId, adminBase44, limit = 500) {
   console.log(`[Gmail] Fetching up to ${limit} messages...`);
   
@@ -175,6 +179,7 @@ async function fetchGmailMessages(accessToken, refreshToken, connectionId, admin
       throw new Error("Token expired and no refresh token available");
     }
     console.log("[Gmail] Token expired, refreshing...");
+    // ✅ תיקון: כעת connectionId מועבר כראוי
     currentToken = await refreshGoogleToken(refreshToken, connectionId, adminBase44);
     listRes = await fetch(listUrl, {
       headers: { Authorization: `Bearer ${currentToken}` }
@@ -227,8 +232,6 @@ async function fetchGmailMessages(accessToken, refreshToken, connectionId, admin
       if (senderName === senderEmail) senderName = null;
       
       const body = extractEmailBody(detailData.payload);
-      
-      // ✅ תיקון: העברת messageId
       const attachments = extractAttachments(detailData.payload, msg.id);
       
       emails.push({
@@ -243,7 +246,6 @@ async function fetchGmailMessages(accessToken, refreshToken, connectionId, admin
         source: 'gmail',
         body_plain: body.plain || detailData.snippet || "",
         body_html: body.html || null,
-        // ✅ תיקון: שמירת קבצים עם כל הפרטים
         attachments: attachments.length > 0 ? attachments : null,
         metadata: {
           labels: detailData.labelIds || [],
@@ -323,10 +325,11 @@ Deno.serve(async (req) => {
       throw new Error("Failed to decrypt access token");
     }
 
+    // ✅ תיקון: העברת connection.id כפרמטר
     const newEmails = await fetchGmailMessages(
       accessToken, 
       refreshToken, 
-      connection.id, 
+      connection.id,  // ✅ כאן התיקון המרכזי!
       adminBase44,
       500
     );
