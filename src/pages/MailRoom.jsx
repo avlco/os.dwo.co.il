@@ -23,69 +23,84 @@ export default function MailRoom() {
   const [activeTab, setActiveTab] = useState('inbox');
   const pageSize = 50;
 
-  // === שליפת נתונים (תוקן לראייה מערכתית) ===
+  // ✅ שליפת נתונים - גרסה מתוקנת
   const { data, isLoading, isRefetching, refetch } = useQuery({
     queryKey: ['mails', activeTab, page],
     queryFn: async () => {
-      // מיפוי הטאב לסטטוס ב-DB
-      const statusMap = {
-        'inbox': 'pending',
-        'processed': 'processed',
-        'archived': 'archived'
-      };
-
-      // שליפה עם פרמטרים מפורשים כדי למנוע סינונים נסתרים
-      const response = await base44.entities.Mail.list({
-        where: { 
-            processing_status: statusMap[activeTab] 
-            // הערה: לא מוסיפים כאן user_id כדי לראות את כל המיילים המשרדיים
-        },
-        page: page,
-        limit: pageSize,
-        order: { received_at: 'desc' } // חדש ביותר למעלה
-      });
-      
-      return response;
+      try {
+        // שליפת כל המיילים (Base44 SDK תקני)
+        const allMails = await base44.entities.Mail.list('-received_at', 1000);
+        
+        // המרה למערך
+        const mailsArray = Array.isArray(allMails) ? allMails : (allMails.data || []);
+        
+        // סינון לפי סטטוס
+        const statusMap = {
+          'inbox': 'pending',
+          'processed': 'processed',
+          'archived': 'archived'
+        };
+        
+        const filteredMails = mailsArray.filter(
+          mail => mail.processing_status === statusMap[activeTab]
+        );
+        
+        // Pagination בצד קליינט
+        const startIndex = (page - 1) * pageSize;
+        const endIndex = startIndex + pageSize;
+        const paginatedMails = filteredMails.slice(startIndex, endIndex);
+        
+        return {
+          data: paginatedMails,
+          total: filteredMails.length,
+          totalPages: Math.ceil(filteredMails.length / pageSize)
+        };
+      } catch (error) {
+        console.error('[MailRoom] Failed to fetch mails:', error);
+        toast({ 
+          variant: "destructive", 
+          title: "שגיאה בשליפת מיילים", 
+          description: error.message 
+        });
+        return { data: [], total: 0, totalPages: 0 };
+      }
     },
     placeholderData: keepPreviousData,
-    staleTime: 1000 * 60 * 1, // Cache ל-1 דקה
+    staleTime: 1000 * 60 * 1,
   });
 
-  // פעולת הרענן הידנית
   const handleRefresh = async () => {
-      await refetch();
-      toast({ description: "הטבלה רועננה בהצלחה" });
+    await refetch();
+    toast({ description: "הטבלה רועננה בהצלחה" });
   };
 
-  // === פעולת הסנכרון (מפעילה את ה-Function בשרת) ===
+  // ✅ פעולת סנכרון - גרסה מתוקנת
   const syncMutation = useMutation({
     mutationFn: async () => {
-        const res = await base44.functions.invoke('processIncomingMail', {});
-        
-        // טיפול בשגיאות שמגיעות בתוך אובייקט ה-data או ה-error
-        if (res.error) throw new Error(res.error.message || "Unknown error");
-        if (res.data && res.data.error) throw new Error(res.data.error);
-        
-        return res.data;
+      const res = await base44.functions.invoke('processIncomingMail', {});
+      
+      if (res.error) throw new Error(res.error.message || "Unknown error");
+      if (res.data && res.data.error) throw new Error(res.data.error);
+      
+      return res.data;
     },
     onSuccess: (data) => {
-        const count = data?.synced || 0;
-        toast({ 
-            title: "סנכרון הושלם", 
-            description: count > 0 ? `נוספו ${count} מיילים חדשים.` : "לא נמצאו מיילים חדשים." 
-        });
-        
-        // רענון הנתונים בטבלה
-        queryClient.invalidateQueries(['mails']);
-        setTimeout(() => refetch(), 500);
+      const count = data?.synced || 0;
+      toast({ 
+        title: "סנכרון הושלם", 
+        description: count > 0 ? `נוספו ${count} מיילים חדשים.` : "לא נמצאו מיילים חדשים." 
+      });
+      
+      queryClient.invalidateQueries(['mails']);
+      setTimeout(() => refetch(), 500);
     },
     onError: (err) => {
-        console.error("Sync failed:", err);
-        toast({ 
-            variant: "destructive", 
-            title: "שגיאת סנכרון", 
-            description: err.message || "אנא וודא שהמערכת מחוברת לגוגל בהגדרות."
-        });
+      console.error("[MailRoom] Sync failed:", err);
+      toast({ 
+        variant: "destructive", 
+        title: "שגיאת סנכרון", 
+        description: err.message || "אנא וודא שהמערכת מחוברת לגוגל בהגדרות."
+      });
     }
   });
 
@@ -100,9 +115,9 @@ export default function MailRoom() {
     },
     { accessorKey: "sender_email", header: "שולח" },
     { 
-        accessorKey: "subject", 
-        header: "נושא", 
-        cell: ({ row }) => <span className="font-medium">{row.getValue("subject")}</span> 
+      accessorKey: "subject", 
+      header: "נושא", 
+      cell: ({ row }) => <span className="font-medium">{row.getValue("subject")}</span> 
     },
     {
       accessorKey: "processing_status",
@@ -110,17 +125,28 @@ export default function MailRoom() {
       cell: ({ row }) => {
         const status = row.getValue("processing_status");
         const colors = { 
-            pending: "bg-blue-100 text-blue-800", 
-            processed: "bg-green-100 text-green-800", 
-            archived: "bg-gray-100 text-gray-800"
+          pending: "bg-blue-100 text-blue-800", 
+          processed: "bg-green-100 text-green-800", 
+          archived: "bg-gray-100 text-gray-800"
         };
         const labels = { pending: "חדש", processed: "טופל", archived: "בארכיון" };
         return <Badge variant="secondary" className={colors[status] || ""}>{labels[status] || status}</Badge>;
       },
     },
     {
-        id: "actions",
-        cell: ({ row }) => <Button variant="ghost" size="sm" onClick={() => navigate(createPageUrl(`MailView?id=${row.original.id}`))}>צפה</Button>
+      id: "actions",
+      cell: ({ row }) => (
+        <Button 
+          variant="ghost" 
+          size="sm" 
+          onClick={(e) => {
+            e.stopPropagation();
+            navigate(createPageUrl(`MailView?id=${row.original.id}`));
+          }}
+        >
+          צפה
+        </Button>
+      )
     }
   ];
 
@@ -130,25 +156,25 @@ export default function MailRoom() {
       
       {/* כפתורי פעולה */}
       <div className="flex justify-end gap-2 p-2 bg-slate-50 dark:bg-slate-900 rounded-md border">
-          <Button 
-            className="bg-blue-600 hover:bg-blue-700 text-white" 
-            size="sm" 
-            onClick={() => syncMutation.mutate()} 
-            disabled={syncMutation.isPending}
-          >
-            {syncMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin ml-2"/> : <Download className="w-4 h-4 ml-2"/>}
-            סנכרן מ-Gmail
-          </Button>
-          
-          <Button 
-            variant="outline" 
-            size="sm" 
-            onClick={handleRefresh}
-            disabled={isLoading || isRefetching}
-          >
-            {(isLoading || isRefetching) ? <Loader2 className="w-4 h-4 ml-2 animate-spin" /> : <RefreshCw className="w-4 h-4 ml-2" />}
-            רענן טבלה
-          </Button>
+        <Button 
+          className="bg-blue-600 hover:bg-blue-700 text-white" 
+          size="sm" 
+          onClick={() => syncMutation.mutate()} 
+          disabled={syncMutation.isPending}
+        >
+          {syncMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin ml-2"/> : <Download className="w-4 h-4 ml-2"/>}
+          סנכרן מ-Gmail
+        </Button>
+        
+        <Button 
+          variant="outline" 
+          size="sm" 
+          onClick={handleRefresh}
+          disabled={isLoading || isRefetching}
+        >
+          {(isLoading || isRefetching) ? <Loader2 className="w-4 h-4 ml-2 animate-spin" /> : <RefreshCw className="w-4 h-4 ml-2" />}
+          רענן טבלה
+        </Button>
       </div>
 
       {/* סטטיסטיקה */}
@@ -159,10 +185,9 @@ export default function MailRoom() {
             <Mail className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-              {/* מציג את סך כל הרשומות בטאב הנוכחי אם הוא inbox */}
-              <div className="text-2xl font-bold">
-                  {activeTab === 'inbox' ? (data?.total || data?.data?.length || 0) : '--'}
-              </div>
+            <div className="text-2xl font-bold">
+              {activeTab === 'inbox' ? (data?.total || 0) : '--'}
+            </div>
           </CardContent>
         </Card>
         <Card className="dark:bg-slate-800">
