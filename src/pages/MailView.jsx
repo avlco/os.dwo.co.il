@@ -21,7 +21,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 export default function MailView() {
   const queryClient = useQueryClient();
   const urlParams = new URLSearchParams(window.location.search);
-  const mailId = urlParams.get('mailId');
+  const mailId = urlParams.get('id');
 
   const { data: mail, isLoading } = useQuery({
     queryKey: ['mail', mailId],
