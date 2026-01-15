@@ -64,7 +64,29 @@ export default function MailView() {
 
   const currentMail = mail?.[0];
 
-  // ✅ פונקציה להורדת קובץ מצורף
+  // ✅ Debug: הצג מידע על הקבצים המצורפים
+  React.useEffect(() => {
+    if (currentMail) {
+      console.log('=== MailView Debug ===');
+      console.log('Mail ID:', currentMail.id);
+      console.log('Subject:', currentMail.subject);
+      console.log('metadata:', currentMail.metadata);
+      console.log('attachments:', currentMail.attachments);
+      
+      if (currentMail.attachments) {
+        console.log(`Found ${currentMail.attachments.length} attachments:`);
+        currentMail.attachments.forEach((att, idx) => {
+          console.log(`  ${idx + 1}. ${att.filename}`);
+          console.log(`     messageId: ${att.messageId || '❌ MISSING'}`);
+          console.log(`     attachmentId: ${att.attachmentId || '❌ MISSING'}`);
+          console.log(`     size: ${att.size}`);
+        });
+      } else {
+        console.log('No attachments array found');
+      }
+    }
+  }, [currentMail]);
+
   const handleDownloadAttachment = async (attachment) => {
     try {
       toast({ description: "מוריד קובץ..." });
@@ -83,7 +105,6 @@ export default function MailView() {
         throw new Error('No data received from server');
       }
 
-      // המרת Base64 ל-Blob
       const base64Data = response.data.data.replace(/-/g, '+').replace(/_/g, '/');
       const binaryString = atob(base64Data);
       const bytes = new Uint8Array(binaryString.length);
@@ -95,14 +116,12 @@ export default function MailView() {
       const blob = new Blob([bytes], { type: attachment.mimeType });
       const url = window.URL.createObjectURL(blob);
       
-      // יצירת קישור להורדה
       const a = document.createElement('a');
       a.href = url;
       a.download = attachment.filename;
       document.body.appendChild(a);
       a.click();
       
-      // ניקוי
       document.body.removeChild(a);
       window.URL.revokeObjectURL(url);
 
@@ -118,7 +137,6 @@ export default function MailView() {
     }
   };
 
-  // פורמט גודל קובץ
   const formatBytes = (bytes) => {
     if (!bytes || bytes === 0) return '0 B';
     const k = 1024;
@@ -127,7 +145,6 @@ export default function MailView() {
     return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i];
   };
 
-  // מצב טעינה
   if (isLoading) {
     return (
       <div className="space-y-6 p-6">
@@ -137,7 +154,6 @@ export default function MailView() {
     );
   }
 
-  // מייל לא נמצא
   if (!currentMail) {
     return (
       <div className="flex flex-col items-center justify-center py-16">
@@ -156,7 +172,6 @@ export default function MailView() {
 
   return (
     <div className="space-y-6 p-6">
-      {/* Header */}
       <div className="flex items-center gap-4">
         <Link to={createPageUrl('MailRoom')}>
           <Button variant="ghost" size="icon" className="rounded-xl">
@@ -185,7 +200,6 @@ export default function MailView() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-        {/* Sidebar - פרטים */}
         <div className="lg:col-span-1 space-y-4">
           <Card className="dark:bg-slate-800">
             <CardHeader className="pb-3">
@@ -233,7 +247,6 @@ export default function MailView() {
             </CardContent>
           </Card>
 
-          {/* AI Suggestions */}
           {currentMail.inferred_case_id && (
             <Card className="dark:bg-slate-800">
               <CardHeader className="pb-3">
@@ -255,10 +268,8 @@ export default function MailView() {
           )}
         </div>
 
-        {/* Main Content - תוכן המייל */}
         <div className="lg:col-span-3">
           <Card className="dark:bg-slate-800">
-            {/* Mail Header */}
             <CardHeader className="border-b dark:border-slate-700">
               <div className="flex items-start gap-3">
                 <div className="w-10 h-10 rounded-xl bg-blue-100 dark:bg-blue-900 flex items-center justify-center flex-shrink-0">
@@ -297,8 +308,8 @@ export default function MailView() {
               </div>
             </CardHeader>
 
-            {/* ✅ Attachments Section - מתוקן */}
-            {currentMail.attachments && currentMail.attachments.length > 0 && (
+            {/* ✅ Attachments Section - עם Debug */}
+            {currentMail.attachments && currentMail.attachments.length > 0 ? (
               <div className="p-6 border-b dark:border-slate-700 bg-slate-50 dark:bg-slate-900">
                 <div className="flex items-center gap-2 mb-3">
                   <Paperclip className="w-4 h-4 text-slate-500" />
@@ -323,6 +334,11 @@ export default function MailView() {
                           <p className="text-xs text-slate-500 dark:text-slate-400">
                             {formatBytes(att.size)}
                           </p>
+                          {!canDownload && (
+                            <p className="text-xs text-red-500 mt-1">
+                              Debug: messageId={att.messageId ? '✓' : '✗'}, attachmentId={att.attachmentId ? '✓' : '✗'}
+                            </p>
+                          )}
                         </div>
                         {canDownload ? (
                           <Button 
@@ -335,16 +351,28 @@ export default function MailView() {
                             <Download className="w-4 h-4" />
                           </Button>
                         ) : (
-                          <span className="text-xs text-slate-400 px-2">לא זמין</span>
+                          <span className="text-xs text-red-500 px-2 font-medium">
+                            {!att.messageId ? 'חסר messageId' : 'חסר attachmentId'}
+                          </span>
                         )}
                       </div>
                     );
                   })}
                 </div>
               </div>
+            ) : (
+              currentMail.metadata?.has_attachments && (
+                <div className="p-6 border-b dark:border-slate-700 bg-yellow-50 dark:bg-yellow-900/20">
+                  <p className="text-sm text-yellow-800 dark:text-yellow-200">
+                    ⚠️ המייל מסומן כבעל קבצים מצורפים, אבל הם לא נמצאו במאגר.
+                  </p>
+                  <p className="text-xs text-yellow-600 dark:text-yellow-400 mt-1">
+                    נסה לעשות סנכרון מחדש מדף Mail Room.
+                  </p>
+                </div>
+              )
             )}
 
-            {/* Mail Body */}
             <CardContent className="pt-6">
               <ScrollArea className="h-[600px]">
                 {currentMail.body_html ? (
