@@ -1,7 +1,7 @@
 // @ts-nocheck
 import { createClient, createClientFromRequest } from 'npm:@base44/sdk@0.8.6';
 
-// ===== פונקציות הצפנה =====
+// ===== פונקציות הצפנה (ללא שינוי) =====
 async function getCryptoKey() {
   const envKey = Deno.env.get("ENCRYPTION_KEY");
   if (!envKey) throw new Error("ENCRYPTION_KEY is missing");
@@ -44,7 +44,6 @@ async function encrypt(text) {
   }
 }
 
-// ===== פונקציות Google OAuth =====
 function getProviderConfig(providerRaw) {
   const provider = providerRaw.toLowerCase().trim();
   if (provider === 'google') {
@@ -94,7 +93,6 @@ async function refreshGoogleToken(refreshToken, connectionId, adminBase44) {
 
 // ===== פונקציות עיבוד מיילים =====
 
-// פענוח Base64 מ-Gmail (URL-safe)
 function decodeBase64(data) {
   if (!data) return null;
   try {
@@ -106,14 +104,11 @@ function decodeBase64(data) {
   }
 }
 
-// חילוץ גוף המייל (טקסט רגיל ו-HTML)
 function extractEmailBody(payload) {
   let plainText = null;
   let htmlText = null;
   
-  // פונקציה רקורסיבית לחיפוש בכל ה-parts
   function searchParts(part) {
-    // אם יש body ישיר
     if (part.body?.data) {
       const decoded = decodeBase64(part.body.data);
       if (part.mimeType === 'text/plain' && !plainText) {
@@ -123,7 +118,6 @@ function extractEmailBody(payload) {
       }
     }
     
-    // חיפוש רקורסיבי ב-parts מקוננים
     if (part.parts) {
       for (const subPart of part.parts) {
         searchParts(subPart);
@@ -139,22 +133,22 @@ function extractEmailBody(payload) {
   };
 }
 
-// חילוץ קבצים מצורפים
-function extractAttachments(payload) {
+// ✅ תיקון: הוספת URL להורדת קבצים
+function extractAttachments(payload, messageId) {
   const attachments = [];
   
   function searchParts(part) {
-    // קובץ מצורף = יש filename ו-attachmentId
     if (part.filename && part.body?.attachmentId) {
       attachments.push({
         filename: part.filename,
         mimeType: part.mimeType || 'application/octet-stream',
         size: part.body.size || 0,
-        attachmentId: part.body.attachmentId
+        attachmentId: part.body.attachmentId,
+        // ✅ שמירת messageId כדי לבנות URL מאוחר יותר
+        messageId: messageId
       });
     }
     
-    // רקורסיה
     if (part.parts) {
       for (const subPart of part.parts) {
         searchParts(subPart);
@@ -166,11 +160,9 @@ function extractAttachments(payload) {
   return attachments;
 }
 
-// ✅ משיכת מיילים מ-Gmail עם כל הפרטים
 async function fetchGmailMessages(accessToken, refreshToken, connectionId, adminBase44, limit = 500) {
   console.log(`[Gmail] Fetching up to ${limit} messages...`);
   
-  // ✅ שינוי: הסרת q=in:inbox כדי לקבל את כל המיילים
   const listUrl = `https://gmail.googleapis.com/gmail/v1/users/me/messages?maxResults=${limit}`;
   
   let currentToken = accessToken;
@@ -178,7 +170,6 @@ async function fetchGmailMessages(accessToken, refreshToken, connectionId, admin
     headers: { Authorization: `Bearer ${currentToken}` }
   });
   
-  // טיפול בתוקף Token
   if (listRes.status === 401) {
     if (!refreshToken || refreshToken === "MISSING") {
       throw new Error("Token expired and no refresh token available");
@@ -204,7 +195,6 @@ async function fetchGmailMessages(accessToken, refreshToken, connectionId, admin
   console.log(`[Gmail] Found ${listData.messages.length} messages, fetching details...`);
   const emails = [];
   
-  // שליפת פרטי כל מייל
   for (let i = 0; i < listData.messages.length; i++) {
     const msg = listData.messages[i];
     
@@ -222,28 +212,24 @@ async function fetchGmailMessages(accessToken, refreshToken, connectionId, admin
       const detailData = await detailRes.json();
       const headers = detailData.payload?.headers || [];
       
-      // חילוץ Headers
       const subject = headers.find(h => h.name === 'Subject')?.value || '(No Subject)';
       const from = headers.find(h => h.name === 'From')?.value || 'Unknown';
       const to = headers.find(h => h.name === 'To')?.value || '';
       const dateHeader = headers.find(h => h.name === 'Date')?.value;
       
-      // חילוץ אימייל השולח
       let senderEmail = from;
       const emailMatch = from.match(/<(.+)>/);
       if (emailMatch) {
         senderEmail = emailMatch[1];
       }
       
-      // חילוץ שם השולח
       let senderName = from.replace(/<.+>/, '').trim();
       if (senderName === senderEmail) senderName = null;
       
-      // ✅ חילוץ גוף המייל (טקסט + HTML)
       const body = extractEmailBody(detailData.payload);
       
-      // ✅ חילוץ קבצים מצורפים
-      const attachments = extractAttachments(detailData.payload);
+      // ✅ תיקון: העברת messageId
+      const attachments = extractAttachments(detailData.payload, msg.id);
       
       emails.push({
         subject,
@@ -257,6 +243,7 @@ async function fetchGmailMessages(accessToken, refreshToken, connectionId, admin
         source: 'gmail',
         body_plain: body.plain || detailData.snippet || "",
         body_html: body.html || null,
+        // ✅ תיקון: שמירת קבצים עם כל הפרטים
         attachments: attachments.length > 0 ? attachments : null,
         metadata: {
           labels: detailData.labelIds || [],
@@ -265,7 +252,6 @@ async function fetchGmailMessages(accessToken, refreshToken, connectionId, admin
         }
       });
       
-      // לוג כל 50 מיילים
       if ((i + 1) % 50 === 0) {
         console.log(`[Gmail] Processed ${i + 1}/${listData.messages.length} messages`);
       }
@@ -295,7 +281,6 @@ Deno.serve(async (req) => {
   try {
     console.log("[Sync] Starting mail sync process...");
     
-    // אימות משתמש
     const base44 = createClientFromRequest(req);
     const user = await base44.auth.me();
     
@@ -308,10 +293,8 @@ Deno.serve(async (req) => {
     
     console.log(`[Sync] Authenticated user: ${user.email || user.id}`);
 
-    // קליינט אדמין לעדכון Tokens
     const adminBase44 = createClient({ useServiceRole: true });
 
-    // חיפוש חיבור Google
     console.log("[Sync] Looking for Google connection...");
     const allConnections = await base44.entities.IntegrationConnection.list('-created_at', 100);
     const items = Array.isArray(allConnections) ? allConnections : (allConnections.data || []);
@@ -331,7 +314,6 @@ Deno.serve(async (req) => {
 
     console.log(`[Sync] Connection found (ID: ${connection.id})`);
 
-    // פענוח Tokens
     const accessToken = await decrypt(connection.access_token_encrypted);
     const refreshToken = connection.refresh_token_encrypted 
       ? await decrypt(connection.refresh_token_encrypted) 
@@ -341,16 +323,14 @@ Deno.serve(async (req) => {
       throw new Error("Failed to decrypt access token");
     }
 
-    // ✅ משיכת מיילים (עד 500)
     const newEmails = await fetchGmailMessages(
       accessToken, 
       refreshToken, 
       connection.id, 
       adminBase44,
-      500  // ✅ הגדלנו מ-20 ל-500
+      500
     );
     
-    // שמירת מיילים חדשים בלבד
     console.log("[Sync] Checking for new emails...");
     const allExistingMails = await base44.entities.Mail.list('-received_at', 2000);
     const existingMailItems = Array.isArray(allExistingMails) 
