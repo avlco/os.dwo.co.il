@@ -4,6 +4,7 @@ import { base44 } from '@/api/base44Client';
 import { Link } from 'react-router-dom';
 import { createPageUrl } from '../utils';
 import { format } from 'date-fns';
+import { he } from 'date-fns/locale';
 import StatusBadge from '../components/ui/StatusBadge';
 import {
   ArrowRight,
@@ -11,21 +12,27 @@ import {
   Paperclip,
   FileText,
   User,
-  Calendar
+  Calendar,
+  Download,
+  ExternalLink
 } from 'lucide-react';
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import { ScrollArea } from "@/components/ui/scroll-area";
 
 export default function MailView() {
   const queryClient = useQueryClient();
   const urlParams = new URLSearchParams(window.location.search);
-  const mailId = urlParams.get('id');
+  const mailId = urlParams.get('id');  // ✅ תיקון: id במקום mailId
 
   const { data: mail, isLoading } = useQuery({
     queryKey: ['mail', mailId],
-    queryFn: () => base44.entities.Mail.filter({ id: mailId }),
+    queryFn: async () => {
+      const result = await base44.entities.Mail.filter({ id: mailId });
+      return Array.isArray(result) ? result : [result];
+    },
     enabled: !!mailId,
   });
 
@@ -34,39 +41,47 @@ export default function MailView() {
       mail_id: mailData.id,
       title: `טיפול במייל: ${mailData.subject}`,
       description: `מייל מ-${mailData.sender_name || mailData.sender_email}`,
-      task_type: 'custom',
+      task_type: 'mail_processing',
       status: 'pending',
       priority: mailData.priority || 'medium',
       case_id: mailData.related_case_id,
       client_id: mailData.related_client_id,
     }),
-    onSuccess: (newTask) => {
-      // Update mail status
-      base44.entities.Mail.update(mailId, { processing_status: 'processed', task_id: newTask.id });
+    onSuccess: async (newTask) => {
+      // עדכון סטטוס המייל
+      await base44.entities.Mail.update(mailId, { 
+        processing_status: 'processed', 
+        task_id: newTask.id 
+      });
+      
       queryClient.invalidateQueries(['mail', mailId]);
       queryClient.invalidateQueries(['tasks']);
-      // Navigate to workbench
+      
+      // ניווט ל-Workbench
       window.location.href = createPageUrl(`Workbench?taskId=${newTask.id}`);
     },
   });
 
   const currentMail = mail?.[0];
 
+  // מצב טעינה
   if (isLoading) {
     return (
-      <div className="space-y-6">
+      <div className="space-y-6 p-6">
         <Skeleton className="h-10 w-48" />
         <Skeleton className="h-96 w-full" />
       </div>
     );
   }
 
+  // מייל לא נמצא
   if (!currentMail) {
     return (
-      <div className="text-center py-16">
-        <p className="text-slate-500">מייל לא נמצא</p>
+      <div className="flex flex-col items-center justify-center py-16">
+        <Mail className="w-16 h-16 text-slate-300 mb-4" />
+        <p className="text-lg text-slate-500 mb-2">מייל לא נמצא</p>
         <Link to={createPageUrl('MailRoom')}>
-          <Button variant="link" className="mt-4">חזרה לחדר דואר</Button>
+          <Button variant="link">חזרה לחדר דואר</Button>
         </Link>
       </div>
     );
@@ -76,8 +91,17 @@ export default function MailView() {
     createTaskMutation.mutate(currentMail);
   };
 
+  // פורמט גודל קובץ
+  const formatBytes = (bytes) => {
+    if (!bytes || bytes === 0) return '0 B';
+    const k = 1024;
+    const sizes = ['B', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i];
+  };
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 p-6">
       {/* Header */}
       <div className="flex items-center gap-4">
         <Link to={createPageUrl('MailRoom')}>
@@ -86,12 +110,14 @@ export default function MailView() {
           </Button>
         </Link>
         <div className="flex-1">
-          <h1 className="text-2xl font-bold text-slate-800">צפייה במייל</h1>
+          <h1 className="text-2xl font-bold text-slate-800 dark:text-slate-100">
+            צפייה במייל
+          </h1>
         </div>
         {currentMail.processing_status !== 'processed' && (
           <Button 
             onClick={handleCreateTask}
-            className="bg-slate-800 hover:bg-slate-700 gap-2"
+            className="bg-blue-600 hover:bg-blue-700 gap-2"
             disabled={createTaskMutation.isPending}
           >
             <FileText className="w-4 h-4" />
@@ -101,46 +127,64 @@ export default function MailView() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-        {/* Sidebar */}
+        {/* Sidebar - פרטים */}
         <div className="lg:col-span-1 space-y-4">
-          <Card>
+          <Card className="dark:bg-slate-800">
             <CardHeader className="pb-3">
-              <h3 className="font-semibold text-slate-800">פרטים</h3>
+              <h3 className="font-semibold text-slate-800 dark:text-slate-100">
+                פרטים
+              </h3>
             </CardHeader>
             <CardContent className="space-y-3">
               <div>
-                <p className="text-xs text-slate-500 mb-1">סטטוס עיבוד</p>
+                <p className="text-xs text-slate-500 dark:text-slate-400 mb-1">
+                  סטטוס עיבוד
+                </p>
                 <StatusBadge status={currentMail.processing_status} />
               </div>
+              
               {currentMail.priority && (
                 <div>
-                  <p className="text-xs text-slate-500 mb-1">עדיפות</p>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mb-1">
+                    עדיפות
+                  </p>
                   <StatusBadge status={currentMail.priority} />
                 </div>
               )}
-              {currentMail.category && (
-                <div>
-                  <p className="text-xs text-slate-500 mb-1">קטגוריה</p>
-                  <Badge variant="outline">{currentMail.category}</Badge>
-                </div>
-              )}
+              
               <div>
-                <p className="text-xs text-slate-500 mb-1">תאריך קבלה</p>
-                <div className="flex items-center gap-2 text-sm text-slate-700">
+                <p className="text-xs text-slate-500 dark:text-slate-400 mb-1">
+                  תאריך קבלה
+                </p>
+                <div className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-300">
                   <Calendar className="w-3 h-3" />
-                  {format(new Date(currentMail.received_at), 'dd/MM/yyyy HH:mm')}
+                  {format(new Date(currentMail.received_at), 'dd/MM/yyyy HH:mm', { locale: he })}
                 </div>
               </div>
+
+              {currentMail.source && (
+                <div>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mb-1">
+                    מקור
+                  </p>
+                  <Badge variant="outline" className="capitalize">
+                    {currentMail.source}
+                  </Badge>
+                </div>
+              )}
             </CardContent>
           </Card>
 
+          {/* AI Suggestions */}
           {currentMail.inferred_case_id && (
-            <Card>
+            <Card className="dark:bg-slate-800">
               <CardHeader className="pb-3">
-                <h3 className="font-semibold text-slate-800">הצעת AI</h3>
+                <h3 className="font-semibold text-slate-800 dark:text-slate-100">
+                  הצעת AI
+                </h3>
               </CardHeader>
               <CardContent>
-                <p className="text-sm text-slate-600">
+                <p className="text-sm text-slate-600 dark:text-slate-400">
                   תיק מוצע: {currentMail.inferred_case_id}
                 </p>
                 {currentMail.inferred_confidence && (
@@ -153,28 +197,38 @@ export default function MailView() {
           )}
         </div>
 
-        {/* Main Content */}
+        {/* Main Content - תוכן המייל */}
         <div className="lg:col-span-3">
-          <Card>
-            <CardHeader className="border-b">
+          <Card className="dark:bg-slate-800">
+            {/* Mail Header */}
+            <CardHeader className="border-b dark:border-slate-700">
               <div className="flex items-start gap-3">
-                <div className="w-10 h-10 rounded-xl bg-blue-100 flex items-center justify-center flex-shrink-0">
-                  <Mail className="w-5 h-5 text-blue-600" />
+                <div className="w-10 h-10 rounded-xl bg-blue-100 dark:bg-blue-900 flex items-center justify-center flex-shrink-0">
+                  <Mail className="w-5 h-5 text-blue-600 dark:text-blue-400" />
                 </div>
-                <div className="flex-1">
-                  <h2 className="text-lg font-semibold text-slate-800">{currentMail.subject}</h2>
+                <div className="flex-1 min-w-0">
+                  <h2 className="text-lg font-semibold text-slate-800 dark:text-slate-100 break-words">
+                    {currentMail.subject}
+                  </h2>
                   <div className="flex items-center gap-2 mt-2">
                     <User className="w-4 h-4 text-slate-400" />
-                    <span className="text-sm text-slate-600">
+                    <span className="text-sm text-slate-600 dark:text-slate-400">
                       {currentMail.sender_name || currentMail.sender_email}
                     </span>
+                    {currentMail.sender_name && (
+                      <span className="text-xs text-slate-400">
+                        {'<'}{currentMail.sender_email}{'>'}
+                      </span>
+                    )}
                   </div>
                   {currentMail.recipients?.length > 0 && (
                     <div className="flex items-start gap-2 mt-1">
-                      <span className="text-xs text-slate-500">אל:</span>
+                      <span className="text-xs text-slate-500 dark:text-slate-400">
+                        אל:
+                      </span>
                       <div className="flex flex-wrap gap-1">
                         {currentMail.recipients.map((r, idx) => (
-                          <span key={idx} className="text-xs text-slate-600">
+                          <span key={idx} className="text-xs text-slate-600 dark:text-slate-400">
                             {r.email}{idx < currentMail.recipients.length - 1 ? ',' : ''}
                           </span>
                         ))}
@@ -185,41 +239,60 @@ export default function MailView() {
               </div>
             </CardHeader>
 
-            {currentMail.attachments?.length > 0 && (
-              <div className="p-6 border-b bg-slate-50">
+            {/* Attachments Section */}
+            {currentMail.attachments && currentMail.attachments.length > 0 && (
+              <div className="p-6 border-b dark:border-slate-700 bg-slate-50 dark:bg-slate-900">
                 <div className="flex items-center gap-2 mb-3">
                   <Paperclip className="w-4 h-4 text-slate-500" />
-                  <span className="text-sm font-medium text-slate-700">
+                  <span className="text-sm font-medium text-slate-700 dark:text-slate-300">
                     {currentMail.attachments.length} קבצים מצורפים
                   </span>
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
                   {currentMail.attachments.map((att, idx) => (
-                    <a
+                    <div
                       key={idx}
-                      href={att.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="flex items-center gap-2 p-3 bg-white rounded-lg border border-slate-200 hover:border-blue-300 transition-colors"
+                      className="flex items-center gap-3 p-3 bg-white dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700 hover:border-blue-300 dark:hover:border-blue-700 transition-colors"
                     >
-                      <Paperclip className="w-4 h-4 text-slate-400" />
+                      <Paperclip className="w-4 h-4 text-slate-400 flex-shrink-0" />
                       <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-slate-800 truncate">{att.filename}</p>
-                        <p className="text-xs text-slate-500">{(att.size / 1024).toFixed(1)} KB</p>
+                        <p className="text-sm font-medium text-slate-800 dark:text-slate-200 truncate">
+                          {att.filename}
+                        </p>
+                        <p className="text-xs text-slate-500 dark:text-slate-400">
+                          {formatBytes(att.size)}
+                        </p>
                       </div>
-                    </a>
+                      <Button 
+                        variant="ghost" 
+                        size="icon"
+                        className="flex-shrink-0"
+                        title="הורדת קובץ"
+                      >
+                        <Download className="w-4 h-4" />
+                      </Button>
+                    </div>
                   ))}
                 </div>
               </div>
             )}
 
+            {/* Mail Body */}
             <CardContent className="pt-6">
-              <div 
-                className="prose prose-sm max-w-none"
-                dangerouslySetInnerHTML={{ 
-                  __html: currentMail.body_html || `<pre style="white-space: pre-wrap; font-family: inherit;">${currentMail.body_plain}</pre>` 
-                }}
-              />
+              <ScrollArea className="h-[600px]">
+                {currentMail.body_html ? (
+                  // תצוגת HTML
+                  <div 
+                    className="prose prose-sm max-w-none dark:prose-invert prose-headings:font-semibold prose-a:text-blue-600 dark:prose-a:text-blue-400"
+                    dangerouslySetInnerHTML={{ __html: currentMail.body_html }}
+                  />
+                ) : (
+                  // תצוגת טקסט רגיל
+                  <pre className="whitespace-pre-wrap font-sans text-sm text-slate-700 dark:text-slate-300 leading-relaxed">
+                    {currentMail.body_plain || currentMail.content_snippet || 'אין תוכן'}
+                  </pre>
+                )}
+              </ScrollArea>
             </CardContent>
           </Card>
         </div>
