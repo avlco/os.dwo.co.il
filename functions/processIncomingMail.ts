@@ -55,13 +55,13 @@ function getProviderConfig(providerRaw) {
   throw new Error(`Provider ${providerRaw} not supported for refresh`);
 }
 
-async function refreshGoogleToken(refreshToken, connectionId, adminBase44) {
-  // ✅ הוספת בדיקה
-  if (!connectionId) {
-    throw new Error("connectionId is required for token refresh");
+// ✅ תיקון: שימוש ב-User Client במקום Admin
+async function refreshGoogleToken(refreshToken, connection, userBase44) {
+  if (!connection || !connection.id) {
+    throw new Error("Valid connection object is required for token refresh");
   }
   
-  console.log(`[Refresh] Starting token refresh for connection ${connectionId}...`);
+  console.log(`[Refresh] Starting token refresh for connection ${connection.id}...`);
   const config = getProviderConfig('google');
   
   const res = await fetch('https://oauth2.googleapis.com/token', {
@@ -82,17 +82,30 @@ async function refreshGoogleToken(refreshToken, connectionId, adminBase44) {
   const encryptedAccess = await encrypt(newAccessToken);
   const expiresAt = Date.now() + ((data.expires_in || 3600) * 1000);
 
-  await adminBase44.entities.IntegrationConnection.update(connectionId, {
-    access_token_encrypted: encryptedAccess,
-    expires_at: expiresAt,
-    metadata: { 
-      last_updated: new Date().toISOString(), 
-      last_refresh: "success" 
-    },
-    is_active: true
-  });
+  // ✅ תיקון: שימוש ב-User Client עם Object מלא
+  try {
+    await userBase44.entities.IntegrationConnection.update(connection.id, {
+      access_token_encrypted: encryptedAccess,
+      expires_at: expiresAt,
+      metadata: { 
+        ...connection.metadata,
+        last_updated: new Date().toISOString(), 
+        last_refresh: "success" 
+      },
+      is_active: true
+    });
+    console.log("[Refresh] Token refreshed successfully");
+  } catch (updateError) {
+    console.error("[Refresh] Update failed:", updateError);
+    // ✅ Fallback: נסה בלי metadata
+    await userBase44.entities.IntegrationConnection.update(connection.id, {
+      access_token_encrypted: encryptedAccess,
+      expires_at: expiresAt,
+      is_active: true
+    });
+    console.log("[Refresh] Token refreshed successfully (without metadata)");
+  }
 
-  console.log("[Refresh] Token refreshed successfully");
   return newAccessToken;
 }
 
@@ -163,8 +176,8 @@ function extractAttachments(payload, messageId) {
   return attachments;
 }
 
-// ✅ תיקון: הוספת connectionId בחתימת הפונקציה
-async function fetchGmailMessages(accessToken, refreshToken, connectionId, adminBase44, limit = 500) {
+// ✅ תיקון: העברת connection object במקום ID
+async function fetchGmailMessages(accessToken, refreshToken, connection, userBase44, limit = 500) {
   console.log(`[Gmail] Fetching up to ${limit} messages...`);
   
   const listUrl = `https://gmail.googleapis.com/gmail/v1/users/me/messages?maxResults=${limit}`;
@@ -179,8 +192,8 @@ async function fetchGmailMessages(accessToken, refreshToken, connectionId, admin
       throw new Error("Token expired and no refresh token available");
     }
     console.log("[Gmail] Token expired, refreshing...");
-    // ✅ תיקון: כעת connectionId מועבר כראוי
-    currentToken = await refreshGoogleToken(refreshToken, connectionId, adminBase44);
+    // ✅ תיקון: העברת connection object
+    currentToken = await refreshGoogleToken(refreshToken, connection, userBase44);
     listRes = await fetch(listUrl, {
       headers: { Authorization: `Bearer ${currentToken}` }
     });
@@ -295,8 +308,6 @@ Deno.serve(async (req) => {
     
     console.log(`[Sync] Authenticated user: ${user.email || user.id}`);
 
-    const adminBase44 = createClient({ useServiceRole: true });
-
     console.log("[Sync] Looking for Google connection...");
     const allConnections = await base44.entities.IntegrationConnection.list('-created_at', 100);
     const items = Array.isArray(allConnections) ? allConnections : (allConnections.data || []);
@@ -325,12 +336,12 @@ Deno.serve(async (req) => {
       throw new Error("Failed to decrypt access token");
     }
 
-    // ✅ תיקון: העברת connection.id כפרמטר
+    // ✅ תיקון: העברת connection object ו-User Client
     const newEmails = await fetchGmailMessages(
       accessToken, 
       refreshToken, 
-      connection.id,  // ✅ כאן התיקון המרכזי!
-      adminBase44,
+      connection,  // ✅ Object מלא
+      base44,      // ✅ User Client
       500
     );
     
