@@ -14,18 +14,20 @@ import {
   User,
   Calendar,
   Download,
-  ExternalLink
+  Loader2
 } from 'lucide-react';
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { useToast } from "@/components/ui/use-toast";
 
 export default function MailView() {
   const queryClient = useQueryClient();
+  const { toast } = useToast();
   const urlParams = new URLSearchParams(window.location.search);
-  const mailId = urlParams.get('id');  // ✅ תיקון: id במקום mailId
+  const mailId = urlParams.get('id');
 
   const { data: mail, isLoading } = useQuery({
     queryKey: ['mail', mailId],
@@ -48,7 +50,6 @@ export default function MailView() {
       client_id: mailData.related_client_id,
     }),
     onSuccess: async (newTask) => {
-      // עדכון סטטוס המייל
       await base44.entities.Mail.update(mailId, { 
         processing_status: 'processed', 
         task_id: newTask.id 
@@ -57,12 +58,74 @@ export default function MailView() {
       queryClient.invalidateQueries(['mail', mailId]);
       queryClient.invalidateQueries(['tasks']);
       
-      // ניווט ל-Workbench
       window.location.href = createPageUrl(`Workbench?taskId=${newTask.id}`);
     },
   });
 
   const currentMail = mail?.[0];
+
+  // ✅ פונקציה להורדת קובץ מצורף
+  const handleDownloadAttachment = async (attachment) => {
+    try {
+      toast({ description: "מוריד קובץ..." });
+
+      const response = await base44.functions.invoke('downloadGmailAttachment', {
+        messageId: attachment.messageId,
+        attachmentId: attachment.attachmentId,
+        filename: attachment.filename
+      });
+
+      if (response.error) {
+        throw new Error(response.error.message || 'Download failed');
+      }
+
+      if (!response.data || !response.data.data) {
+        throw new Error('No data received from server');
+      }
+
+      // המרת Base64 ל-Blob
+      const base64Data = response.data.data.replace(/-/g, '+').replace(/_/g, '/');
+      const binaryString = atob(base64Data);
+      const bytes = new Uint8Array(binaryString.length);
+      
+      for (let i = 0; i < binaryString.length; i++) {
+        bytes[i] = binaryString.charCodeAt(i);
+      }
+
+      const blob = new Blob([bytes], { type: attachment.mimeType });
+      const url = window.URL.createObjectURL(blob);
+      
+      // יצירת קישור להורדה
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = attachment.filename;
+      document.body.appendChild(a);
+      a.click();
+      
+      // ניקוי
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(url);
+
+      toast({ description: "הקובץ הורד בהצלחה!" });
+
+    } catch (error) {
+      console.error('[MailView] Download failed:', error);
+      toast({
+        variant: "destructive",
+        title: "שגיאה בהורדה",
+        description: error.message || "לא ניתן להוריד את הקובץ"
+      });
+    }
+  };
+
+  // פורמט גודל קובץ
+  const formatBytes = (bytes) => {
+    if (!bytes || bytes === 0) return '0 B';
+    const k = 1024;
+    const sizes = ['B', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i];
+  };
 
   // מצב טעינה
   if (isLoading) {
@@ -91,15 +154,6 @@ export default function MailView() {
     createTaskMutation.mutate(currentMail);
   };
 
-  // פורמט גודל קובץ
-  const formatBytes = (bytes) => {
-    if (!bytes || bytes === 0) return '0 B';
-    const k = 1024;
-    const sizes = ['B', 'KB', 'MB', 'GB'];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i];
-  };
-
   return (
     <div className="space-y-6 p-6">
       {/* Header */}
@@ -120,7 +174,11 @@ export default function MailView() {
             className="bg-blue-600 hover:bg-blue-700 gap-2"
             disabled={createTaskMutation.isPending}
           >
-            <FileText className="w-4 h-4" />
+            {createTaskMutation.isPending ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : (
+              <FileText className="w-4 h-4" />
+            )}
             הפוך למשימה
           </Button>
         )}
@@ -239,7 +297,7 @@ export default function MailView() {
               </div>
             </CardHeader>
 
-            {/* Attachments Section */}
+            {/* ✅ Attachments Section - מתוקן */}
             {currentMail.attachments && currentMail.attachments.length > 0 && (
               <div className="p-6 border-b dark:border-slate-700 bg-slate-50 dark:bg-slate-900">
                 <div className="flex items-center gap-2 mb-3">
@@ -249,30 +307,39 @@ export default function MailView() {
                   </span>
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                  {currentMail.attachments.map((att, idx) => (
-                    <div
-                      key={idx}
-                      className="flex items-center gap-3 p-3 bg-white dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700 hover:border-blue-300 dark:hover:border-blue-700 transition-colors"
-                    >
-                      <Paperclip className="w-4 h-4 text-slate-400 flex-shrink-0" />
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-slate-800 dark:text-slate-200 truncate">
-                          {att.filename}
-                        </p>
-                        <p className="text-xs text-slate-500 dark:text-slate-400">
-                          {formatBytes(att.size)}
-                        </p>
-                      </div>
-                      <Button 
-                        variant="ghost" 
-                        size="icon"
-                        className="flex-shrink-0"
-                        title="הורדת קובץ"
+                  {currentMail.attachments.map((att, idx) => {
+                    const canDownload = att.messageId && att.attachmentId;
+
+                    return (
+                      <div
+                        key={idx}
+                        className="flex items-center gap-3 p-3 bg-white dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700 hover:border-blue-300 dark:hover:border-blue-700 transition-colors"
                       >
-                        <Download className="w-4 h-4" />
-                      </Button>
-                    </div>
-                  ))}
+                        <Paperclip className="w-4 h-4 text-slate-400 flex-shrink-0" />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium text-slate-800 dark:text-slate-200 truncate">
+                            {att.filename}
+                          </p>
+                          <p className="text-xs text-slate-500 dark:text-slate-400">
+                            {formatBytes(att.size)}
+                          </p>
+                        </div>
+                        {canDownload ? (
+                          <Button 
+                            variant="ghost" 
+                            size="icon"
+                            className="flex-shrink-0"
+                            title="הורדת קובץ"
+                            onClick={() => handleDownloadAttachment(att)}
+                          >
+                            <Download className="w-4 h-4" />
+                          </Button>
+                        ) : (
+                          <span className="text-xs text-slate-400 px-2">לא זמין</span>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             )}
@@ -281,13 +348,11 @@ export default function MailView() {
             <CardContent className="pt-6">
               <ScrollArea className="h-[600px]">
                 {currentMail.body_html ? (
-                  // תצוגת HTML
                   <div 
                     className="prose prose-sm max-w-none dark:prose-invert prose-headings:font-semibold prose-a:text-blue-600 dark:prose-a:text-blue-400"
                     dangerouslySetInnerHTML={{ __html: currentMail.body_html }}
                   />
                 ) : (
-                  // תצוגת טקסט רגיל
                   <pre className="whitespace-pre-wrap font-sans text-sm text-slate-700 dark:text-slate-300 leading-relaxed">
                     {currentMail.body_plain || currentMail.content_snippet || 'אין תוכן'}
                   </pre>
