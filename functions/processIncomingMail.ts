@@ -55,7 +55,6 @@ function getProviderConfig(providerRaw) {
   throw new Error(`Provider ${providerRaw} not supported for refresh`);
 }
 
-// ✅ תיקון: שימוש ב-User Client במקום Admin
 async function refreshGoogleToken(refreshToken, connection, userBase44) {
   if (!connection || !connection.id) {
     throw new Error("Valid connection object is required for token refresh");
@@ -82,7 +81,6 @@ async function refreshGoogleToken(refreshToken, connection, userBase44) {
   const encryptedAccess = await encrypt(newAccessToken);
   const expiresAt = Date.now() + ((data.expires_in || 3600) * 1000);
 
-  // ✅ תיקון: שימוש ב-User Client עם Object מלא
   try {
     await userBase44.entities.IntegrationConnection.update(connection.id, {
       access_token_encrypted: encryptedAccess,
@@ -97,7 +95,6 @@ async function refreshGoogleToken(refreshToken, connection, userBase44) {
     console.log("[Refresh] Token refreshed successfully");
   } catch (updateError) {
     console.error("[Refresh] Update failed:", updateError);
-    // ✅ Fallback: נסה בלי metadata
     await userBase44.entities.IntegrationConnection.update(connection.id, {
       access_token_encrypted: encryptedAccess,
       expires_at: expiresAt,
@@ -154,29 +151,44 @@ function extractEmailBody(payload) {
 function extractAttachments(payload, messageId) {
   const attachments = [];
   
-  function searchParts(part) {
+  console.log(`[Attachments] Extracting for messageId: ${messageId}`);
+  
+  function searchParts(part, depth = 0) {
+    const indent = '  '.repeat(depth);
+    
+    if (part.filename) {
+      console.log(`${indent}[Attachments] Found part with filename: ${part.filename}`);
+      console.log(`${indent}[Attachments] mimeType: ${part.mimeType}`);
+      console.log(`${indent}[Attachments] attachmentId: ${part.body?.attachmentId || 'NONE'}`);
+      console.log(`${indent}[Attachments] size: ${part.body?.size || 0}`);
+    }
+    
     if (part.filename && part.body?.attachmentId) {
-      attachments.push({
+      const attachment = {
         filename: part.filename,
         mimeType: part.mimeType || 'application/octet-stream',
         size: part.body.size || 0,
         attachmentId: part.body.attachmentId,
         messageId: messageId
-      });
+      };
+      
+      attachments.push(attachment);
+      console.log(`${indent}✅ Added attachment: ${part.filename}`);
     }
     
     if (part.parts) {
       for (const subPart of part.parts) {
-        searchParts(subPart);
+        searchParts(subPart, depth + 1);
       }
     }
   }
   
   searchParts(payload);
+  
+  console.log(`[Attachments] Total found: ${attachments.length}`);
   return attachments;
 }
 
-// ✅ תיקון: העברת connection object במקום ID
 async function fetchGmailMessages(accessToken, refreshToken, connection, userBase44, limit = 500) {
   console.log(`[Gmail] Fetching up to ${limit} messages...`);
   
@@ -192,7 +204,6 @@ async function fetchGmailMessages(accessToken, refreshToken, connection, userBas
       throw new Error("Token expired and no refresh token available");
     }
     console.log("[Gmail] Token expired, refreshing...");
-    // ✅ תיקון: העברת connection object
     currentToken = await refreshGoogleToken(refreshToken, connection, userBase44);
     listRes = await fetch(listUrl, {
       headers: { Authorization: `Bearer ${currentToken}` }
@@ -336,12 +347,11 @@ Deno.serve(async (req) => {
       throw new Error("Failed to decrypt access token");
     }
 
-    // ✅ תיקון: העברת connection object ו-User Client
     const newEmails = await fetchGmailMessages(
       accessToken, 
       refreshToken, 
-      connection,  // ✅ Object מלא
-      base44,      // ✅ User Client
+      connection,
+      base44,
       500
     );
     
