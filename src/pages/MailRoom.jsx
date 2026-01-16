@@ -22,10 +22,9 @@ export default function MailRoom() {
   const [page, setPage] = useState(1);
   const [activeTab, setActiveTab] = useState('inbox');
   const [lastSyncTime, setLastSyncTime] = useState(null);
-  const [nextSyncIn, setNextSyncIn] = useState(300); // 5 דקות בשניות
+  const [nextSyncIn, setNextSyncIn] = useState(300);
   const pageSize = 50;
 
-  // ✅ שליפת נתונים
   const { data, isLoading, isRefetching, refetch } = useQuery({
     queryKey: ['mails', activeTab, page],
     queryFn: async () => {
@@ -71,7 +70,6 @@ export default function MailRoom() {
     toast({ description: "הטבלה רועננה בהצלחה" });
   };
 
-  // ✅ פעולת סנכרון מלא
   const syncMutation = useMutation({
     mutationFn: async () => {
       const res = await base44.functions.invoke('processIncomingMail', {});
@@ -89,7 +87,8 @@ export default function MailRoom() {
       });
       
       setLastSyncTime(new Date());
-      setNextSyncIn(300); // איפוס הטיימר
+      setNextSyncIn(300);
+      localStorage.setItem('lastMailSync', Date.now().toString());
       
       queryClient.invalidateQueries(['mails']);
       setTimeout(() => refetch(), 500);
@@ -104,34 +103,45 @@ export default function MailRoom() {
     }
   });
 
-  // ✅ סנכרון אוטומטי כל 5 דקות
   useEffect(() => {
-    // סנכרון ראשוני כשהעמוד נטען
-    console.log('[MailRoom] Initial auto-sync on page load');
-    syncMutation.mutate();
+    const lastSync = localStorage.getItem('lastMailSync');
+    const now = Date.now();
+    const fiveMinutes = 5 * 60 * 1000;
+    
+    if (!lastSync || (now - parseInt(lastSync)) > fiveMinutes) {
+      console.log('[MailRoom] Initial auto-sync on page load');
+      syncMutation.mutate();
+      localStorage.setItem('lastMailSync', now.toString());
+    } else {
+      console.log('[MailRoom] Skipping sync - last sync was recent');
+      const elapsed = now - parseInt(lastSync);
+      const remaining = Math.ceil((fiveMinutes - elapsed) / 1000);
+      setNextSyncIn(remaining);
+      
+      const lastSyncDate = new Date(parseInt(lastSync));
+      setLastSyncTime(lastSyncDate);
+    }
 
-    // סנכרון מחזורי כל 5 דקות
     const syncInterval = setInterval(() => {
       console.log('[MailRoom] Auto-syncing from Gmail...');
       syncMutation.mutate();
-    }, 5 * 60 * 1000); // 5 דקות
+      localStorage.setItem('lastMailSync', Date.now().toString());
+    }, fiveMinutes);
 
     return () => clearInterval(syncInterval);
-  }, []); // ריק - רק בטעינה ראשונה
+  }, []);
 
-  // ✅ טיימר חזותי - ספירה לאחור
   useEffect(() => {
     const countdown = setInterval(() => {
       setNextSyncIn(prev => {
-        if (prev <= 1) return 300; // איפוס ל-5 דקות
+        if (prev <= 1) return 300;
         return prev - 1;
       });
-    }, 1000); // כל שנייה
+    }, 1000);
 
     return () => clearInterval(countdown);
   }, []);
 
-  // פורמט הטיימר (MM:SS)
   const formatCountdown = (seconds) => {
     const mins = Math.floor(seconds / 60);
     const secs = seconds % 60;
@@ -188,10 +198,8 @@ export default function MailRoom() {
     <div className="space-y-6">
       <PageHeader title="חדר דואר" description="ניהול ומיון דואר נכנס." />
       
-      {/* כפתורי פעולה + אינדיקטור סנכרון */}
       <div className="flex justify-between items-center p-4 bg-slate-50 dark:bg-slate-900 rounded-md border">
         <div className="flex items-center gap-3">
-          {/* אינדיקטור סנכרון */}
           <div className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-400">
             <Clock className="w-4 h-4" />
             <span>
@@ -243,7 +251,6 @@ export default function MailRoom() {
         </div>
       </div>
 
-      {/* סטטיסטיקה */}
       <div className="grid gap-4 md:grid-cols-3">
         <Card className="dark:bg-slate-800">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
