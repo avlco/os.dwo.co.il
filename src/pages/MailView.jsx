@@ -64,7 +64,6 @@ export default function MailView() {
 
   const currentMail = mail?.[0];
 
-  // ✅ Debug: הצג מידע על הקבצים המצורפים
   React.useEffect(() => {
     if (currentMail) {
       console.log('=== MailView Debug ===');
@@ -308,7 +307,6 @@ export default function MailView() {
               </div>
             </CardHeader>
 
-            {/* ✅ Attachments Section - עם Debug */}
             {currentMail.attachments && currentMail.attachments.length > 0 ? (
               <div className="p-6 border-b dark:border-slate-700 bg-slate-50 dark:bg-slate-900">
                 <div className="flex items-center gap-2 mb-3">
