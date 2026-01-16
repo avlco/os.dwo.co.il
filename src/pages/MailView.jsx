@@ -102,20 +102,31 @@ export default function MailView() {
         filename: attachment.filename
       });
 
-      console.log('[MailView] Response received:', response);
+      console.log('[MailView] Raw response:', response);
 
       if (response.error) {
         throw new Error(response.error.message || response.error || 'Download failed');
       }
 
-      if (!response.data) {
-        console.error('[MailView] No data in response:', response);
+      // ✅ התיקון: response.data.data (לא response.data!)
+      if (!response.data || !response.data.data) {
+        console.error('[MailView] Invalid response structure:', response);
         throw new Error('No data received from server');
       }
 
+      const base64Data = response.data.data;  // ✅ כאן התיקון!
+      console.log('[MailView] base64Data type:', typeof base64Data);
+      console.log('[MailView] base64Data length:', base64Data?.length);
+
+      // בדיקה שזה באמת string
+      if (typeof base64Data !== 'string') {
+        console.error('[MailView] base64Data is not a string:', base64Data);
+        throw new Error('Invalid data format received');
+      }
+
       console.log('[MailView] Processing base64 data...');
-      const base64Data = response.data.replace(/-/g, '+').replace(/_/g, '/');
-      const binaryString = atob(base64Data);
+      const cleanBase64 = base64Data.replace(/-/g, '+').replace(/_/g, '/');
+      const binaryString = atob(cleanBase64);
       const bytes = new Uint8Array(binaryString.length);
       
       for (let i = 0; i < binaryString.length; i++) {
