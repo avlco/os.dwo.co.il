@@ -29,7 +29,7 @@ export default function MailView() {
   const urlParams = new URLSearchParams(window.location.search);
   const mailId = urlParams.get('id');
 
-  const { data: mail, isLoading } = useQuery({
+  const {  mail, isLoading } = useQuery({
     queryKey: ['mail', mailId],
     queryFn: async () => {
       const result = await base44.entities.Mail.filter({ id: mailId });
@@ -69,7 +69,7 @@ export default function MailView() {
       console.log('=== MailView Debug ===');
       console.log('Mail ID:', currentMail.id);
       console.log('Subject:', currentMail.subject);
-      console.log('metadata:', currentMail.metadata);
+      console.log('meta', currentMail.metadata);
       console.log('attachments:', currentMail.attachments);
       
       if (currentMail.attachments) {
@@ -90,21 +90,31 @@ export default function MailView() {
     try {
       toast({ description: "מוריד קובץ..." });
 
+      console.log('[MailView] Calling downloadGmailAttachment with:', {
+        messageId: attachment.messageId,
+        attachmentId: attachment.attachmentId,
+        filename: attachment.filename
+      });
+
       const response = await base44.functions.invoke('downloadGmailAttachment', {
         messageId: attachment.messageId,
         attachmentId: attachment.attachmentId,
         filename: attachment.filename
       });
 
+      console.log('[MailView] Response received:', response);
+
       if (response.error) {
-        throw new Error(response.error.message || 'Download failed');
+        throw new Error(response.error.message || response.error || 'Download failed');
       }
 
-      if (!response.data || !response.data.data) {
+      if (!response.data) {
+        console.error('[MailView] No data in response:', response);
         throw new Error('No data received from server');
       }
 
-      const base64Data = response.data.data.replace(/-/g, '+').replace(/_/g, '/');
+      console.log('[MailView] Processing base64 data...');
+      const base64Data = response.data.replace(/-/g, '+').replace(/_/g, '/');
       const binaryString = atob(base64Data);
       const bytes = new Uint8Array(binaryString.length);
       
@@ -112,7 +122,7 @@ export default function MailView() {
         bytes[i] = binaryString.charCodeAt(i);
       }
 
-      const blob = new Blob([bytes], { type: attachment.mimeType });
+      const blob = new Blob([bytes], { type: attachment.mimeType || 'application/octet-stream' });
       const url = window.URL.createObjectURL(blob);
       
       const a = document.createElement('a');
@@ -332,11 +342,6 @@ export default function MailView() {
                           <p className="text-xs text-slate-500 dark:text-slate-400">
                             {formatBytes(att.size)}
                           </p>
-                          {!canDownload && (
-                            <p className="text-xs text-red-500 mt-1">
-                              Debug: messageId={att.messageId ? '✓' : '✗'}, attachmentId={att.attachmentId ? '✓' : '✗'}
-                            </p>
-                          )}
                         </div>
                         {canDownload ? (
                           <Button 
