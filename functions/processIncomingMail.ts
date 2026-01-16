@@ -2,21 +2,15 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.6';
 
 // ========================================
-// HELPER FUNCTIONS (Inline - No Import)
+// HELPER FUNCTIONS
 // ========================================
 
-/**
- * מחזיר תאריך של לפני שבוע
- */
 function getOneWeekAgo() {
   const date = new Date();
   date.setDate(date.getDate() - 7);
   return date.toISOString();
 }
 
-/**
- * ממיר תאריך ISO לפורמט של Gmail
- */
 function formatDateForGmail(isoDate) {
   const date = new Date(isoDate);
   const year = date.getFullYear();
@@ -25,17 +19,11 @@ function formatDateForGmail(isoDate) {
   return `${year}/${month}/${day}`;
 }
 
-/**
- * בונה שאילתת חיפוש ב-Gmail למיילים אחרי תאריך מסוים
- */
 function buildDateQuery(afterDate) {
   const gmailDate = formatDateForGmail(afterDate);
   return `after:${gmailDate}`;
 }
 
-/**
- * מעדכן מטאדאטה של סנכרון
- */
 async function updateSyncMetadata(connection, userBase44, updates) {
   const currentSync = connection.metadata?.gmail_sync || {};
   const updatedSync = { ...currentSync, ...updates };
@@ -48,9 +36,6 @@ async function updateSyncMetadata(connection, userBase44, updates) {
   });
 }
 
-/**
- * שולף את ה-historyId האחרון מ-Gmail
- */
 async function getLatestHistoryId(accessToken) {
   try {
     const res = await fetch(
@@ -69,8 +54,32 @@ async function getLatestHistoryId(accessToken) {
 }
 
 /**
- * מפרק מייל של Gmail לאובייקט Mail
- * ✅ FIXED: Improved attachment detection
+ * ✅ FIXED: UTF-8 decoding for Base64 content
+ */
+function decodeBase64Utf8(base64String) {
+  try {
+    // Gmail uses URL-safe Base64
+    const normalized = base64String.replace(/-/g, '+').replace(/_/g, '/');
+    
+    // Decode Base64 to binary string
+    const binaryString = atob(normalized);
+    
+    // Convert binary string to UTF-8
+    const bytes = new Uint8Array(binaryString.length);
+    for (let i = 0; i < binaryString.length; i++) {
+      bytes[i] = binaryString.charCodeAt(i);
+    }
+    
+    // Decode UTF-8
+    return new TextDecoder('utf-8').decode(bytes);
+  } catch (error) {
+    console.error('[Decode] Failed:', error);
+    return null;
+  }
+}
+
+/**
+ * ✅ FIXED: Full attachment extraction + proper encoding
  */
 function parseGmailMessage(gmailMsg) {
   const headers = gmailMsg.payload?.headers || [];
@@ -82,60 +91,84 @@ function parseGmailMessage(gmailMsg) {
   
   let bodyText = '';
   let bodyHtml = '';
-  let hasAttachments = false;
+  const attachments = [];
   
-  // ✅ FIXED: Recursive function to extract body AND detect attachments
-  function extractBodyAndAttachments(payload) {
-    // Check for attachment in current part
+  // ✅ Recursive function to extract EVERYTHING
+  function extractParts(payload, messageId) {
+    // Check if this is an attachment
     if (payload.filename && payload.filename.length > 0) {
-      hasAttachments = true;
+      if (payload.body?.attachmentId) {
+        attachments.push({
+          filename: payload.filename,
+          mimeType: payload.mimeType || 'application/octet-stream',
+          size: payload.body.size || 0,
+          attachmentId: payload.body.attachmentId,
+          messageId: messageId
+        });
+      }
     }
     
-    // Or if it has an attachmentId (Gmail API marker)
-    if (payload.body?.attachmentId) {
-      hasAttachments = true;
-    }
-    
-    // Extract body text/html
+    // Extract body content
     if (payload.body?.data) {
-      try {
-        const decoded = atob(payload.body.data.replace(/-/g, '+').replace(/_/g, '/'));
+      const decoded = decodeBase64Utf8(payload.body.data);
+      
+      if (decoded) {
         if (payload.mimeType === 'text/html') {
           bodyHtml = decoded;
         } else if (payload.mimeType === 'text/plain') {
           bodyText = decoded;
         }
-      } catch (decodeError) {
-        console.error('[Parse] Failed to decode body:', decodeError);
       }
     }
     
     // Recurse into nested parts
     if (payload.parts && Array.isArray(payload.parts)) {
       for (const part of payload.parts) {
-        extractBodyAndAttachments(part);
+        extractParts(part, messageId);
       }
     }
   }
   
-  extractBodyAndAttachments(gmailMsg.payload);
+  extractParts(gmailMsg.payload, gmailMsg.id);
+  
+  // ✅ Extract snippet (first 150 chars of plain text or stripped HTML)
+  let snippet = bodyText || '';
+  if (!snippet && bodyHtml) {
+    // Strip HTML tags for snippet
+    snippet = bodyHtml.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+  }
+  snippet = snippet.substring(0, 150);
+  
+  // ✅ Parse recipients
+  const toHeader = getHeader('To');
+  const recipients = toHeader 
+    ? toHeader.split(',').map(r => ({ email: r.trim() }))
+    : [];
+  
+  // ✅ Parse labels
+  const labels = gmailMsg.labelIds || [];
   
   return {
     external_id: gmailMsg.id,
-    thread_id: gmailMsg.threadId,
     subject: getHeader('Subject'),
     sender_email: getHeader('From'),
     sender_name: getHeader('From').split('<')[0].trim(),
-    recipient_email: getHeader('To'),
-    cc: getHeader('Cc') || null,
-    bcc: getHeader('Bcc') || null,
-    body_text: bodyText || null,
-    body_html: bodyHtml || null,
+    recipients: recipients,
     received_at: new Date(parseInt(gmailMsg.internalDate)).toISOString(),
-    labels: gmailMsg.labelIds ? gmailMsg.labelIds.join(',') : null,
-    is_read: !gmailMsg.labelIds?.includes('UNREAD'),
-    has_attachments: hasAttachments,  // ✅ Now correctly detected
-    raw_headers: JSON.stringify(headers)
+    content_snippet: snippet || null,
+    body_plain: bodyText || null,
+    body_html: bodyHtml || null,
+    processing_status: 'pending',
+    source: 'gmail',
+    attachments: attachments,
+    metadata: {
+      labels: labels,
+      thread_id: gmailMsg.threadId,
+      is_read: !labels.includes('UNREAD'),
+      raw_headers: JSON.stringify(headers)
+    },
+    thread_id: gmailMsg.threadId,
+    has_attachments: attachments.length > 0
   };
 }
 
@@ -235,12 +268,9 @@ async function refreshGoogleToken(refreshToken, connection, userBase44) {
 }
 
 // ========================================
-// SYNC FUNCTIONS
+// SYNC FUNCTIONS (unchanged)
 // ========================================
 
-/**
- * סנכרון ראשון: משיכת מיילים משבוע אחרון בלבד
- */
 async function fetchFirstWeekMessages(
   accessToken,
   refreshToken,
@@ -261,7 +291,6 @@ async function fetchFirstWeekMessages(
     headers: { Authorization: `Bearer ${currentToken}` }
   });
   
-  // Token refresh if needed
   if (listRes.status === 401) {
     if (!refreshToken || refreshToken === "MISSING") {
       throw new Error("Token expired and no refresh token available");
@@ -337,9 +366,6 @@ async function fetchFirstWeekMessages(
   return emails;
 }
 
-/**
- * סנכרון אינקרמנטלי: משיכת רק מיילים חדשים מאז הפעם האחרונה
- */
 async function fetchIncrementalMessages(
   accessToken,
   refreshToken,
@@ -449,9 +475,6 @@ async function fetchIncrementalMessages(
   }
 }
 
-/**
- * Fallback: משיכת X מיילים אחרונים
- */
 async function fetchFallbackMessages(
   accessToken,
   refreshToken,
