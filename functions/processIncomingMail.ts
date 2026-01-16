@@ -70,6 +70,7 @@ async function getLatestHistoryId(accessToken) {
 
 /**
  * מפרק מייל של Gmail לאובייקט Mail
+ * ✅ FIXED: Improved attachment detection
  */
 function parseGmailMessage(gmailMsg) {
   const headers = gmailMsg.payload?.headers || [];
@@ -81,26 +82,43 @@ function parseGmailMessage(gmailMsg) {
   
   let bodyText = '';
   let bodyHtml = '';
+  let hasAttachments = false;
   
-  // Extract body from parts
-  function extractBody(payload) {
+  // ✅ FIXED: Recursive function to extract body AND detect attachments
+  function extractBodyAndAttachments(payload) {
+    // Check for attachment in current part
+    if (payload.filename && payload.filename.length > 0) {
+      hasAttachments = true;
+    }
+    
+    // Or if it has an attachmentId (Gmail API marker)
+    if (payload.body?.attachmentId) {
+      hasAttachments = true;
+    }
+    
+    // Extract body text/html
     if (payload.body?.data) {
-      const decoded = atob(payload.body.data.replace(/-/g, '+').replace(/_/g, '/'));
-      if (payload.mimeType === 'text/html') {
-        bodyHtml = decoded;
-      } else {
-        bodyText = decoded;
+      try {
+        const decoded = atob(payload.body.data.replace(/-/g, '+').replace(/_/g, '/'));
+        if (payload.mimeType === 'text/html') {
+          bodyHtml = decoded;
+        } else if (payload.mimeType === 'text/plain') {
+          bodyText = decoded;
+        }
+      } catch (decodeError) {
+        console.error('[Parse] Failed to decode body:', decodeError);
       }
     }
     
-    if (payload.parts) {
+    // Recurse into nested parts
+    if (payload.parts && Array.isArray(payload.parts)) {
       for (const part of payload.parts) {
-        extractBody(part);
+        extractBodyAndAttachments(part);
       }
     }
   }
   
-  extractBody(gmailMsg.payload);
+  extractBodyAndAttachments(gmailMsg.payload);
   
   return {
     external_id: gmailMsg.id,
@@ -116,7 +134,7 @@ function parseGmailMessage(gmailMsg) {
     received_at: new Date(parseInt(gmailMsg.internalDate)).toISOString(),
     labels: gmailMsg.labelIds ? gmailMsg.labelIds.join(',') : null,
     is_read: !gmailMsg.labelIds?.includes('UNREAD'),
-    has_attachments: gmailMsg.payload?.parts?.some(p => p.filename) || false,
+    has_attachments: hasAttachments,  // ✅ Now correctly detected
     raw_headers: JSON.stringify(headers)
   };
 }
