@@ -215,13 +215,14 @@ Deno.serve(async function(req) {
     }
 
     const attachmentData = await response.json();
-    const hasData = !!attachmentData.data;
-    console.log("[Download] Success! has ", hasData);
+    const base64String = attachmentData.data || null;
+    const hasData = !!base64String;
+    console.log("[Download] Success! has data:", hasData);
 
-    const resultData = attachmentData.data || null;
+    // ✅ מחזיר רק את ה-base64 string, לא את כל האובייקט
     const result = JSON.stringify({ 
       success: true,
-       resultData,
+      data: base64String,
       filename: filename
     });
     
