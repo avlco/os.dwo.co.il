@@ -4,6 +4,38 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.6';
 const APP_BASE_URL = "https://dwo.base44.app"; 
 const REDIRECT_URI = `${APP_BASE_URL}/Settings`; 
 
+// ✅ NEW: Encryption key validation
+function validateEncryptionKey() {
+  const key = Deno.env.get("ENCRYPTION_KEY");
+  
+  if (!key) {
+    throw new Error("⚠️ CRITICAL: ENCRYPTION_KEY environment variable is not set!");
+  }
+  
+  if (key.length < 32) {
+    throw new Error(
+      `⚠️ CRITICAL: ENCRYPTION_KEY must be at least 32 characters. Current length: ${key.length}`
+    );
+  }
+  
+  // בדיקת weak keys
+  const weakKeys = ['12345678901234567890123456789012', 'test', 'development', 'password'];
+  const keyLower = key.toLowerCase().slice(0, 32);
+  if (weakKeys.includes(keyLower)) {
+    console.warn("⚠️ WARNING: Using a weak/default ENCRYPTION_KEY. Please use a strong random key in production!");
+  }
+  
+  console.log("✅ [Encryption] Key validated successfully");
+}
+
+// Run validation on startup
+try {
+  validateEncryptionKey();
+} catch (error) {
+  console.error(error.message);
+  // Don't throw - allow function to start but log prominently
+}
+
 function getProviderConfig(providerRaw) {
     const provider = providerRaw.toLowerCase().trim();
     if (provider === 'google') {
@@ -40,7 +72,8 @@ async function encrypt(text) {
         const encryptedHex = Array.from(new Uint8Array(encrypted)).map(b => b.toString(16).padStart(2, '0')).join('');
         return `${ivHex}:${encryptedHex}`;
     } catch (e) {
-        throw new Error(`Encryption failed: ${e.message}`);
+        console.error("[Encryption] Failed to encrypt token:", e);
+        throw new Error(`Token encryption failed: ${e.message}. Please check ENCRYPTION_KEY configuration.`);
     }
 }
 
@@ -69,7 +102,12 @@ async function handleRequest(req) {
                 client_id: config.clientId,
                 redirect_uri: REDIRECT_URI,
                 response_type: 'code',
-                scope: 'https://www.googleapis.com/auth/gmail.modify https://www.googleapis.com/auth/calendar https://www.googleapis.com/auth/drive.file',
+                // ✅ UPDATED: Minimal scopes (readonly + send + labels)
+                scope: 'https://www.googleapis.com/auth/gmail.readonly ' +
+                       'https://www.googleapis.com/auth/gmail.send ' +
+                       'https://www.googleapis.com/auth/gmail.labels ' +
+                       'https://www.googleapis.com/auth/calendar ' +
+                       'https://www.googleapis.com/auth/drive.file',
                 access_type: 'offline',
                 prompt: 'consent',
                 state: state,
@@ -141,7 +179,11 @@ async function handleRequest(req) {
             provider: config.type,
             access_token_encrypted: encryptedAccess,
             expires_at: expiresAt,
-            metadata: { last_updated: new Date().toISOString() },
+            metadata: { 
+                last_updated: new Date().toISOString(),
+                // ✅ NEW: Reset gmail_sync on reconnect
+                gmail_sync: null
+            },
             is_active: true
         };
 
