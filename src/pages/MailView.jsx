@@ -29,7 +29,7 @@ export default function MailView() {
   const urlParams = new URLSearchParams(window.location.search);
   const mailId = urlParams.get('id');
 
-  const {  mail, isLoading } = useQuery({
+  const { data: mail, isLoading } = useQuery({
     queryKey: ['mail', mailId],
     queryFn: async () => {
       const result = await base44.entities.Mail.filter({ id: mailId });
@@ -69,7 +69,7 @@ export default function MailView() {
       console.log('=== MailView Debug ===');
       console.log('Mail ID:', currentMail.id);
       console.log('Subject:', currentMail.subject);
-      console.log('meta', currentMail.metadata);
+      console.log('metadata:', currentMail.metadata);
       console.log('attachments:', currentMail.attachments);
       
       if (currentMail.attachments) {
