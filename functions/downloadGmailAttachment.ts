@@ -2,17 +2,20 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.6';
 
 async function getCryptoKey() {
   const envKey = Deno.env.get("ENCRYPTION_KEY");
-  if (!envKey) throw new Error("ENCRYPTION_KEY is missing");
+  if (!envKey) {
+    throw new Error("ENCRYPTION_KEY is missing");
+  }
   const encoder = new TextEncoder();
   const keyString = envKey.padEnd(32, '0').slice(0, 32);
   const keyBuffer = encoder.encode(keyString);
-  return await crypto.subtle.importKey("raw", keyBuffer, { name: "AES-GCM" }, false, ["encrypt", "decrypt"]);
+  const key = await crypto.subtle.importKey("raw", keyBuffer, { name: "AES-GCM" }, false, ["encrypt", "decrypt"]);
+  return key;
 }
 
 async function decrypt(text) {
   try {
     if (!text) {
-      console.error("[Decrypt] Text is null or undefined");
+      console.error("[Decrypt] Text is null");
       return null;
     }
     
@@ -28,13 +31,24 @@ async function decrypt(text) {
     console.log("[Decrypt] Decrypting token...");
     
     const key = await getCryptoKey();
-    const iv = new Uint8Array(ivHex.match(/.{1,2}/g).map(byte => parseInt(byte, 16)));
-    const encrypted = new Uint8Array(encryptedHex.match(/.{1,2}/g).map(byte => parseInt(byte, 16)));
     
-    const decrypted = await crypto.subtle.decrypt({ name: "AES-GCM", iv }, key, encrypted);
-    const decryptedText = new TextDecoder().decode(decrypted);
+    const ivBytes = [];
+    for (let i = 0; i < ivHex.length; i += 2) {
+      ivBytes.push(parseInt(ivHex.substr(i, 2), 16));
+    }
+    const iv = new Uint8Array(ivBytes);
     
-    console.log("[Decrypt] Successfully decrypted");
+    const encBytes = [];
+    for (let i = 0; i < encryptedHex.length; i += 2) {
+      encBytes.push(parseInt(encryptedHex.substr(i, 2), 16));
+    }
+    const encrypted = new Uint8Array(encBytes);
+    
+    const decrypted = await crypto.subtle.decrypt({ name: "AES-GCM", iv: iv }, key, encrypted);
+    const decoder = new TextDecoder();
+    const decryptedText = decoder.decode(decrypted);
+    
+    console.log("[Decrypt] Success");
     return decryptedText;
   } catch (e) {
     console.error("[Decrypt] Error:", e.message);
@@ -43,48 +57,57 @@ async function decrypt(text) {
 }
 
 async function encrypt(text) {
-  try {
-    const key = await getCryptoKey();
-    const iv = crypto.getRandomValues(new Uint8Array(12));
-    const encoded = new TextEncoder().encode(text);
-    const encrypted = await crypto.subtle.encrypt({ name: "AES-GCM", iv }, key, encoded);
-    const ivHex = Array.from(iv).map(b => b.toString(16).padStart(2, '0')).join('');
-    const encryptedHex = Array.from(new Uint8Array(encrypted)).map(b => b.toString(16).padStart(2, '0')).join('');
-    return ivHex + ':' + encryptedHex;
-  } catch (e) {
-    throw new Error("Encryption failed: " + e.message);
+  const key = await getCryptoKey();
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const encoder = new TextEncoder();
+  const encoded = encoder.encode(text);
+  const encrypted = await crypto.subtle.encrypt({ name: "AES-GCM", iv: iv }, key, encoded);
+  
+  const ivBytes = Array.from(iv);
+  let ivHex = '';
+  for (let i = 0; i < ivBytes.length; i++) {
+    ivHex = ivHex + ivBytes[i].toString(16).padStart(2, '0');
   }
+  
+  const encBytes = Array.from(new Uint8Array(encrypted));
+  let encHex = '';
+  for (let i = 0; i < encBytes.length; i++) {
+    encHex = encHex + encBytes[i].toString(16).padStart(2, '0');
+  }
+  
+  return ivHex + ':' + encHex;
 }
 
 async function refreshGoogleToken(refreshToken, connection, base44) {
-  console.log("[Refresh] Starting token refresh...");
+  console.log("[Refresh] Starting...");
   
   const clientId = Deno.env.get("GOOGLE_CLIENT_ID");
   const clientSecret = Deno.env.get("GOOGLE_CLIENT_SECRET");
-  
   if (!clientId || !clientSecret) {
     throw new Error("Missing GOOGLE env vars");
   }
   
+  const params = new URLSearchParams();
+  params.append('client_id', clientId);
+  params.append('client_secret', clientSecret);
+  params.append('refresh_token', refreshToken);
+  params.append('grant_type', 'refresh_token');
+  
   const res = await fetch('https://oauth2.googleapis.com/token', {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams({
-      client_id: clientId,
-      client_secret: clientSecret,
-      refresh_token: refreshToken,
-      grant_type: 'refresh_token',
-    }).toString(),
+    body: params.toString()
   });
 
   const data = await res.json();
   if (data.error) {
-    throw new Error("Token refresh failed: " + JSON.stringify(data));
+    throw new Error("Token refresh failed");
   }
 
   const newAccessToken = data.access_token;
   const encryptedAccess = await encrypt(newAccessToken);
-  const expiresAt = Date.now() + ((data.expires_in || 3600) * 1000);
+  const expiresIn = data.expires_in || 3600;
+  const expiresAt = Date.now() + (expiresIn * 1000);
 
   await base44.entities.IntegrationConnection.update(connection.id, {
     access_token_encrypted: encryptedAccess,
@@ -92,11 +115,11 @@ async function refreshGoogleToken(refreshToken, connection, base44) {
     is_active: true
   });
   
-  console.log("[Refresh] Token refreshed successfully");
+  console.log("[Refresh] Success");
   return newAccessToken;
 }
 
-Deno.serve(async (req) => {
+Deno.serve(async function(req) {
   const headers = {
     "Access-Control-Allow-Origin": "*",
     "Access-Control-Allow-Methods": "POST, OPTIONS",
@@ -105,7 +128,7 @@ Deno.serve(async (req) => {
   };
 
   if (req.method === "OPTIONS") {
-    return new Response(null, { headers });
+    return new Response(null, { headers: headers });
   }
 
   try {
@@ -115,10 +138,8 @@ Deno.serve(async (req) => {
     const user = await base44.auth.me();
     
     if (!user) {
-      return new Response(
-        JSON.stringify({ error: 'Unauthorized' }), 
-        { status: 401, headers }
-      );
+      const errorResponse = JSON.stringify({ error: 'Unauthorized' });
+      return new Response(errorResponse, { status: 401, headers: headers });
     }
 
     const body = await req.json();
@@ -135,8 +156,21 @@ Deno.serve(async (req) => {
 
     console.log("[Download] Fetching connection...");
     const allConnections = await base44.entities.IntegrationConnection.list('-created_at', 100);
-    const items = Array.isArray(allConnections) ? allConnections : (allConnections.data || []);
-    const connection = items.find(c => c.provider === 'google' && c.is_active !== false);
+    let items = [];
+    if (Array.isArray(allConnections)) {
+      items = allConnections;
+    } else if (allConnections.data) {
+      items = allConnections.data;
+    }
+    
+    let connection = null;
+    for (let i = 0; i < items.length; i++) {
+      const c = items[i];
+      if (c.provider === 'google' && c.is_active !== false) {
+        connection = c;
+        break;
+      }
+    }
 
     if (!connection) {
       throw new Error("Google connection not found");
@@ -145,7 +179,6 @@ Deno.serve(async (req) => {
     console.log("[Download] Connection found");
 
     let accessToken = await decrypt(connection.access_token_encrypted);
-    
     if (!accessToken) {
       throw new Error("Failed to decrypt access token");
     }
@@ -160,16 +193,16 @@ Deno.serve(async (req) => {
     if (response.status === 401) {
       console.log("[Download] Token expired, refreshing...");
       
-      const refreshToken = connection.refresh_token_encrypted 
-        ? await decrypt(connection.refresh_token_encrypted) 
-        : null;
+      let refreshToken = null;
+      if (connection.refresh_token_encrypted) {
+        refreshToken = await decrypt(connection.refresh_token_encrypted);
+      }
       
       if (!refreshToken) {
         throw new Error("Token expired and no refresh token");
       }
 
       accessToken = await refreshGoogleToken(refreshToken, connection, base44);
-      
       response = await fetch(attachmentUrl, {
         headers: { Authorization: "Bearer " + accessToken }
       });
@@ -177,30 +210,28 @@ Deno.serve(async (req) => {
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error("[Download] Gmail API error:", response.status, errorText);
+      console.error("[Download] Gmail error:", response.status, errorText);
       throw new Error("Gmail API error: " + response.status);
     }
 
     const attachmentData = await response.json();
-    
-    console.log("[Download] Success!");
+    const hasData = !!attachmentData.data;
+    console.log("[Download] Success! has ", hasData);
 
-    return new Response(
-      JSON.stringify({ 
-        success: true,
-         attachmentData,
-        filename: filename
-      }), 
-      { status: 200, headers }
-    );
+    const resultData = attachmentData.data || null;
+    const result = JSON.stringify({ 
+      success: true,
+       resultData,
+      filename: filename
+    });
+    
+    return new Response(result, { status: 200, headers: headers });
 
   } catch (err) {
     console.error("[Download] Error:", err.message);
-    return new Response(
-      JSON.stringify({ 
-        error: err.message || "Unknown error"
-      }), 
-      { status: 500, headers }
-    );
+    const errorResult = JSON.stringify({ 
+      error: err.message || "Unknown error"
+    });
+    return new Response(errorResult, { status: 500, headers: headers });
   }
 });
