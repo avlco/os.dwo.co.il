@@ -12,31 +12,34 @@ serve(async (req) => {
   }
 
   try {
+    const authHeader = req.headers.get('Authorization') || '';
+    
     const supabaseClient = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_ANON_KEY') ?? '',
       {
         global: {
-          headers: { Authorization: req.headers.get('Authorization')! },
+          headers: { Authorization: authHeader },
         },
       }
     );
 
-    const { action, approvalId, reason } = await req.json();
+    const { action, activityId, reason } = await req.json();
 
-    // Get approval request
-    const { data: approval, error: fetchError } = await supabaseClient
-      .from('AutomationApproval')
+    // Get approval activity
+    const { data: activity, error: fetchError } = await supabaseClient
+      .from('Activity')
       .select('*')
-      .eq('id', approvalId)
+      .eq('id', activityId)
+      .eq('activity_type', 'approval_request')
       .single();
 
-    if (fetchError || !approval) {
+    if (fetchError || !activity) {
       throw new Error('Approval request not found');
     }
 
     // Check if already processed
-    if (approval.status !== 'pending') {
+    if (activity.status === 'completed' || activity.status === 'cancelled') {
       throw new Error('Approval request already processed');
     }
 
@@ -46,51 +49,58 @@ serve(async (req) => {
       throw new Error('User not authenticated');
     }
 
+    // Parse metadata
+    const metadata = activity.metadata || {};
+    
     // Verify user is the approver
-    if (user.email !== approval.approver_email) {
+    if (user.email !== metadata.approver_email) {
       throw new Error('User is not authorized to approve this request');
     }
 
     const now = new Date().toISOString();
 
     if (action === 'approve') {
-      // Update approval status
+      // Update activity status
       const { error: updateError } = await supabaseClient
-        .from('AutomationApproval')
+        .from('Activity')
         .update({
-          status: 'approved',
-          approved_by: user.email,
-          approved_at: now,
+          status: 'completed',
+          metadata: {
+            ...metadata,
+            approved_by: user.email,
+            approved_at: now,
+            decision: 'approved',
+          },
         })
-        .eq('id', approvalId);
+        .eq('id', activityId);
 
       if (updateError) throw updateError;
 
       // Execute the action
-      const actionConfig = approval.action_config;
-      const actionType = approval.action_type;
+      const actionConfig = metadata.action_config;
+      const actionType = metadata.action_type;
 
       let executionResult = { success: false, message: '' };
 
       switch (actionType) {
         case 'send_email':
-          executionResult = await executeSendEmail(supabaseClient, actionConfig, approval);
+          executionResult = await executeSendEmail(supabaseClient, actionConfig, metadata);
           break;
         
         case 'create_task':
-          executionResult = await executeCreateTask(supabaseClient, actionConfig, approval);
+          executionResult = await executeCreateTask(supabaseClient, actionConfig, metadata);
           break;
         
         case 'create_deadline':
-          executionResult = await executeCreateDeadline(supabaseClient, actionConfig, approval);
+          executionResult = await executeCreateDeadline(supabaseClient, actionConfig, metadata);
           break;
         
         case 'billing':
-          executionResult = await executeCreateBilling(supabaseClient, actionConfig, approval);
+          executionResult = await executeCreateBilling(supabaseClient, actionConfig, metadata);
           break;
         
         case 'calendar_event':
-          executionResult = await executeCreateCalendar(supabaseClient, actionConfig, approval);
+          executionResult = await executeCreateCalendar(supabaseClient, actionConfig, metadata);
           break;
         
         default:
@@ -107,16 +117,20 @@ serve(async (req) => {
       );
 
     } else if (action === 'reject') {
-      // Update approval status
+      // Update activity status
       const { error: updateError } = await supabaseClient
-        .from('AutomationApproval')
+        .from('Activity')
         .update({
-          status: 'rejected',
-          approved_by: user.email,
-          approved_at: now,
-          rejection_reason: reason || 'No reason provided',
+          status: 'cancelled',
+          metadata: {
+            ...metadata,
+            approved_by: user.email,
+            approved_at: now,
+            decision: 'rejected',
+            rejection_reason: reason || 'No reason provided',
+          },
         })
-        .eq('id', approvalId);
+        .eq('id', activityId);
 
       if (updateError) throw updateError;
 
@@ -142,15 +156,15 @@ serve(async (req) => {
 });
 
 // Execute send email action
-async function executeSendEmail(supabase: any, config: any, approval: any) {
+async function executeSendEmail(supabase, config, metadata) {
   try {
     const { error } = await supabase.functions.invoke('sendEmail', {
       body: {
         to: config.to,
         subject: config.subject,
         body: config.body,
-        case_id: approval.case_id,
-        mail_id: approval.mail_id,
+        case_id: metadata.case_id,
+        mail_id: metadata.mail_id,
       },
     });
 
@@ -163,14 +177,14 @@ async function executeSendEmail(supabase: any, config: any, approval: any) {
 }
 
 // Execute create task action
-async function executeCreateTask(supabase: any, config: any, approval: any) {
+async function executeCreateTask(supabase, config, metadata) {
   try {
     const { error } = await supabase
       .from('Task')
       .insert({
         title: config.title,
         description: config.description,
-        case_id: approval.case_id,
+        case_id: metadata.case_id,
         due_date: config.due_date,
         assigned_to: config.assigned_to,
         priority: config.priority || 'medium',
@@ -186,14 +200,14 @@ async function executeCreateTask(supabase: any, config: any, approval: any) {
 }
 
 // Execute create deadline action
-async function executeCreateDeadline(supabase: any, config: any, approval: any) {
+async function executeCreateDeadline(supabase, config, metadata) {
   try {
     const { error } = await supabase
       .from('Deadline')
       .insert({
         title: config.title,
         description: config.description,
-        case_id: approval.case_id,
+        case_id: metadata.case_id,
         due_date: config.due_date,
         deadline_type: config.deadline_type || 'general',
         status: 'active',
@@ -208,16 +222,15 @@ async function executeCreateDeadline(supabase: any, config: any, approval: any) 
 }
 
 // Execute billing action
-async function executeCreateBilling(supabase: any, config: any, approval: any) {
+async function executeCreateBilling(supabase, config, metadata) {
   try {
-    // Get case details for hourly rate
     let hourlyRate = config.hourly_rate || 800;
     
-    if (approval.case_id) {
+    if (metadata.case_id) {
       const { data: caseData } = await supabase
         .from('Case')
         .select('hourly_rate, client_id')
-        .eq('id', approval.case_id)
+        .eq('id', metadata.case_id)
         .single();
       
       if (caseData?.hourly_rate) {
@@ -240,7 +253,7 @@ async function executeCreateBilling(supabase: any, config: any, approval: any) {
     const { error } = await supabase
       .from('TimeEntry')
       .insert({
-        case_id: approval.case_id,
+        case_id: metadata.case_id,
         description: config.description,
         hours: config.hours,
         hourly_rate: hourlyRate,
@@ -258,10 +271,8 @@ async function executeCreateBilling(supabase: any, config: any, approval: any) {
 }
 
 // Execute calendar event action
-async function executeCreateCalendar(supabase: any, config: any, approval: any) {
+async function executeCreateCalendar(supabase, config, metadata) {
   try {
-    // This would call Google Calendar API
-    // For now, just log it
     console.log('Calendar event creation:', config);
     return { success: true, message: 'Calendar event feature coming soon' };
   } catch (error) {
