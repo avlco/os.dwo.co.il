@@ -197,11 +197,11 @@ export default function Cases() {
   const handleSubmit = (e) => {
     e.preventDefault();
     const submitData = { ...formData };
-    
+
     // Convert empty strings to null for optional fields
     if (!submitData.hourly_rate) submitData.hourly_rate = null;
     if (!submitData.assigned_lawyer_id) submitData.assigned_lawyer_id = null;
-    
+
     if (editingCase) {
       updateMutation.mutate({ id: editingCase.id, data: submitData });
     } else {
@@ -242,110 +242,133 @@ export default function Cases() {
     {
       header: t('cases.case_number'),
       accessor: 'case_number',
-      render: (row) => (
-        <div>
-          <span className="font-medium text-slate-800 dark:text-slate-200">{row.case_number}</span>
-          {row.priority_level && row.priority_level !== 'medium' && row.priority_level !== 'low' && (
-            <div className="flex items-center gap-1 mt-1">
-              <AlertTriangle className={`w-3 h-3 ${getPriorityColor(row.priority_level)}`} />
-              <span className={`text-xs ${getPriorityColor(row.priority_level)}`}>
-                {getPriorityLabel(row.priority_level)}
-              </span>
-            </div>
-          )}
-        </div>
-      ),
+      cell: ({ row }) => {
+        const r = row.original;
+        return (
+          <div>
+            <span className="font-medium text-slate-800 dark:text-slate-200">{r.case_number}</span>
+            {r.priority_level && r.priority_level !== 'medium' && r.priority_level !== 'low' && (
+              <div className="flex items-center gap-1 mt-1">
+                <AlertTriangle className={`w-3 h-3 ${getPriorityColor(r.priority_level)}`} />
+                <span className={`text-xs ${getPriorityColor(r.priority_level)}`}>
+                  {getPriorityLabel(r.priority_level)}
+                </span>
+              </div>
+            )}
+          </div>
+        );
+      },
     },
     {
       header: t('cases.title_field'),
       accessor: 'title',
-      render: (row) => (
-        <span className="text-slate-600 dark:text-slate-400 truncate max-w-xs block">{row.title}</span>
+      cell: ({ row }) => (
+        <span className="text-slate-600 dark:text-slate-400 truncate max-w-xs block">
+          {row.original.title}
+        </span>
       ),
     },
     {
       header: t('cases.client'),
       accessor: 'client_id',
-      render: (row) => <span className="dark:text-slate-300">{getClientName(row.client_id)}</span>,
+      cell: ({ row }) => (
+        <span className="dark:text-slate-300">
+          {getClientName(row.original.client_id)}
+        </span>
+      ),
     },
     {
+      id: 'assigned_lawyer',
       header: 'עו"ד מטפל',
-      render: (row) => (
-        row.assigned_lawyer_id ? (
+      cell: ({ row }) => {
+        const r = row.original;
+        return r.assigned_lawyer_id ? (
           <div className="flex items-center gap-2 text-sm">
             <UserCheck className="w-4 h-4 text-blue-600" />
-            <span className="dark:text-slate-300">{getLawyerName(row.assigned_lawyer_id)}</span>
+            <span className="dark:text-slate-300">{getLawyerName(r.assigned_lawyer_id)}</span>
           </div>
         ) : (
           <span className="text-slate-400 text-sm">-</span>
-        )
-      ),
+        );
+      },
     },
     {
       header: t('cases.type'),
       accessor: 'case_type',
-      render: (row) => {
-        const type = caseTypes.find(t => t.value === row.case_type);
-        return <span className="dark:text-slate-300">{type?.label || row.case_type}</span>;
+      cell: ({ row }) => {
+        const r = row.original;
+        const type = caseTypes.find(t => t.value === r.case_type);
+        return <span className="dark:text-slate-300">{type?.label || r.case_type}</span>;
       },
     },
     {
       header: t('cases.status'),
       accessor: 'status',
-      render: (row) => <StatusBadge status={row.status} />,
+      cell: ({ row }) => <StatusBadge status={row.original.status} />,
     },
     {
+      id: 'deadlines',
       header: 'מועדים',
-      render: (row) => (
-        <div className="space-y-1 text-xs">
-          {row.expiry_date && (
-            <div className="flex items-center gap-1 text-orange-600">
-              <Calendar className="w-3 h-3" />
-              <span>פקיעה: {format(new Date(row.expiry_date), 'dd/MM/yyyy')}</span>
-            </div>
-          )}
-          {row.renewal_date && (
-            <div className="flex items-center gap-1 text-blue-600">
-              <Calendar className="w-3 h-3" />
-              <span>חידוש: {format(new Date(row.renewal_date), 'dd/MM/yyyy')}</span>
-            </div>
-          )}
-          {!row.expiry_date && !row.renewal_date && (
-            <span className="text-slate-400">-</span>
-          )}
-        </div>
-      ),
+      cell: ({ row }) => {
+        const r = row.original;
+        return (
+          <div className="space-y-1 text-xs">
+            {r.expiry_date && (
+              <div className="flex items-center gap-1 text-orange-600">
+                <Calendar className="w-3 h-3" />
+                <span>פקיעה: {format(new Date(r.expiry_date), 'dd/MM/yyyy')}</span>
+              </div>
+            )}
+            {r.renewal_date && (
+              <div className="flex items-center gap-1 text-blue-600">
+                <Calendar className="w-3 h-3" />
+                <span>חידוש: {format(new Date(r.renewal_date), 'dd/MM/yyyy')}</span>
+              </div>
+            )}
+            {!r.expiry_date && !r.renewal_date && (
+              <span className="text-slate-400">-</span>
+            )}
+          </div>
+        );
+      },
     },
     {
+      id: 'actions',
       header: '',
-      render: (row) => (
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="ghost" size="icon" className="h-8 w-8 dark:hover:bg-slate-700">
-              <MoreHorizontal className="w-4 h-4" />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="dark:bg-slate-800 dark:border-slate-700">
-            <DropdownMenuItem asChild className="dark:text-slate-200 dark:hover:bg-slate-700">
-              <Link to={createPageUrl(`CaseView?id=${row.id}`)} className="flex items-center gap-2">
-                <Eye className="w-4 h-4" />
-                {t('cases.view')}
-              </Link>
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => openEditDialog(row)} className="flex items-center gap-2 dark:text-slate-200 dark:hover:bg-slate-700">
-              <Edit className="w-4 h-4" />
-              {t('cases.edit')}
-            </DropdownMenuItem>
-            <DropdownMenuItem 
-              onClick={() => deleteMutation.mutate(row.id)} 
-              className="flex items-center gap-2 text-rose-600 dark:text-rose-400 dark:hover:bg-slate-700"
-            >
-              <Trash2 className="w-4 h-4" />
-              {t('cases.delete')}
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-      ),
+      cell: ({ row }) => {
+        const r = row.original;
+        return (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="icon" className="h-8 w-8 dark:hover:bg-slate-700">
+                <MoreHorizontal className="w-4 h-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="dark:bg-slate-800 dark:border-slate-700">
+              <DropdownMenuItem asChild className="dark:text-slate-200 dark:hover:bg-slate-700">
+                <Link to={createPageUrl(`CaseView?id=${r.id}`)} className="flex items-center gap-2">
+                  <Eye className="w-4 h-4" />
+                  {t('cases.view')}
+                </Link>
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={() => openEditDialog(r)}
+                className="flex items-center gap-2 dark:text-slate-200 dark:hover:bg-slate-700"
+              >
+                <Edit className="w-4 h-4" />
+                {t('cases.edit')}
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={() => deleteMutation.mutate(r.id)}
+                className="flex items-center gap-2 text-rose-600 dark:text-rose-400 dark:hover:bg-slate-700"
+              >
+                <Trash2 className="w-4 h-4" />
+                {t('cases.delete')}
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        );
+      },
     },
   ];
 
@@ -375,7 +398,9 @@ export default function Cases() {
           <SelectContent className="dark:bg-slate-800 dark:border-slate-700">
             <SelectItem value="all" className="dark:text-slate-200">{t('cases.all_types')}</SelectItem>
             {caseTypes.map(type => (
-              <SelectItem key={type.value} value={type.value} className="dark:text-slate-200">{type.label}</SelectItem>
+              <SelectItem key={type.value} value={type.value} className="dark:text-slate-200">
+                {type.label}
+              </SelectItem>
             ))}
           </SelectContent>
         </Select>
@@ -386,7 +411,9 @@ export default function Cases() {
           <SelectContent className="dark:bg-slate-800 dark:border-slate-700">
             <SelectItem value="all" className="dark:text-slate-200">{t('cases.all_statuses')}</SelectItem>
             {caseStatuses.map(status => (
-              <SelectItem key={status.value} value={status.value} className="dark:text-slate-200">{status.label}</SelectItem>
+              <SelectItem key={status.value} value={status.value} className="dark:text-slate-200">
+                {status.label}
+              </SelectItem>
             ))}
           </SelectContent>
         </Select>
@@ -412,7 +439,9 @@ export default function Cases() {
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
         <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto dark:bg-slate-800 dark:border-slate-700">
           <DialogHeader>
-            <DialogTitle className="dark:text-slate-200">{editingCase ? 'עריכת תיק' : 'תיק חדש'}</DialogTitle>
+            <DialogTitle className="dark:text-slate-200">
+              {editingCase ? 'עריכת תיק' : 'תיק חדש'}
+            </DialogTitle>
           </DialogHeader>
           <form onSubmit={handleSubmit} className="space-y-6 mt-4">
             <div className="grid grid-cols-3 gap-4">
@@ -428,26 +457,38 @@ export default function Cases() {
               </div>
               <div className="space-y-2">
                 <Label className="dark:text-slate-300">סוג תיק *</Label>
-                <Select value={formData.case_type} onValueChange={(v) => setFormData({ ...formData, case_type: v })}>
+                <Select
+                  value={formData.case_type}
+                  onValueChange={(v) => setFormData({ ...formData, case_type: v })}
+                >
                   <SelectTrigger className="dark:bg-slate-900 dark:border-slate-600">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent className="dark:bg-slate-800 dark:border-slate-700">
                     {caseTypes.map(type => (
-                      <SelectItem key={type.value} value={type.value} className="dark:text-slate-200">{type.label}</SelectItem>
+                      <SelectItem key={type.value} value={type.value} className="dark:text-slate-200">
+                        {type.label}
+                      </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
               </div>
               <div className="space-y-2">
                 <Label className="dark:text-slate-300">דחיפות</Label>
-                <Select value={formData.priority_level} onValueChange={(v) => setFormData({ ...formData, priority_level: v })}>
+                <Select
+                  value={formData.priority_level}
+                  onValueChange={(v) => setFormData({ ...formData, priority_level: v })}
+                >
                   <SelectTrigger className="dark:bg-slate-900 dark:border-slate-600">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent className="dark:bg-slate-800 dark:border-slate-700">
                     {priorityLevels.map(priority => (
-                      <SelectItem key={priority.value} value={priority.value} className="dark:text-slate-200">
+                      <SelectItem
+                        key={priority.value}
+                        value={priority.value}
+                        className="dark:text-slate-200"
+                      >
                         {priority.label}
                       </SelectItem>
                     ))}
@@ -469,25 +510,32 @@ export default function Cases() {
             <div className="grid grid-cols-3 gap-4">
               <div className="space-y-2">
                 <Label className="dark:text-slate-300">לקוח</Label>
-                <Select value={formData.client_id} onValueChange={(v) => setFormData({ ...formData, client_id: v })}>
+                <Select
+                  value={formData.client_id || undefined}
+                  onValueChange={(v) => setFormData({ ...formData, client_id: v })}
+                >
                   <SelectTrigger className="dark:bg-slate-900 dark:border-slate-600">
                     <SelectValue placeholder="בחר לקוח" />
                   </SelectTrigger>
                   <SelectContent className="dark:bg-slate-800 dark:border-slate-700">
                     {clients.map(client => (
-                      <SelectItem key={client.id} value={client.id} className="dark:text-slate-200">{client.name}</SelectItem>
+                      <SelectItem key={client.id} value={client.id} className="dark:text-slate-200">
+                        {client.name}
+                      </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
               </div>
               <div className="space-y-2">
                 <Label className="dark:text-slate-300">עו"ד מטפל</Label>
-                <Select value={formData.assigned_lawyer_id} onValueChange={(v) => setFormData({ ...formData, assigned_lawyer_id: v })}>
+                <Select
+                  value={formData.assigned_lawyer_id || undefined}
+                  onValueChange={(v) => setFormData({ ...formData, assigned_lawyer_id: v })}
+                >
                   <SelectTrigger className="dark:bg-slate-900 dark:border-slate-600">
                     <SelectValue placeholder="בחר עו״ד" />
                   </SelectTrigger>
                   <SelectContent className="dark:bg-slate-800 dark:border-slate-700">
-                    <SelectItem value="" className="dark:text-slate-200">ללא</SelectItem>
                     {users.map(user => (
                       <SelectItem key={user.id} value={user.id} className="dark:text-slate-200">
                         {user.full_name || user.email}
@@ -498,13 +546,18 @@ export default function Cases() {
               </div>
               <div className="space-y-2">
                 <Label className="dark:text-slate-300">סטטוס *</Label>
-                <Select value={formData.status} onValueChange={(v) => setFormData({ ...formData, status: v })}>
+                <Select
+                  value={formData.status}
+                  onValueChange={(v) => setFormData({ ...formData, status: v })}
+                >
                   <SelectTrigger className="dark:bg-slate-900 dark:border-slate-600">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent className="dark:bg-slate-800 dark:border-slate-700">
                     {caseStatuses.map(status => (
-                      <SelectItem key={status.value} value={status.value} className="dark:text-slate-200">{status.label}</SelectItem>
+                      <SelectItem key={status.value} value={status.value} className="dark:text-slate-200">
+                        {status.label}
+                      </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
@@ -584,11 +637,16 @@ export default function Cases() {
             </div>
 
             <div className="flex justify-end gap-3 pt-4">
-              <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)} className="dark:border-slate-600">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setIsDialogOpen(false)}
+                className="dark:border-slate-600"
+              >
                 ביטול
               </Button>
-              <Button 
-                type="submit" 
+              <Button
+                type="submit"
                 className="bg-slate-800 hover:bg-slate-700 dark:bg-slate-700"
                 disabled={createMutation.isPending || updateMutation.isPending}
               >
