@@ -26,7 +26,6 @@ serve(async (req) => {
 
     const { mailId, ruleId } = await req.json();
 
-    // Get mail data
     const { data: mail, error: mailError } = await supabaseClient
       .from('Mail')
       .select('*')
@@ -37,7 +36,6 @@ serve(async (req) => {
       throw new Error('Mail not found');
     }
 
-    // Get automation rule
     const { data: rule, error: ruleError } = await supabaseClient
       .from('AutomationRule')
       .select('*')
@@ -48,7 +46,6 @@ serve(async (req) => {
       throw new Error('Automation rule not found');
     }
 
-    // Extract case_id and client_id from mail using map_config
     let caseId = null;
     let clientId = null;
 
@@ -83,10 +80,8 @@ serve(async (req) => {
       }
     }
 
-    // Get current user for approval requests
     const { data: { user } } = await supabaseClient.auth.getUser();
 
-    // Process each action
     const results = [];
     const actions = rule.actions_config || {};
 
@@ -99,7 +94,7 @@ serve(async (req) => {
       };
 
       if (actions.send_email.require_approval) {
-        const approvalResult = await createApprovalRequest(
+        const approvalActivity = await createApprovalActivity(
           supabaseClient,
           {
             automation_rule_id: ruleId,
@@ -114,7 +109,7 @@ serve(async (req) => {
             mail_from: mail.from_email,
           }
         );
-        results.push({ action: 'send_email', status: 'pending_approval', approvalId: approvalResult.id });
+        results.push({ action: 'send_email', status: 'pending_approval', activityId: approvalActivity.id });
       } else {
         const { error } = await supabaseClient.functions.invoke('sendEmail', {
           body: emailConfig,
@@ -135,7 +130,7 @@ serve(async (req) => {
       };
 
       if (actions.create_task.require_approval) {
-        const approvalResult = await createApprovalRequest(
+        const approvalActivity = await createApprovalActivity(
           supabaseClient,
           {
             automation_rule_id: ruleId,
@@ -150,7 +145,7 @@ serve(async (req) => {
             mail_from: mail.from_email,
           }
         );
-        results.push({ action: 'create_task', status: 'pending_approval', approvalId: approvalResult.id });
+        results.push({ action: 'create_task', status: 'pending_approval', activityId: approvalActivity.id });
       } else {
         const { error } = await supabaseClient
           .from('Task')
@@ -159,42 +154,7 @@ serve(async (req) => {
       }
     }
 
-    // 3. Create Deadline Action
-    if (actions.create_deadline?.enabled) {
-      const deadlineConfig = {
-        title: await replaceTokens(actions.create_deadline.title, { mail, caseId, clientId }, supabaseClient),
-        description: await replaceTokens(actions.create_deadline.description, { mail, caseId, clientId }, supabaseClient),
-        case_id: caseId,
-        due_date: calculateDueDate(actions.create_deadline.due_offset_days),
-        deadline_type: actions.create_deadline.deadline_type || 'general',
-      };
-
-      if (actions.create_deadline.require_approval) {
-        const approvalResult = await createApprovalRequest(
-          supabaseClient,
-          {
-            automation_rule_id: ruleId,
-            mail_id: mailId,
-            case_id: caseId,
-            client_id: clientId,
-            action_type: 'create_deadline',
-            action_config: deadlineConfig,
-            approver_email: actions.create_deadline.approver_email,
-            requested_by: user?.email || 'system',
-            mail_subject: mail.subject,
-            mail_from: mail.from_email,
-          }
-        );
-        results.push({ action: 'create_deadline', status: 'pending_approval', approvalId: approvalResult.id });
-      } else {
-        const { error } = await supabaseClient
-          .from('Deadline')
-          .insert({ ...deadlineConfig, status: 'active' });
-        results.push({ action: 'create_deadline', status: error ? 'failed' : 'success', error: error?.message });
-      }
-    }
-
-    // 4. Billing Action
+    // 3. Billing Action
     if (actions.billing?.enabled) {
       const billingConfig = {
         hours: actions.billing.hours,
@@ -203,7 +163,7 @@ serve(async (req) => {
       };
 
       if (actions.billing.require_approval) {
-        const approvalResult = await createApprovalRequest(
+        const approvalActivity = await createApprovalActivity(
           supabaseClient,
           {
             automation_rule_id: ruleId,
@@ -218,7 +178,7 @@ serve(async (req) => {
             mail_from: mail.from_email,
           }
         );
-        results.push({ action: 'billing', status: 'pending_approval', approvalId: approvalResult.id });
+        results.push({ action: 'billing', status: 'pending_approval', activityId: approvalActivity.id });
       } else {
         let hourlyRate = billingConfig.hourly_rate || 800;
         
@@ -262,37 +222,6 @@ serve(async (req) => {
       }
     }
 
-    // 5. Calendar Event Action
-    if (actions.calendar_event?.enabled) {
-      const calendarConfig = {
-        title: await replaceTokens(actions.calendar_event.title, { mail, caseId, clientId }, supabaseClient),
-        description: await replaceTokens(actions.calendar_event.description, { mail, caseId, clientId }, supabaseClient),
-        date: calculateDueDate(actions.calendar_event.date_offset_days),
-        duration: actions.calendar_event.duration || 60,
-      };
-
-      if (actions.calendar_event.require_approval) {
-        const approvalResult = await createApprovalRequest(
-          supabaseClient,
-          {
-            automation_rule_id: ruleId,
-            mail_id: mailId,
-            case_id: caseId,
-            client_id: clientId,
-            action_type: 'calendar_event',
-            action_config: calendarConfig,
-            approver_email: actions.calendar_event.approver_email,
-            requested_by: user?.email || 'system',
-            mail_subject: mail.subject,
-            mail_from: mail.from_email,
-          }
-        );
-        results.push({ action: 'calendar_event', status: 'pending_approval', approvalId: approvalResult.id });
-      } else {
-        results.push({ action: 'calendar_event', status: 'pending_implementation' });
-      }
-    }
-
     return new Response(
       JSON.stringify({ success: true, results }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -310,7 +239,6 @@ serve(async (req) => {
   }
 });
 
-// Helper: Extract data from mail
 function extractFromMail(mail, config) {
   if (!config) return null;
   
@@ -336,7 +264,6 @@ function extractFromMail(mail, config) {
   return null;
 }
 
-// Helper: Replace tokens in templates
 async function replaceTokens(template, context, supabase) {
   if (!template) return '';
   
@@ -371,24 +298,35 @@ async function replaceTokens(template, context, supabase) {
   return result;
 }
 
-// Helper: Calculate due date
 function calculateDueDate(offsetDays) {
   const date = new Date();
   date.setDate(date.getDate() + (offsetDays || 0));
   return date.toISOString().split('T')[0];
 }
 
-// Helper: Create approval request
-async function createApprovalRequest(supabase, data) {
+async function createApprovalActivity(supabase, data) {
   const expiresAt = new Date();
   expiresAt.setDate(expiresAt.getDate() + 7);
 
-  const { data: approval, error } = await supabaseClient
-    .from('AutomationApproval')
+  const { data: activity, error } = await supabase
+    .from('Activity')
     .insert({
-      ...data,
+      activity_type: 'approval_request',
+      case_id: data.case_id,
       status: 'pending',
-      expires_at: expiresAt.toISOString(),
+      description: `בקשת אישור: ${data.action_type}`,
+      metadata: {
+        automation_rule_id: data.automation_rule_id,
+        mail_id: data.mail_id,
+        client_id: data.client_id,
+        action_type: data.action_type,
+        action_config: data.action_config,
+        approver_email: data.approver_email,
+        requested_by: data.requested_by,
+        mail_subject: data.mail_subject,
+        mail_from: data.mail_from,
+        expires_at: expiresAt.toISOString(),
+      },
     })
     .select()
     .single();
@@ -413,5 +351,5 @@ async function createApprovalRequest(supabase, data) {
     },
   });
 
-  return approval;
+  return activity;
 }
