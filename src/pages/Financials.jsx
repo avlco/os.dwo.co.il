@@ -181,64 +181,88 @@ export default function Financials() {
 
   const invoiceColumns = [
     {
+      id: 'invoice_number',
       header: t('financials.invoice_number'),
-      accessor: 'invoice_number',
-      render: (row) => <span className="font-medium text-slate-800 dark:text-slate-200">{row.invoice_number}</span>,
-    },
-    {
-      header: t('financials.client'),
-      accessor: 'client_id',
-      render: (row) => <span className="dark:text-slate-300">{getClientName(row.client_id)}</span>,
-    },
-    {
-      header: t('financials.date'),
-      accessor: 'issued_date',
-      render: (row) => <span className="dark:text-slate-300">{row.issued_date ? format(new Date(row.issued_date), 'dd/MM/yyyy') : '-'}</span>,
-    },
-    {
-      header: t('financials.amount'),
-      accessor: 'total',
-      render: (row) => (
-        <span className="font-semibold dark:text-slate-200">
-          {row.currency === 'USD' ? '$' : row.currency === 'EUR' ? '€' : '₪'}
-          {(row.total || 0).toLocaleString()}
+      accessorKey: 'invoice_number',
+      cell: ({ row }) => (
+        <span className="font-medium text-slate-800 dark:text-slate-200">
+          {row.original.invoice_number}
         </span>
       ),
     },
     {
-      header: t('financials.status'),
-      accessor: 'status',
-      render: (row) => <StatusBadge status={row.status} />,
+      id: 'client',
+      header: t('financials.client'),
+      accessorKey: 'client_id',
+      cell: ({ row }) => (
+        <span className="dark:text-slate-300">
+          {getClientName(row.original.client_id)}
+        </span>
+      ),
     },
     {
-      header: '',
-      render: (row) => (
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="ghost" size="icon" className="h-8 w-8 dark:hover:bg-slate-700">
-              <MoreHorizontal className="w-4 h-4" />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="dark:bg-slate-800 dark:border-slate-700">
-            {row.status !== 'paid' && row.status !== 'cancelled' && (
-              <DropdownMenuItem 
-                onClick={() => updateInvoiceStatusMutation.mutate({ id: row.id, status: 'paid' })}
-                className="flex items-center gap-2 dark:text-slate-200 dark:hover:bg-slate-700"
-              >
-                <CreditCard className="w-4 h-4" />
-                {t('financials.mark_as_paid')}
-              </DropdownMenuItem>
-            )}
-            <DropdownMenuItem 
-              onClick={() => deleteInvoiceMutation.mutate(row.id)}
-              className="flex items-center gap-2 text-rose-600 dark:text-rose-400 dark:hover:bg-slate-700"
-            >
-              <Trash2 className="w-4 h-4" />
-              {t('financials.delete')}
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
+      id: 'issued_date',
+      header: t('financials.date'),
+      accessorKey: 'issued_date',
+      cell: ({ row }) => (
+        <span className="dark:text-slate-300">
+          {row.original.issued_date ? format(new Date(row.original.issued_date), 'dd/MM/yyyy') : '-'}
+        </span>
       ),
+    },
+    {
+      id: 'total',
+      header: t('financials.amount'),
+      accessorKey: 'total',
+      cell: ({ row }) => {
+        const r = row.original;
+        return (
+          <span className="font-semibold dark:text-slate-200">
+            {r.currency === 'USD' ? '$' : r.currency === 'EUR' ? '€' : '₪'}
+            {(r.total || 0).toLocaleString()}
+          </span>
+        );
+      },
+    },
+    {
+      id: 'status',
+      header: t('financials.status'),
+      accessorKey: 'status',
+      cell: ({ row }) => <StatusBadge status={row.original.status} />,
+    },
+    {
+      id: 'actions',
+      header: '',
+      cell: ({ row }) => {
+        const r = row.original;
+        return (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="icon" className="h-8 w-8 dark:hover:bg-slate-700">
+                <MoreHorizontal className="w-4 h-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="dark:bg-slate-800 dark:border-slate-700">
+              {r.status !== 'paid' && r.status !== 'cancelled' && (
+                <DropdownMenuItem 
+                  onClick={() => updateInvoiceStatusMutation.mutate({ id: r.id, status: 'paid' })}
+                  className="flex items-center gap-2 dark:text-slate-200 dark:hover:bg-slate-700"
+                >
+                  <CreditCard className="w-4 h-4" />
+                  {t('financials.mark_as_paid')}
+                </DropdownMenuItem>
+              )}
+              <DropdownMenuItem 
+                onClick={() => deleteInvoiceMutation.mutate(r.id)}
+                className="flex items-center gap-2 text-rose-600 dark:text-rose-400 dark:hover:bg-slate-700"
+              >
+                <Trash2 className="w-4 h-4" />
+                {t('financials.delete')}
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        );
+      },
     },
   ];
 
