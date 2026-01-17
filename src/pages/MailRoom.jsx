@@ -4,9 +4,9 @@ import { base44 } from '../api/base44Client';
 import { PageHeader } from "../components/ui/PageHeader";
 import { DataTable } from "../components/ui/DataTable";
 import { Button } from "../components/ui/button";
-import { Mail, RefreshCw, CheckCircle, Clock, Download, Loader2 } from 'lucide-react';
+import { Mail, RefreshCw, CheckCircle, Clock, Download, Loader2, Settings } from 'lucide-react';
 import { createPageUrl } from '../utils';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { format } from 'date-fns';
 import { he } from 'date-fns/locale';
 import { Badge } from "../components/ui/badge";
@@ -196,7 +196,26 @@ export default function MailRoom() {
 
   return (
     <div className="space-y-6">
-      <PageHeader title="חדר דואר" description="ניהול ומיון דואר נכנס." />
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-slate-800 dark:text-slate-200">חדר דואר</h1>
+          <p className="text-slate-500 dark:text-slate-400 mt-1">ניהול ומיון דואר נכנס.</p>
+        </div>
+        <div className="flex gap-2">
+          <Link to={createPageUrl('ApprovalQueue')}>
+            <Button variant="outline" className="gap-2">
+              <CheckCircle className="w-4 h-4" />
+              תור אישורים
+            </Button>
+          </Link>
+          <Link to={createPageUrl('AutomationRules')}>
+            <Button variant="outline" className="gap-2">
+              <Settings className="w-4 h-4" />
+              חוקי אוטומציה
+            </Button>
+          </Link>
+        </div>
+      </div>
       
       <div className="flex justify-between items-center p-4 bg-slate-50 dark:bg-slate-900 rounded-md border">
         <div className="flex items-center gap-3">
