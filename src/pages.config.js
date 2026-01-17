@@ -10,6 +10,7 @@ import MailView from './pages/MailView';
 import MailAnalytics from './pages/MailAnalytics';
 import Workbench from './pages/Workbench';
 import ApprovalQueue from './pages/ApprovalQueue';
+import AutomationRules from './pages/AutomationRules';
 import Settings from './pages/Settings';
 import Layout from './Layout';
 
@@ -27,6 +28,7 @@ export const pagesConfig = {
     MailAnalytics,
     Workbench,
     ApprovalQueue,
+    AutomationRules,
     Settings,
   },
   Layout,
