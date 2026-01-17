@@ -209,112 +209,150 @@ export default function Clients() {
     {
       header: t('clients.name'),
       accessor: 'name',
-      render: (row) => (
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-slate-100 dark:bg-slate-700 flex items-center justify-center">
-            {row.type === 'company' ? (
-              <Building2 className="w-5 h-5 text-slate-500 dark:text-slate-400" />
-            ) : (
-              <Users className="w-5 h-5 text-slate-500 dark:text-slate-400" />
-            )}
-          </div>
-          <div>
-            <p className="font-medium text-slate-800 dark:text-slate-200">{row.name}</p>
-            <div className="flex items-center gap-2">
-              <p className="text-sm text-slate-500 dark:text-slate-400">
-                {row.type === 'company' ? t('clients.type_company') : t('clients.type_individual')}
-              </p>
-              {row.client_number && (
-                <Badge variant="outline" className="text-xs">
-                  {row.client_number}
-                </Badge>
+      cell: ({ row }) => {
+        const r = row.original;
+        return (
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-slate-100 dark:bg-slate-700 flex items-center justify-center">
+              {r.type === 'company' ? (
+                <Building2 className="w-5 h-5 text-slate-500 dark:text-slate-400" />
+              ) : (
+                <Users className="w-5 h-5 text-slate-500 dark:text-slate-400" />
               )}
             </div>
+            <div>
+              <p className="font-medium text-slate-800 dark:text-slate-200">{r.name}</p>
+              <div className="flex items-center gap-2">
+                <p className="text-sm text-slate-500 dark:text-slate-400">
+                  {r.type === 'company' ? t('clients.type_company') : t('clients.type_individual')}
+                </p>
+                {r.client_number && (
+                  <Badge variant="outline" className="text-xs">
+                    {r.client_number}
+                  </Badge>
+                )}
+              </div>
+            </div>
           </div>
-        </div>
-      ),
+        );
+      },
     },
     {
+      id: 'contact_details',
       header: t('clients.contact_details'),
-      render: (row) => (
-        <div className="space-y-1">
-          {row.email && (
-            <div className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-400">
-              <Mail className="w-3 h-3" />
-              {row.email}
-            </div>
-          )}
-          {row.phone && (
-            <div className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-400">
-              <Phone className="w-3 h-3" />
-              {row.phone}
-            </div>
-          )}
-        </div>
-      ),
+      cell: ({ row }) => {
+        const r = row.original;
+        return (
+          <div className="space-y-1">
+            {r.email && (
+              <div className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-400">
+                <Mail className="w-3 h-3" />
+                {r.email}
+              </div>
+            )}
+            {r.phone && (
+              <div className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-400">
+                <Phone className="w-3 h-3" />
+                {r.phone}
+              </div>
+            )}
+          </div>
+        );
+      },
     },
     {
+      id: 'assigned_lawyer',
       header: 'עו"ד מטפל',
-      render: (row) => (
-        row.assigned_lawyer_id ? (
+      cell: ({ row }) => {
+        const r = row.original;
+        return r.assigned_lawyer_id ? (
           <div className="flex items-center gap-2 text-sm">
             <UserCheck className="w-4 h-4 text-blue-600" />
-            <span className="dark:text-slate-300">{getLawyerName(row.assigned_lawyer_id)}</span>
+            <span className="dark:text-slate-300">{getLawyerName(r.assigned_lawyer_id)}</span>
           </div>
         ) : (
           <span className="text-slate-400 text-sm">-</span>
-        )
-      ),
+        );
+      },
     },
     {
+      id: 'hourly_rate',
       header: 'תעריף שעתי',
-      render: (row) => (
-        <span className="dark:text-slate-300 font-mono text-sm">
-          {row.hourly_rate ? `${row.hourly_rate} ${row.billing_currency || '₪'}` : '-'}
-        </span>
-      ),
+      cell: ({ row }) => {
+        const r = row.original;
+        return (
+          <span className="dark:text-slate-300 font-mono text-sm">
+            {r.hourly_rate ? `${r.hourly_rate} ${r.billing_currency || '₪'}` : '-'}
+          </span>
+        );
+      },
     },
     {
+      id: 'cases_count',
       header: t('clients.cases_count'),
-      render: (row) => (
-        <Badge variant="secondary" className="bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300">
-          {getCasesCount(row.id)} תיקים
-        </Badge>
-      ),
+      cell: ({ row }) => {
+        const r = row.original;
+        return (
+          <Badge
+            variant="secondary"
+            className="bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300"
+          >
+            {getCasesCount(r.id)} תיקים
+          </Badge>
+        );
+      },
     },
     {
+      id: 'status',
       header: t('clients.status'),
-      render: (row) => (
-        <Badge variant={row.is_active !== false ? 'default' : 'secondary'} 
-          className={row.is_active !== false ? 'bg-green-50 dark:bg-green-900/30 text-green-700 dark:text-green-300' : 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-400'}>
-          {row.is_active !== false ? t('clients.active') : t('clients.inactive')}
-        </Badge>
-      ),
+      cell: ({ row }) => {
+        const r = row.original;
+        const active = r.is_active !== false;
+        return (
+          <Badge
+            variant={active ? 'default' : 'secondary'}
+            className={
+              active
+                ? 'bg-green-50 dark:bg-green-900/30 text-green-700 dark:text-green-300'
+                : 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-400'
+            }
+          >
+            {active ? t('clients.active') : t('clients.inactive')}
+          </Badge>
+        );
+      },
     },
     {
+      id: 'actions',
       header: '',
-      render: (row) => (
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="ghost" size="icon" className="h-8 w-8 dark:hover:bg-slate-700">
-              <MoreHorizontal className="w-4 h-4" />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="dark:bg-slate-800 dark:border-slate-700">
-            <DropdownMenuItem onClick={() => openEditDialog(row)} className="flex items-center gap-2 dark:text-slate-200 dark:hover:bg-slate-700">
-              <Edit className="w-4 h-4" />
-              {t('clients.edit')}
-            </DropdownMenuItem>
-            <DropdownMenuItem 
-              onClick={() => deleteMutation.mutate(row.id)} 
-              className="flex items-center gap-2 text-rose-600 dark:text-rose-400 dark:hover:bg-slate-700"
-            >
-              <Trash2 className="w-4 h-4" />
-              {t('clients.delete')}
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-      ),
+      cell: ({ row }) => {
+        const r = row.original;
+        return (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="icon" className="h-8 w-8 dark:hover:bg-slate-700">
+                <MoreHorizontal className="w-4 h-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="dark:bg-slate-800 dark:border-slate-700">
+              <DropdownMenuItem
+                onClick={() => openEditDialog(r)}
+                className="flex items-center gap-2 dark:text-slate-200 dark:hover:bg-slate-700"
+              >
+                <Edit className="w-4 h-4" />
+                {t('clients.edit')}
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={() => deleteMutation.mutate(r.id)}
+                className="flex items-center gap-2 text-rose-600 dark:text-rose-400 dark:hover:bg-slate-700"
+              >
+                <Trash2 className="w-4 h-4" />
+                {t('clients.delete')}
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        );
+      },
     },
   ];
 
@@ -327,9 +365,11 @@ export default function Clients() {
         actionLabel={t('clients.new_client')}
       />
 
-      <div className="flex flex-wrap gap-4 items-center">
+      <div className="flex.flex-wrap gap-4 items-center">
         <div className="relative flex-1 min-w-[200px] max-w-md">
-          <Search className={`absolute ${isRTL ? 'right-3' : 'left-3'} top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400`} />
+          <Search
+            className={`absolute ${isRTL ? 'right-3' : 'left-3'} top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400`}
+          />
           <Input
             placeholder={t('clients.search_placeholder')}
             value={searchTerm}
@@ -342,9 +382,13 @@ export default function Clients() {
             <SelectValue placeholder={t('clients.client_type')} />
           </SelectTrigger>
           <SelectContent className="dark:bg-slate-800 dark:border-slate-700">
-            <SelectItem value="all" className="dark:text-slate-200">{t('clients.all_types')}</SelectItem>
+            <SelectItem value="all" className="dark:text-slate-200">
+              {t('clients.all_types')}
+            </SelectItem>
             {clientTypes.map(type => (
-              <SelectItem key={type.value} value={type.value} className="dark:text-slate-200">{type.label}</SelectItem>
+              <SelectItem key={type.value} value={type.value} className="dark:text-slate-200">
+                {type.label}
+              </SelectItem>
             ))}
           </SelectContent>
         </Select>
@@ -370,7 +414,9 @@ export default function Clients() {
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
         <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto dark:bg-slate-800 dark:border-slate-700">
           <DialogHeader>
-            <DialogTitle className="dark:text-slate-200">{editingClient ? 'עריכת לקוח' : 'לקוח חדש'}</DialogTitle>
+            <DialogTitle className="dark:text-slate-200">
+              {editingClient ? 'עריכת לקוח' : 'לקוח חדש'}
+            </DialogTitle>
           </DialogHeader>
           <form onSubmit={handleSubmit} className="space-y-6 mt-4">
             <div className="grid grid-cols-3 gap-4">
@@ -397,25 +443,32 @@ export default function Clients() {
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label className="dark:text-slate-300">סוג לקוח *</Label>
-                <Select value={formData.type} onValueChange={(v) => setFormData({ ...formData, type: v })}>
+                <Select
+                  value={formData.type}
+                  onValueChange={(v) => setFormData({ ...formData, type: v })}
+                >
                   <SelectTrigger className="dark:bg-slate-900 dark:border-slate-600">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent className="dark:bg-slate-800 dark:border-slate-700">
                     {clientTypes.map(type => (
-                      <SelectItem key={type.value} value={type.value} className="dark:text-slate-200">{type.label}</SelectItem>
+                      <SelectItem key={type.value} value={type.value} className="dark:text-slate-200">
+                        {type.label}
+                      </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
               </div>
               <div className="space-y-2">
                 <Label className="dark:text-slate-300">עו"ד מטפל</Label>
-                <Select value={formData.assigned_lawyer_id} onValueChange={(v) => setFormData({ ...formData, assigned_lawyer_id: v })}>
+                <Select
+                  value={formData.assigned_lawyer_id || undefined}
+                  onValueChange={(v) => setFormData({ ...formData, assigned_lawyer_id: v })}
+                >
                   <SelectTrigger className="dark:bg-slate-900 dark:border-slate-600">
                     <SelectValue placeholder="בחר עו״ד" />
                   </SelectTrigger>
                   <SelectContent className="dark:bg-slate-800 dark:border-slate-700">
-                    <SelectItem value="" className="dark:text-slate-200">ללא</SelectItem>
                     {users.map(user => (
                       <SelectItem key={user.id} value={user.id} className="dark:text-slate-200">
                         {user.full_name || user.email}
@@ -462,32 +515,47 @@ export default function Clients() {
                   type="number"
                   step="0.01"
                   value={formData.hourly_rate}
-                  onChange={(e) => setFormData({ ...formData, hourly_rate: parseFloat(e.target.value) || 0 })}
+                  onChange={(e) =>
+                    setFormData({
+                      ...formData,
+                      hourly_rate: parseFloat(e.target.value) || 0,
+                    })
+                  }
                   className="dark:bg-slate-900 dark:border-slate-600"
                 />
               </div>
               <div className="space-y-2">
                 <Label className="dark:text-slate-300">מטבע</Label>
-                <Select value={formData.billing_currency} onValueChange={(v) => setFormData({ ...formData, billing_currency: v })}>
+                <Select
+                  value={formData.billing_currency}
+                  onValueChange={(v) => setFormData({ ...formData, billing_currency: v })}
+                >
                   <SelectTrigger className="dark:bg-slate-900 dark:border-slate-600">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent className="dark:bg-slate-800 dark:border-slate-700">
                     {currencies.map(curr => (
-                      <SelectItem key={curr.value} value={curr.value} className="dark:text-slate-200">{curr.label}</SelectItem>
+                      <SelectItem key={curr.value} value={curr.value} className="dark:text-slate-200">
+                        {curr.label}
+                      </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
               </div>
               <div className="space-y-2">
                 <Label className="dark:text-slate-300">תנאי תשלום</Label>
-                <Select value={formData.payment_terms} onValueChange={(v) => setFormData({ ...formData, payment_terms: v })}>
+                <Select
+                  value={formData.payment_terms}
+                  onValueChange={(v) => setFormData({ ...formData, payment_terms: v })}
+                >
                   <SelectTrigger className="dark:bg-slate-900 dark:border-slate-600">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent className="dark:bg-slate-800 dark:border-slate-700">
                     {paymentTerms.map(term => (
-                      <SelectItem key={term.value} value={term.value} className="dark:text-slate-200">{term.label}</SelectItem>
+                      <SelectItem key={term.value} value={term.value} className="dark:text-slate-200">
+                        {term.label}
+                      </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
@@ -507,7 +575,9 @@ export default function Clients() {
                 <Label className="dark:text-slate-300">מספר תאגיד</Label>
                 <Input
                   value={formData.registration_number}
-                  onChange={(e) => setFormData({ ...formData, registration_number: e.target.value })}
+                  onChange={(e) =>
+                    setFormData({ ...formData, registration_number: e.target.value })
+                  }
                   className="dark:bg-slate-900 dark:border-slate-600"
                 />
               </div>
@@ -532,11 +602,16 @@ export default function Clients() {
             </div>
 
             <div className="flex justify-end gap-3 pt-4">
-              <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)} className="dark:border-slate-600">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setIsDialogOpen(false)}
+                className="dark:border-slate-600"
+              >
                 ביטול
               </Button>
-              <Button 
-                type="submit" 
+              <Button
+                type="submit"
                 className="bg-slate-800 hover:bg-slate-700 dark:bg-slate-700"
                 disabled={createMutation.isPending || updateMutation.isPending}
               >
