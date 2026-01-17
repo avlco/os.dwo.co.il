@@ -1,6 +1,9 @@
 // @ts-nocheck
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.6';
 
+const supabaseUrl = Deno.env.get('SUPABASE_URL');
+const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+
 // ========================================
 // HELPER FUNCTIONS
 // ========================================
@@ -53,24 +56,14 @@ async function getLatestHistoryId(accessToken) {
   }
 }
 
-/**
- * ✅ FIXED: UTF-8 decoding for Base64 content
- */
 function decodeBase64Utf8(base64String) {
   try {
-    // Gmail uses URL-safe Base64
     const normalized = base64String.replace(/-/g, '+').replace(/_/g, '/');
-    
-    // Decode Base64 to binary string
     const binaryString = atob(normalized);
-    
-    // Convert binary string to UTF-8
     const bytes = new Uint8Array(binaryString.length);
     for (let i = 0; i < binaryString.length; i++) {
       bytes[i] = binaryString.charCodeAt(i);
     }
-    
-    // Decode UTF-8
     return new TextDecoder('utf-8').decode(bytes);
   } catch (error) {
     console.error('[Decode] Failed:', error);
@@ -78,9 +71,6 @@ function decodeBase64Utf8(base64String) {
   }
 }
 
-/**
- * ✅ FIXED: Full attachment extraction + proper encoding
- */
 function parseGmailMessage(gmailMsg) {
   const headers = gmailMsg.payload?.headers || [];
   
@@ -93,9 +83,7 @@ function parseGmailMessage(gmailMsg) {
   let bodyHtml = '';
   const attachments = [];
   
-  // ✅ Recursive function to extract EVERYTHING
   function extractParts(payload, messageId) {
-    // Check if this is an attachment
     if (payload.filename && payload.filename.length > 0) {
       if (payload.body?.attachmentId) {
         attachments.push({
@@ -108,7 +96,6 @@ function parseGmailMessage(gmailMsg) {
       }
     }
     
-    // Extract body content
     if (payload.body?.data) {
       const decoded = decodeBase64Utf8(payload.body.data);
       
@@ -121,7 +108,6 @@ function parseGmailMessage(gmailMsg) {
       }
     }
     
-    // Recurse into nested parts
     if (payload.parts && Array.isArray(payload.parts)) {
       for (const part of payload.parts) {
         extractParts(part, messageId);
@@ -131,21 +117,17 @@ function parseGmailMessage(gmailMsg) {
   
   extractParts(gmailMsg.payload, gmailMsg.id);
   
-  // ✅ Extract snippet (first 150 chars of plain text or stripped HTML)
   let snippet = bodyText || '';
   if (!snippet && bodyHtml) {
-    // Strip HTML tags for snippet
     snippet = bodyHtml.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
   }
   snippet = snippet.substring(0, 150);
   
-  // ✅ Parse recipients
   const toHeader = getHeader('To');
   const recipients = toHeader 
     ? toHeader.split(',').map(r => ({ email: r.trim() }))
     : [];
   
-  // ✅ Parse labels
   const labels = gmailMsg.labelIds || [];
   
   return {
@@ -268,15 +250,10 @@ async function refreshGoogleToken(refreshToken, connection, userBase44) {
 }
 
 // ========================================
-// SYNC FUNCTIONS (unchanged)
+// SYNC FUNCTIONS
 // ========================================
 
-async function fetchFirstWeekMessages(
-  accessToken,
-  refreshToken,
-  connection,
-  userBase44
-) {
+async function fetchFirstWeekMessages(accessToken, refreshToken, connection, userBase44) {
   console.log('[Sync] 🎯 FIRST SYNC - Fetching messages from last 7 days');
   
   const oneWeekAgo = getOneWeekAgo();
@@ -366,12 +343,7 @@ async function fetchFirstWeekMessages(
   return emails;
 }
 
-async function fetchIncrementalMessages(
-  accessToken,
-  refreshToken,
-  connection,
-  userBase44
-) {
+async function fetchIncrementalMessages(accessToken, refreshToken, connection, userBase44) {
   const gmailSync = connection.metadata?.gmail_sync;
   const startHistoryId = gmailSync?.history_id;
   
@@ -475,13 +447,7 @@ async function fetchIncrementalMessages(
   }
 }
 
-async function fetchFallbackMessages(
-  accessToken,
-  refreshToken,
-  connection,
-  userBase44,
-  maxResults = 100
-) {
+async function fetchFallbackMessages(accessToken, refreshToken, connection, userBase44, maxResults = 100) {
   console.log(`[Sync] 🔄 FALLBACK - Fetching last ${maxResults} messages`);
   
   const listUrl = `https://gmail.googleapis.com/gmail/v1/users/me/messages?maxResults=${maxResults}`;
@@ -620,15 +586,15 @@ Deno.serve(async (req) => {
     const existingIds = new Set(existingMailItems.map(m => m.external_id));
     console.log(`[Sync] 📋 Found ${existingIds.size} existing mails in database`);
 
-    let savedCount = 0;
+    const savedMails = [];
     for (const mail of newEmails) {
       if (!existingIds.has(mail.external_id)) {
         try {
-          await base44.entities.Mail.create({ 
+          const created = await base44.entities.Mail.create({ 
             ...mail, 
             user_id: user.id 
           });
-          savedCount++;
+          savedMails.push(created);
         } catch (createError) {
           console.error(`[Sync] ❌ Failed to save mail ${mail.external_id}:`, createError.message);
         }
@@ -637,13 +603,42 @@ Deno.serve(async (req) => {
       }
     }
 
+    console.log(`[ProcessMail] Triggering automation for ${savedMails.length} mails`);
+
+    for (const mail of savedMails) {
+      try {
+        console.log(`[ProcessMail] Calling executeAutomationRule for mail ${mail.id}`);
+        
+        const automationResponse = await fetch(`${supabaseUrl}/functions/v1/executeAutomationRule`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${supabaseServiceKey}`
+          },
+          body: JSON.stringify({ mail_id: mail.id })
+        });
+        
+        if (!automationResponse.ok) {
+          const errorText = await automationResponse.text();
+          console.error(`[ProcessMail] Automation failed for mail ${mail.id}: ${errorText}`);
+        } else {
+          const result = await automationResponse.json();
+          console.log(`[ProcessMail] Automation result for mail ${mail.id}:`, JSON.stringify(result));
+        }
+      } catch (error) {
+        console.error(`[ProcessMail] Failed to trigger automation for mail ${mail.id}:`, error);
+      }
+    }
+
+    console.log(`[ProcessMail] Automation trigger complete`);
+
     const syncMode = gmailSync?.sync_mode || 'unknown';
-    console.log(`[Sync] ✅ COMPLETE - Saved ${savedCount} new mail(s) | Mode: ${syncMode}`);
+    console.log(`[Sync] ✅ COMPLETE - Saved ${savedMails.length} new mail(s) | Mode: ${syncMode}`);
 
     return new Response(
       JSON.stringify({ 
         success: true, 
-        synced: savedCount,
+        synced: savedMails.length,
         fetched: newEmails.length,
         sync_mode: syncMode,
         existing_in_db: existingMailItems.length
