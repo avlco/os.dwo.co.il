@@ -155,6 +155,101 @@ function parseGmailMessage(gmailMsg) {
 }
 
 // ========================================
+// 🆕 RULE MATCHING LOGIC
+// ========================================
+
+/**
+ * מוצא חוקי אוטומציה תואמים למייל
+ * @param {Object} mail - אובייקט המייל
+ * @param {Object} base44 - Base44 client
+ * @returns {Array} רשימת חוקים תואמים
+ */
+async function findMatchingRules(mail, base44) {
+  console.log(`[RuleMatcher] 🔍 Checking rules for mail: ${mail.subject}`);
+  
+  try {
+    // שלוף את כל החוקים הפעילים
+    const allRules = await base44.entities.AutomationRule.list('-created_date', 100);
+    const rulesArray = Array.isArray(allRules) ? allRules : (allRules.data || []);
+    const activeRules = rulesArray.filter(rule => rule.is_active === true);
+    
+    console.log(`[RuleMatcher] 📋 Found ${activeRules.length} active rules to check`);
+    
+    if (activeRules.length === 0) {
+      console.log('[RuleMatcher] ⚠️ No active rules found in system');
+      return [];
+    }
+    
+    const matchingRules = [];
+    
+    for (const rule of activeRules) {
+      const config = rule.catch_config || {};
+      let isMatch = true;
+      const reasons = [];
+      
+      // בדיקה 1: שולח (sender)
+      if (config.senders && Array.isArray(config.senders) && config.senders.length > 0) {
+        const senderMatches = config.senders.some(sender => {
+          const senderLower = sender.toLowerCase().trim();
+          const mailSenderLower = (mail.sender_email || '').toLowerCase();
+          
+          // תומך גם בכתובת מלאה או חלקית
+          return mailSenderLower.includes(senderLower) || senderLower.includes(mailSenderLower);
+        });
+        
+        if (!senderMatches) {
+          isMatch = false;
+          reasons.push(`sender mismatch (expected: ${config.senders.join(', ')})`);
+        } else {
+          reasons.push('✓ sender match');
+        }
+      }
+      
+      // בדיקה 2: נושא (subject)
+      if (config.subject_contains && config.subject_contains.trim().length > 0) {
+        const subjectKeyword = config.subject_contains.toLowerCase().trim();
+        const mailSubject = (mail.subject || '').toLowerCase();
+        
+        if (!mailSubject.includes(subjectKeyword)) {
+          isMatch = false;
+          reasons.push(`subject mismatch (looking for: "${config.subject_contains}")`);
+        } else {
+          reasons.push('✓ subject match');
+        }
+      }
+      
+      // בדיקה 3: גוף המייל (body)
+      if (config.body_contains && config.body_contains.trim().length > 0) {
+        const bodyKeyword = config.body_contains.toLowerCase().trim();
+        const mailBody = (mail.body_plain || mail.body_html || '').toLowerCase();
+        
+        if (!mailBody.includes(bodyKeyword)) {
+          isMatch = false;
+          reasons.push(`body mismatch (looking for: "${config.body_contains}")`);
+        } else {
+          reasons.push('✓ body match');
+        }
+      }
+      
+      // אם כל הבדיקות עברו
+      if (isMatch) {
+        console.log(`[RuleMatcher] ✅ Rule "${rule.name}" MATCHED: ${reasons.join(', ')}`);
+        matchingRules.push(rule);
+      } else {
+        console.log(`[RuleMatcher] ❌ Rule "${rule.name}" rejected: ${reasons.join(', ')}`);
+      }
+    }
+    
+    console.log(`[RuleMatcher] 🎯 Total matching rules: ${matchingRules.length}`);
+    return matchingRules;
+    
+  } catch (error) {
+    console.error('[RuleMatcher] ❌ Error finding matching rules:', error);
+    return [];
+  }
+}
+
+// ========================================
 // CRYPTO FUNCTIONS
 // ========================================
 
@@ -603,34 +698,72 @@ Deno.serve(async (req) => {
       }
     }
 
-    console.log(`[ProcessMail] Triggering automation for ${savedMails.length} mails`);
+    console.log(`[Automation] 🤖 Starting automation processing for ${savedMails.length} new mails`);
+
+    // 🆕 לוגיקה חדשה: מצא חוקים תואמים והפעל אותם
+    let totalRulesExecuted = 0;
+    let totalRulesSuccess = 0;
+    let totalRulesFailed = 0;
 
     for (const mail of savedMails) {
       try {
-        console.log(`[ProcessMail] Calling executeAutomationRule for mail ${mail.id}`);
+        console.log(`\n[Automation] 📧 Processing mail ID ${mail.id}: "${mail.subject}"`);
         
-        const automationResponse = await fetch(`${supabaseUrl}/functions/v1/executeAutomationRule`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${supabaseServiceKey}`
-          },
-          body: JSON.stringify({ mail_id: mail.id })
-        });
+        // מצא חוקים תואמים
+        const matchingRules = await findMatchingRules(mail, base44);
         
-        if (!automationResponse.ok) {
-          const errorText = await automationResponse.text();
-          console.error(`[ProcessMail] Automation failed for mail ${mail.id}: ${errorText}`);
-        } else {
-          const result = await automationResponse.json();
-          console.log(`[ProcessMail] Automation result for mail ${mail.id}:`, JSON.stringify(result));
+        if (matchingRules.length === 0) {
+          console.log(`[Automation] ⚠️ No matching rules for mail ${mail.id}`);
+          continue;
         }
+        
+        console.log(`[Automation] 🎯 Found ${matchingRules.length} matching rule(s) for mail ${mail.id}`);
+        
+        // הפעל כל חוק תואם
+        for (const rule of matchingRules) {
+          try {
+            console.log(`[Automation] ▶️ Executing rule "${rule.name}" (ID: ${rule.id}) on mail ${mail.id}`);
+            
+            const automationResponse = await fetch(`${supabaseUrl}/functions/v1/executeAutomationRule`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${supabaseServiceKey}`
+              },
+              body: JSON.stringify({ 
+                mailId: mail.id,  // 🆕 שינוי מ-mail_id ל-mailId
+                ruleId: rule.id   // 🆕 הוספת ruleId
+              })
+            });
+            
+            totalRulesExecuted++;
+            
+            if (!automationResponse.ok) {
+              const errorText = await automationResponse.text();
+              console.error(`[Automation] ❌ Rule "${rule.name}" failed for mail ${mail.id}: ${errorText}`);
+              totalRulesFailed++;
+            } else {
+              const result = await automationResponse.json();
+              console.log(`[Automation] ✅ Rule "${rule.name}" executed successfully:`, JSON.stringify(result));
+              totalRulesSuccess++;
+            }
+            
+          } catch (ruleError) {
+            console.error(`[Automation] ❌ Exception executing rule "${rule.name}" on mail ${mail.id}:`, ruleError);
+            totalRulesFailed++;
+          }
+        }
+        
       } catch (error) {
-        console.error(`[ProcessMail] Failed to trigger automation for mail ${mail.id}:`, error);
+        console.error(`[Automation] ❌ Failed to process automation for mail ${mail.id}:`, error);
       }
     }
 
-    console.log(`[ProcessMail] Automation trigger complete`);
+    console.log(`\n[Automation] 📊 Automation Summary:`);
+    console.log(`  - New mails processed: ${savedMails.length}`);
+    console.log(`  - Rules executed: ${totalRulesExecuted}`);
+    console.log(`  - Successful: ${totalRulesSuccess}`);
+    console.log(`  - Failed: ${totalRulesFailed}`);
 
     const syncMode = gmailSync?.sync_mode || 'unknown';
     console.log(`[Sync] ✅ COMPLETE - Saved ${savedMails.length} new mail(s) | Mode: ${syncMode}`);
@@ -641,7 +774,12 @@ Deno.serve(async (req) => {
         synced: savedMails.length,
         fetched: newEmails.length,
         sync_mode: syncMode,
-        existing_in_db: existingMailItems.length
+        existing_in_db: existingMailItems.length,
+        automation: {
+          rules_executed: totalRulesExecuted,
+          success: totalRulesSuccess,
+          failed: totalRulesFailed
+        }
       }), 
       { status: 200, headers }
     );
