@@ -2,6 +2,8 @@ import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { base44 } from '@/api/base44Client';
 import { useTranslation } from 'react-i18next';
+import { useNavigate } from 'react-router-dom';
+import { createPageUrl } from '../utils';
 import { format } from 'date-fns';
 import PageHeader from '../components/ui/PageHeader';
 import DataTable from '../components/ui/DataTable';
@@ -14,7 +16,8 @@ import {
   Briefcase,
   User,
   AlertCircle,
-  MessageSquare
+  MessageSquare,
+  ArrowRight
 } from 'lucide-react';
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -39,6 +42,7 @@ import { Card, CardContent } from "@/components/ui/card";
 export default function ApprovalQueue() {
   const { t, i18n } = useTranslation();
   const isRTL = i18n.language === 'he';
+  const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [filterStatus, setFilterStatus] = useState('pending');
   const [selectedApproval, setSelectedApproval] = useState(null);
@@ -320,10 +324,22 @@ export default function ApprovalQueue() {
 
   return (
     <div className="space-y-6">
-      <PageHeader
-        title="תור אישורים"
-        subtitle={`${approvals.filter(a => a.status === 'pending').length} בקשות ממתינות`}
-      />
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-slate-800 dark:text-slate-200">תור אישורים</h1>
+          <p className="text-slate-500 dark:text-slate-400 mt-1">
+            {approvals.filter(a => a.status === 'pending').length} בקשות ממתינות
+          </p>
+        </div>
+        <Button
+          variant="outline"
+          onClick={() => navigate(createPageUrl('MailRoom'))}
+          className="gap-2"
+        >
+          <ArrowRight className="w-4 h-4" />
+          חזרה לחדר דואר
+        </Button>
+      </div>
 
       {/* Filters */}
       <div className="flex gap-4 items-center">
