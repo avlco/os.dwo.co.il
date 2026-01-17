@@ -2,19 +2,16 @@ import Dashboard from './pages/Dashboard';
 import Clients from './pages/Clients';
 import Cases from './pages/Cases';
 import CaseView from './pages/CaseView';
-import Contacts from './pages/Contacts';
-import Documents from './pages/Documents';
-import Deadlines from './pages/Deadlines';
 import Tasks from './pages/Tasks';
-import TimeEntries from './pages/TimeEntries';
-import Invoices from './pages/Invoices';
-import Mails from './pages/Mails';
-import MailRules from './pages/MailRules';
-import AutomationRules from './pages/AutomationRules';
+import Docketing from './pages/Docketing';
+import Financials from './pages/Financials';
+import MailRoom from './pages/MailRoom';
+import MailView from './pages/MailView';
+import MailAnalytics from './pages/MailAnalytics';
+import Workbench from './pages/Workbench';
 import ApprovalQueue from './pages/ApprovalQueue';
-import Activities from './pages/Activities';
 import Settings from './pages/Settings';
-import Layout from './components/Layout';
+import Layout from './Layout';
 
 export const pagesConfig = {
   Pages: {
@@ -22,17 +19,14 @@ export const pagesConfig = {
     Clients,
     Cases,
     CaseView,
-    Contacts,
-    Documents,
-    Deadlines,
     Tasks,
-    TimeEntries,
-    Invoices,
-    Mails,
-    MailRules,
-    AutomationRules,
+    Docketing,
+    Financials,
+    MailRoom,
+    MailView,
+    MailAnalytics,
+    Workbench,
     ApprovalQueue,
-    Activities,
     Settings,
   },
   Layout,
