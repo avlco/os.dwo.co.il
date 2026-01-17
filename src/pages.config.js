@@ -10,7 +10,7 @@ import MailView from './pages/MailView';
 import MailAnalytics from './pages/MailAnalytics';
 import Workbench from './pages/Workbench';
 import ApprovalQueue from './pages/ApprovalQueue';
-import AutomationRules from './pages/AutomationRules';
+import AutomationRules from './pages/AutomationRules';  // ← הוסף את זה
 import Settings from './pages/Settings';
 import Layout from './Layout';
 
@@ -28,7 +28,7 @@ export const pagesConfig = {
     MailAnalytics,
     Workbench,
     ApprovalQueue,
-    AutomationRules,
+    AutomationRules,  // ← הוסף את זה
     Settings,
   },
   Layout,
