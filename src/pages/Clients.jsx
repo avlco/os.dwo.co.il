@@ -13,7 +13,8 @@ import {
   MoreHorizontal,
   Mail,
   Phone,
-  Building2
+  Building2,
+  UserCheck
 } from 'lucide-react';
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -60,6 +61,10 @@ export default function Clients() {
     payment_terms: 'net_30',
     is_active: true,
     notes: '',
+    client_number: '',
+    assigned_lawyer_id: '',
+    hourly_rate: 800,
+    billing_currency: 'ILS',
   });
 
   const clientTypes = [
@@ -73,6 +78,12 @@ export default function Clients() {
     { value: 'net_60', label: t('clients.terms_net_60') },
   ];
 
+  const currencies = [
+    { value: 'ILS', label: '₪ ILS' },
+    { value: 'USD', label: '$ USD' },
+    { value: 'EUR', label: '€ EUR' },
+  ];
+
   const { data: clients = [], isLoading } = useQuery({
     queryKey: ['clients'],
     queryFn: () => base44.entities.Client.list('-created_date', 500),
@@ -81,6 +92,18 @@ export default function Clients() {
   const { data: cases = [] } = useQuery({
     queryKey: ['cases'],
     queryFn: () => base44.entities.Case.list('-created_date', 500),
+  });
+
+  const { data: users = [] } = useQuery({
+    queryKey: ['users'],
+    queryFn: async () => {
+      try {
+        return await base44.entities.User.list();
+      } catch (error) {
+        console.error('Error loading users:', error);
+        return [];
+      }
+    },
   });
 
   const createMutation = useMutation({
@@ -121,6 +144,10 @@ export default function Clients() {
       payment_terms: 'net_30',
       is_active: true,
       notes: '',
+      client_number: '',
+      assigned_lawyer_id: '',
+      hourly_rate: 800,
+      billing_currency: 'ILS',
     });
     setEditingClient(null);
   };
@@ -144,6 +171,10 @@ export default function Clients() {
       payment_terms: client.payment_terms || 'net_30',
       is_active: client.is_active !== false,
       notes: client.notes || '',
+      client_number: client.client_number || '',
+      assigned_lawyer_id: client.assigned_lawyer_id || '',
+      hourly_rate: client.hourly_rate || 800,
+      billing_currency: client.billing_currency || 'ILS',
     });
     setIsDialogOpen(true);
   };
@@ -161,9 +192,15 @@ export default function Clients() {
     return cases.filter(c => c.client_id === clientId).length;
   };
 
+  const getLawyerName = (lawyerId) => {
+    const lawyer = users.find(u => u.id === lawyerId);
+    return lawyer?.full_name || lawyer?.email || '-';
+  };
+
   const filteredClients = clients.filter(c => {
     const matchesSearch = c.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      c.email?.toLowerCase().includes(searchTerm.toLowerCase());
+      c.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      c.client_number?.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesType = filterType === 'all' || c.type === filterType;
     return matchesSearch && matchesType;
   });
@@ -183,9 +220,16 @@ export default function Clients() {
           </div>
           <div>
             <p className="font-medium text-slate-800 dark:text-slate-200">{row.name}</p>
-            <p className="text-sm text-slate-500 dark:text-slate-400">
-              {row.type === 'company' ? t('clients.type_company') : t('clients.type_individual')}
-            </p>
+            <div className="flex items-center gap-2">
+              <p className="text-sm text-slate-500 dark:text-slate-400">
+                {row.type === 'company' ? t('clients.type_company') : t('clients.type_individual')}
+              </p>
+              {row.client_number && (
+                <Badge variant="outline" className="text-xs">
+                  {row.client_number}
+                </Badge>
+              )}
+            </div>
           </div>
         </div>
       ),
@@ -210,19 +254,33 @@ export default function Clients() {
       ),
     },
     {
-      header: t('clients.cases_count'),
+      header: 'עו"ד מטפל',
       render: (row) => (
-        <Badge variant="secondary" className="bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300">
-          {t('clients.cases_label', { count: getCasesCount(row.id) })}
-        </Badge>
+        row.assigned_lawyer_id ? (
+          <div className="flex items-center gap-2 text-sm">
+            <UserCheck className="w-4 h-4 text-blue-600" />
+            <span className="dark:text-slate-300">{getLawyerName(row.assigned_lawyer_id)}</span>
+          </div>
+        ) : (
+          <span className="text-slate-400 text-sm">-</span>
+        )
       ),
     },
     {
-      header: t('clients.payment_terms'),
-      render: (row) => {
-        const terms = paymentTerms.find(t => t.value === row.payment_terms);
-        return <span className="dark:text-slate-300">{terms?.label || '-'}</span>;
-      },
+      header: 'תעריף שעתי',
+      render: (row) => (
+        <span className="dark:text-slate-300 font-mono text-sm">
+          {row.hourly_rate ? `${row.hourly_rate} ${row.billing_currency || '₪'}` : '-'}
+        </span>
+      ),
+    },
+    {
+      header: t('clients.cases_count'),
+      render: (row) => (
+        <Badge variant="secondary" className="bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300">
+          {getCasesCount(row.id)} תיקים
+        </Badge>
+      ),
     },
     {
       header: t('clients.status'),
@@ -264,12 +322,11 @@ export default function Clients() {
     <div className="space-y-6">
       <PageHeader
         title={t('clients.title')}
-        subtitle={t('clients.clients_count', { count: clients.length })}
+        subtitle={`${clients.length} לקוחות במערכת`}
         action={openCreateDialog}
         actionLabel={t('clients.new_client')}
       />
 
-      {/* Filters */}
       <div className="flex flex-wrap gap-4 items-center">
         <div className="relative flex-1 min-w-[200px] max-w-md">
           <Search className={`absolute ${isRTL ? 'right-3' : 'left-3'} top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400`} />
@@ -293,7 +350,6 @@ export default function Clients() {
         </Select>
       </div>
 
-      {/* Table */}
       {clients.length === 0 && !isLoading ? (
         <EmptyState
           icon={Users}
@@ -311,16 +367,15 @@ export default function Clients() {
         />
       )}
 
-      {/* Dialog */}
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto dark:bg-slate-800 dark:border-slate-700">
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto dark:bg-slate-800 dark:border-slate-700">
           <DialogHeader>
-            <DialogTitle className="dark:text-slate-200">{editingClient ? t('clients.edit_client') : t('clients.new_client')}</DialogTitle>
+            <DialogTitle className="dark:text-slate-200">{editingClient ? 'עריכת לקוח' : 'לקוח חדש'}</DialogTitle>
           </DialogHeader>
           <form onSubmit={handleSubmit} className="space-y-6 mt-4">
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label className="dark:text-slate-300">{t('clients.client_name')} *</Label>
+            <div className="grid grid-cols-3 gap-4">
+              <div className="col-span-2 space-y-2">
+                <Label className="dark:text-slate-300">שם הלקוח *</Label>
                 <Input
                   value={formData.name}
                   onChange={(e) => setFormData({ ...formData, name: e.target.value })}
@@ -329,7 +384,19 @@ export default function Clients() {
                 />
               </div>
               <div className="space-y-2">
-                <Label className="dark:text-slate-300">{t('clients.type')} *</Label>
+                <Label className="dark:text-slate-300">מספר לקוח</Label>
+                <Input
+                  value={formData.client_number}
+                  onChange={(e) => setFormData({ ...formData, client_number: e.target.value })}
+                  placeholder="CL-2024-001"
+                  className="dark:bg-slate-900 dark:border-slate-600"
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label className="dark:text-slate-300">סוג לקוח *</Label>
                 <Select value={formData.type} onValueChange={(v) => setFormData({ ...formData, type: v })}>
                   <SelectTrigger className="dark:bg-slate-900 dark:border-slate-600">
                     <SelectValue />
@@ -341,11 +408,27 @@ export default function Clients() {
                   </SelectContent>
                 </Select>
               </div>
+              <div className="space-y-2">
+                <Label className="dark:text-slate-300">עו"ד מטפל</Label>
+                <Select value={formData.assigned_lawyer_id} onValueChange={(v) => setFormData({ ...formData, assigned_lawyer_id: v })}>
+                  <SelectTrigger className="dark:bg-slate-900 dark:border-slate-600">
+                    <SelectValue placeholder="בחר עו״ד" />
+                  </SelectTrigger>
+                  <SelectContent className="dark:bg-slate-800 dark:border-slate-700">
+                    <SelectItem value="" className="dark:text-slate-200">ללא</SelectItem>
+                    {users.map(user => (
+                      <SelectItem key={user.id} value={user.id} className="dark:text-slate-200">
+                        {user.full_name || user.email}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
 
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label className="dark:text-slate-300">{t('clients.email')}</Label>
+                <Label className="dark:text-slate-300">אימייל</Label>
                 <Input
                   type="email"
                   value={formData.email}
@@ -354,7 +437,7 @@ export default function Clients() {
                 />
               </div>
               <div className="space-y-2">
-                <Label className="dark:text-slate-300">{t('clients.phone')}</Label>
+                <Label className="dark:text-slate-300">טלפון</Label>
                 <Input
                   value={formData.phone}
                   onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
@@ -364,7 +447,7 @@ export default function Clients() {
             </div>
 
             <div className="space-y-2">
-              <Label className="dark:text-slate-300">{t('clients.address')}</Label>
+              <Label className="dark:text-slate-300">כתובת</Label>
               <Input
                 value={formData.address}
                 onChange={(e) => setFormData({ ...formData, address: e.target.value })}
@@ -372,17 +455,32 @@ export default function Clients() {
               />
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-3 gap-4">
               <div className="space-y-2">
-                <Label className="dark:text-slate-300">{t('clients.country')}</Label>
+                <Label className="dark:text-slate-300">תעריף שעתי</Label>
                 <Input
-                  value={formData.country}
-                  onChange={(e) => setFormData({ ...formData, country: e.target.value })}
+                  type="number"
+                  step="0.01"
+                  value={formData.hourly_rate}
+                  onChange={(e) => setFormData({ ...formData, hourly_rate: parseFloat(e.target.value) || 0 })}
                   className="dark:bg-slate-900 dark:border-slate-600"
                 />
               </div>
               <div className="space-y-2">
-                <Label className="dark:text-slate-300">{t('clients.payment_terms')}</Label>
+                <Label className="dark:text-slate-300">מטבע</Label>
+                <Select value={formData.billing_currency} onValueChange={(v) => setFormData({ ...formData, billing_currency: v })}>
+                  <SelectTrigger className="dark:bg-slate-900 dark:border-slate-600">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent className="dark:bg-slate-800 dark:border-slate-700">
+                    {currencies.map(curr => (
+                      <SelectItem key={curr.value} value={curr.value} className="dark:text-slate-200">{curr.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label className="dark:text-slate-300">תנאי תשלום</Label>
                 <Select value={formData.payment_terms} onValueChange={(v) => setFormData({ ...formData, payment_terms: v })}>
                   <SelectTrigger className="dark:bg-slate-900 dark:border-slate-600">
                     <SelectValue />
@@ -396,9 +494,17 @@ export default function Clients() {
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-3 gap-4">
               <div className="space-y-2">
-                <Label className="dark:text-slate-300">{t('clients.registration_number')}</Label>
+                <Label className="dark:text-slate-300">מדינה</Label>
+                <Input
+                  value={formData.country}
+                  onChange={(e) => setFormData({ ...formData, country: e.target.value })}
+                  className="dark:bg-slate-900 dark:border-slate-600"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label className="dark:text-slate-300">מספר תאגיד</Label>
                 <Input
                   value={formData.registration_number}
                   onChange={(e) => setFormData({ ...formData, registration_number: e.target.value })}
@@ -406,7 +512,7 @@ export default function Clients() {
                 />
               </div>
               <div className="space-y-2">
-                <Label className="dark:text-slate-300">{t('clients.tax_id')}</Label>
+                <Label className="dark:text-slate-300">מספר עוסק</Label>
                 <Input
                   value={formData.tax_id}
                   onChange={(e) => setFormData({ ...formData, tax_id: e.target.value })}
@@ -416,7 +522,7 @@ export default function Clients() {
             </div>
 
             <div className="space-y-2">
-              <Label className="dark:text-slate-300">{t('clients.notes')}</Label>
+              <Label className="dark:text-slate-300">הערות</Label>
               <Textarea
                 value={formData.notes}
                 onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
@@ -427,14 +533,14 @@ export default function Clients() {
 
             <div className="flex justify-end gap-3 pt-4">
               <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)} className="dark:border-slate-600">
-                {t('clients.cancel')}
+                ביטול
               </Button>
               <Button 
                 type="submit" 
                 className="bg-slate-800 hover:bg-slate-700 dark:bg-slate-700"
                 disabled={createMutation.isPending || updateMutation.isPending}
               >
-                {editingClient ? t('clients.update') : t('clients.create')}
+                {editingClient ? 'עדכן' : 'צור'}
               </Button>
             </div>
           </form>
