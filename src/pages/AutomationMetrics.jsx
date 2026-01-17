@@ -9,29 +9,33 @@ import { format } from 'date-fns';
 import { he } from 'date-fns/locale';
 
 export default function AutomationMetrics() {
-  const { data: logs = [], isLoading } = useQuery({
+  // שלוף לוגים מ-Activity (activity_type = 'automation_log')
+  const { data: allActivities = [], isLoading } = useQuery({
     queryKey: ['automationLogs'],
-    queryFn: () => base44.entities.AutomationLog.list('-executed_at', 100),
+    queryFn: () => base44.entities.Activity.list('-created_at', 200),
   });
+
+  const logs = allActivities.filter(a => a.activity_type === 'automation_log');
 
   const { data: rules = [] } = useQuery({
     queryKey: ['automationRules'],
     queryFn: () => base44.entities.AutomationRule.list(),
   });
 
-  // חישוב סטטיסטיקות כלליות
+  // סטטיסטיקות
   const totalExecutions = logs.length;
-  const successfulExecutions = logs.filter(l => l.execution_status === 'completed').length;
-  const failedExecutions = logs.filter(l => l.execution_status === 'failed').length;
+  const successfulExecutions = logs.filter(l => l.status === 'completed').length;
+  const failedExecutions = logs.filter(l => l.status === 'failed').length;
   const successRate = totalExecutions > 0 ? ((successfulExecutions / totalExecutions) * 100).toFixed(1) : 0;
   
   const avgExecutionTime = logs.length > 0
-    ? (logs.reduce((sum, log) => sum + (log.execution_time_ms || 0), 0) / logs.length).toFixed(0)
+    ? (logs.reduce((sum, log) => sum + (log.metadata?.execution_time_ms || 0), 0) / logs.length).toFixed(0)
     : 0;
 
-  // Top rules by execution count
+  // Top rules
   const ruleExecutionCounts = logs.reduce((acc, log) => {
-    acc[log.rule_name] = (acc[log.rule_name] || 0) + 1;
+    const ruleName = log.metadata?.rule_name || 'Unknown';
+    acc[ruleName] = (acc[ruleName] || 0) + 1;
     return acc;
   }, {});
   
@@ -39,10 +43,10 @@ export default function AutomationMetrics() {
     .sort((a, b) => b[1] - a[1])
     .slice(0, 5);
 
-  if (isLoading) return <div>טוען...</div>;
+  if (isLoading) return <div className="p-8">טוען נתונים...</div>;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 p-6">
       <div>
         <h1 className="text-2xl font-bold">📊 מטריקות אוטומציות</h1>
         <p className="text-slate-500 mt-1">מעקב אחר ביצועי חוקי האוטומציה</p>
@@ -95,7 +99,7 @@ export default function AutomationMetrics() {
         </Card>
       </div>
 
-      {/* Charts & Tables */}
+      {/* Tabs */}
       <Tabs defaultValue="logs" className="w-full">
         <TabsList>
           <TabsTrigger value="logs">לוג ביצועים</TabsTrigger>
@@ -106,31 +110,34 @@ export default function AutomationMetrics() {
         <TabsContent value="logs">
           <Card>
             <CardHeader>
-              <CardTitle>100 ביצועים אחרונים</CardTitle>
+              <CardTitle>ביצועים אחרונים</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="space-y-2">
-                {logs.slice(0, 20).map(log => (
-                  <div key={log.id} className="flex items-center justify-between p-3 border rounded">
-                    <div className="flex-1">
-                      <p className="font-medium">{log.rule_name}</p>
-                      <p className="text-sm text-slate-500">{log.mail_subject}</p>
-                      <p className="text-xs text-slate-400">
-                        {format(new Date(log.executed_at), 'dd/MM/yyyy HH:mm', { locale: he })}
-                      </p>
+              {logs.length === 0 ? (
+                <p className="text-slate-500 text-center py-8">אין לוגים עדיין</p>
+              ) : (
+                <div className="space-y-2">
+                  {logs.slice(0, 20).map(log => (
+                    <div key={log.id} className="flex items-center justify-between p-3 border rounded hover:bg-slate-50">
+                      <div className="flex-1">
+                        <p className="font-medium">{log.metadata?.rule_name || 'Unknown'}</p>
+                        <p className="text-sm text-slate-500">{log.description}</p>
+                        <p className="text-xs text-slate-400">
+                          {format(new Date(log.created_at), 'dd/MM/yyyy HH:mm', { locale: he })}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Badge variant={log.status === 'completed' ? 'success' : 'destructive'}>
+                          {log.status}
+                        </Badge>
+                        <span className="text-xs text-slate-500">
+                          {log.metadata?.execution_time_ms || 0}ms
+                        </span>
+                      </div>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <Badge variant={
-                        log.execution_status === 'completed' ? 'success' :
-                        log.execution_status === 'failed' ? 'destructive' : 'secondary'
-                      }>
-                        {log.execution_status}
-                      </Badge>
-                      <span className="text-xs text-slate-500">{log.execution_time_ms}ms</span>
-                    </div>
-                  </div>
-                ))}
-              </div>
+                  ))}
+                </div>
+              )}
             </CardContent>
           </Card>
         </TabsContent>
@@ -157,7 +164,7 @@ export default function AutomationMetrics() {
                           {stats.success_rate ? stats.success_rate.toFixed(1) : 0}%
                         </div>
                         <p className="text-xs text-slate-500">
-                          {stats.successful_executions || 0}/{stats.total_executions || 0} הצלחות
+                          {stats.successful_executions || 0}/{stats.total_executions || 0}
                         </p>
                       </div>
                     </div>
@@ -174,17 +181,21 @@ export default function AutomationMetrics() {
               <CardTitle>Top 5 חוקים פעילים</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="space-y-3">
-                {topRules.map(([ruleName, count], index) => (
-                  <div key={ruleName} className="flex items-center gap-3">
-                    <div className="text-2xl font-bold text-slate-300">#{index + 1}</div>
-                    <div className="flex-1">
-                      <p className="font-medium">{ruleName}</p>
+              {topRules.length === 0 ? (
+                <p className="text-slate-500 text-center py-8">אין נתונים</p>
+              ) : (
+                <div className="space-y-3">
+                  {topRules.map(([ruleName, count], index) => (
+                    <div key={ruleName} className="flex items-center gap-3">
+                      <div className="text-2xl font-bold text-slate-300">#{index + 1}</div>
+                      <div className="flex-1">
+                        <p className="font-medium">{ruleName}</p>
+                      </div>
+                      <Badge>{count} ביצועים</Badge>
                     </div>
-                    <Badge>{count} ביצועים</Badge>
-                  </div>
-                ))}
-              </div>
+                  ))}
+                </div>
+              )}
             </CardContent>
           </Card>
         </TabsContent>
