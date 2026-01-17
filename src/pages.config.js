@@ -1,35 +1,40 @@
-import CaseView from './pages/CaseView';
-import Cases from './pages/Cases';
-import Clients from './pages/Clients';
 import Dashboard from './pages/Dashboard';
-import Docketing from './pages/Docketing';
-import Financials from './pages/Financials';
-import MailAnalytics from './pages/MailAnalytics';
-import MailRoom from './pages/MailRoom';
-import MailView from './pages/MailView';
-import Settings from './pages/Settings';
+import Clients from './pages/Clients';
+import Cases from './pages/Cases';
+import CaseView from './pages/CaseView';
+import Contacts from './pages/Contacts';
+import Documents from './pages/Documents';
+import Deadlines from './pages/Deadlines';
 import Tasks from './pages/Tasks';
-import Workbench from './pages/Workbench';
-import __Layout from './Layout.jsx';
-
-
-export const PAGES = {
-    "CaseView": CaseView,
-    "Cases": Cases,
-    "Clients": Clients,
-    "Dashboard": Dashboard,
-    "Docketing": Docketing,
-    "Financials": Financials,
-    "MailAnalytics": MailAnalytics,
-    "MailRoom": MailRoom,
-    "MailView": MailView,
-    "Settings": Settings,
-    "Tasks": Tasks,
-    "Workbench": Workbench,
-}
+import TimeEntries from './pages/TimeEntries';
+import Invoices from './pages/Invoices';
+import Mails from './pages/Mails';
+import MailRules from './pages/MailRules';
+import AutomationRules from './pages/AutomationRules';
+import ApprovalQueue from './pages/ApprovalQueue';
+import Activities from './pages/Activities';
+import Settings from './pages/Settings';
+import Layout from './components/Layout';
 
 export const pagesConfig = {
-    mainPage: "Dashboard",
-    Pages: PAGES,
-    Layout: __Layout,
+  Pages: {
+    Dashboard,
+    Clients,
+    Cases,
+    CaseView,
+    Contacts,
+    Documents,
+    Deadlines,
+    Tasks,
+    TimeEntries,
+    Invoices,
+    Mails,
+    MailRules,
+    AutomationRules,
+    ApprovalQueue,
+    Activities,
+    Settings,
+  },
+  Layout,
+  mainPage: 'Dashboard',
 };
