@@ -4,7 +4,7 @@ import { createPageUrl } from './utils';
 import { useTranslation } from 'react-i18next';
 import { ThemeProvider } from './components/ThemeProvider';
 import './components/i18nConfig';
-import { useAuth } from '@/lib/AuthContext'; // חזרה ל-lib
+import { useAuth } from '@/lib/AuthContext';
 import {
   LayoutDashboard,
   Briefcase,
@@ -22,7 +22,7 @@ import {
   Mail,
   PanelLeftClose,
   PanelLeftOpen,
-  Loader2 // הוספת אייקון טעינה
+  Loader2
 } from 'lucide-react';
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -41,24 +41,22 @@ function LayoutContent({ children, currentPageName }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   
-  // שליפת נתונים מהקונטקסט המרכזי
   const { user, isLoading, isAuthenticated, logout, navigateToLogin } = useAuth();
   
   const isRTL = i18n.language === 'he';
 
   const navigation = [
-        { name: t('nav.dashboard'), href: 'Dashboard', icon: LayoutDashboard },
-        { name: t('nav.mail_room'), href: 'MailRoom', icon: Mail },
-        { name: t('nav.cases'), href: 'Cases', icon: Briefcase },
-        { name: t('nav.clients'), href: 'Clients', icon: Users },
-        { name: t('nav.docketing'), href: 'Docketing', icon: Calendar },
-        { name: t('nav.tasks'), href: 'Tasks', icon: FileText },
-        { name: t('nav.financials'), href: 'Financials', icon: Receipt },
-        { name: t('nav.analytics'), href: 'MailAnalytics', icon: Bell },
-        { name: t('nav.settings'), href: 'Settings', icon: Settings },
-      ];
+    { name: t('nav.dashboard'), href: 'Dashboard', icon: LayoutDashboard },
+    { name: t('nav.mail_room'), href: 'MailRoom', icon: Mail },
+    { name: t('nav.cases'), href: 'Cases', icon: Briefcase },
+    { name: t('nav.clients'), href: 'Clients', icon: Users },
+    { name: t('nav.docketing'), href: 'Docketing', icon: Calendar },
+    { name: t('nav.tasks'), href: 'Tasks', icon: FileText },
+    { name: t('nav.financials'), href: 'Financials', icon: Receipt },
+    { name: t('nav.analytics'), href: 'MailAnalytics', icon: Bell },
+    { name: t('nav.settings'), href: 'Settings', icon: Settings },
+  ];
 
-  // אפקט שאחראי על ההפניה בלבד אם המשתמש לא מחובר
   useEffect(() => {
     if (!isLoading && !isAuthenticated) {
       navigateToLogin();
@@ -70,7 +68,6 @@ function LayoutContent({ children, currentPageName }) {
     return name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
   };
 
-  // 1. מסך טעינה - מופיע כל עוד AuthContext בודק מול השרת
   if (isLoading) {
     return (
       <div className="min-h-screen bg-slate-50 dark:bg-slate-900 flex items-center justify-center">
@@ -79,12 +76,10 @@ function LayoutContent({ children, currentPageName }) {
     );
   }
 
-  // 2. מניעת הבהוב (FOUC) - אם סיימנו לטעון ואין משתמש, אל תציג כלום (ה-useEffect למעלה כבר מפנה)
   if (!isAuthenticated) {
     return null;
   }
 
-  // 3. התוכן הראשי - מוצג רק למשתמש מאומת
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-900" dir={isRTL ? 'rtl' : 'ltr'}>
       {/* Mobile sidebar overlay */}
@@ -186,8 +181,8 @@ function LayoutContent({ children, currentPageName }) {
               </DropdownMenu>
             </div>
           )}
-          </div>
-          </aside>
+        </div>
+      </aside>
 
       {/* Main content */}
       <div className={cn(
@@ -207,7 +202,6 @@ function LayoutContent({ children, currentPageName }) {
               >
                 <Menu className="w-5 h-5 text-slate-600 dark:text-slate-300" />
               </button>
-              {/* Desktop Sidebar Toggle */}
               <button 
                 className="hidden lg:flex p-2 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg"
                 onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
@@ -228,10 +222,57 @@ function LayoutContent({ children, currentPageName }) {
               </div>
             </div>
             <div className="flex items-center gap-3">
-              <Button variant="ghost" size="icon" className="relative rounded-xl dark:hover:bg-slate-700" aria-label={t('common.notifications')}>
-                <Bell className="w-5 h-5 text-slate-600 dark:text-slate-300" />
-                <span className="absolute top-1 right-1 w-2 h-2 bg-rose-500 rounded-full" />
-              </Button>
+              {/* Notification Bell with Dropdown */}
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="ghost" size="icon" className="relative rounded-xl dark:hover:bg-slate-700" aria-label={t('common.notifications')}>
+                    <Bell className="w-5 h-5 text-slate-600 dark:text-slate-300" />
+                    <span className="absolute top-1 right-1 w-2 h-2 bg-rose-500 rounded-full" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-80 dark:bg-slate-800 dark:border-slate-700">
+                  <div className="p-4">
+                    <div className="flex items-center justify-between mb-3">
+                      <h3 className="font-semibold text-sm dark:text-slate-200">
+                        {t('common.notifications')}
+                      </h3>
+                      <Button 
+                        variant="ghost" 
+                        size="sm" 
+                        className="h-auto p-0 text-xs text-blue-600 dark:text-blue-400 hover:underline"
+                      >
+                        סמן הכל כנקרא
+                      </Button>
+                    </div>
+                    <div className="space-y-2">
+                      {/* Empty state */}
+                      <div className="text-sm text-slate-500 dark:text-slate-400 text-center py-8">
+                        אין הודעות חדשות
+                      </div>
+                      
+                      {/* Example notifications (you can remove these later) */}
+                      {/* 
+                      <div className="p-3 hover:bg-slate-50 dark:hover:bg-slate-700 rounded-lg cursor-pointer transition-colors">
+                        <p className="text-sm font-medium dark:text-slate-200">מייל חדש התקבל</p>
+                        <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">לפני 5 דקות</p>
+                      </div>
+                      <div className="p-3 hover:bg-slate-50 dark:hover:bg-slate-700 rounded-lg cursor-pointer transition-colors">
+                        <p className="text-sm font-medium dark:text-slate-200">תיק חדש נוצר</p>
+                        <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">לפני שעה</p>
+                      </div>
+                      */}
+                    </div>
+                  </div>
+                  <DropdownMenuSeparator className="dark:bg-slate-700" />
+                  <div className="p-2">
+                    <Link to={createPageUrl('Settings')}>
+                      <Button variant="ghost" className="w-full justify-center text-sm dark:text-slate-200 dark:hover:bg-slate-700">
+                        הגדרות הודעות
+                      </Button>
+                    </Link>
+                  </div>
+                </DropdownMenuContent>
+              </DropdownMenu>
             </div>
           </div>
         </header>
