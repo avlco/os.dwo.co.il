@@ -214,7 +214,7 @@ export default function Cases() {
     }
 
     if (!data.title || data.title.trim() === '') {
-      errors.push('שם הנכס הוא שדה חובה');
+      errors.push('נושא התיק הוא שדה חובה');
     }
 
     // Date logic validation
@@ -608,10 +608,11 @@ export default function Cases() {
             </div>
 
             <div className="space-y-2">
-              <Label className="dark:text-slate-300">שם הנכס *</Label>
+              <Label className="dark:text-slate-300">נושא התיק / תיאור המצאה *</Label>
               <Input
                 value={formData.title}
                 onChange={(e) => setFormData({ ...formData, title: e.target.value })}
+                placeholder="לדוגמה: שיטה לזיהוי פנים באמצעות AI"
                 required
                 className="dark:bg-slate-900 dark:border-slate-600"
               />
