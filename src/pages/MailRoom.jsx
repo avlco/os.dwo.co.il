@@ -4,7 +4,7 @@ import { base44 } from '../api/base44Client';
 import { PageHeader } from "../components/ui/PageHeader";
 import { DataTable } from "../components/ui/DataTable";
 import { Button } from "../components/ui/button";
-import { Mail, RefreshCw, CheckCircle, Clock, Download, Loader2, Settings } from 'lucide-react';
+import { Mail, RefreshCw, CheckCircle, Clock, Download, Loader2, Settings, Activity, Zap, AlertCircle, CheckCircle2, XCircle } from 'lucide-react';
 import { createPageUrl } from '../utils';
 import { useNavigate, Link } from 'react-router-dom';
 import { format } from 'date-fns';
@@ -65,6 +65,26 @@ export default function MailRoom() {
     staleTime: 1000 * 60 * 1,
   });
 
+  const { data: automationLogs = [] } = useQuery({
+    queryKey: ['automationLogs'],
+    queryFn: async () => {
+      try {
+        const allActivities = await base44.entities.Activity.list('-created_at', 500);
+        const logsArray = Array.isArray(allActivities) ? allActivities : (allActivities.data || []);
+        return logsArray.filter(a => a.activity_type === 'automation_log');
+      } catch (error) {
+        console.error('[MailRoom] Failed to fetch automation logs:', error);
+        return [];
+      }
+    },
+    staleTime: 1000 * 30,
+  });
+
+  const { data: allTasks = [] } = useQuery({
+    queryKey: ['tasks'],
+    queryFn: () => base44.entities.Task.list('-created_date', 200),
+  });
+
   const handleRefresh = async () => {
     await refetch();
     toast({ description: "הטבלה רועננה בהצלחה" });
@@ -91,6 +111,7 @@ export default function MailRoom() {
       localStorage.setItem('lastMailSync', Date.now().toString());
       
       queryClient.invalidateQueries(['mails']);
+      queryClient.invalidateQueries(['automationLogs']);
       setTimeout(() => refetch(), 500);
     },
     onError: (err) => {
@@ -98,232 +119,386 @@ export default function MailRoom() {
       toast({ 
         variant: "destructive", 
         title: "שגיאת סנכרון", 
-        description: err.message || "אנא וודא שהמערכת מחוברת לגוגל בהגדרות."
+        description: err.message || "נכשל בסנכרון מיילים. נסה שוב." 
       });
     }
   });
 
-  useEffect(() => {
-    const lastSync = localStorage.getItem('lastMailSync');
-    const now = Date.now();
-    const fiveMinutes = 5 * 60 * 1000;
+  const getMailAutomationStatus = (mailId) => {
+    const mailLogs = automationLogs.filter(log => log.metadata?.mail_id === mailId);
     
-    if (!lastSync || (now - parseInt(lastSync)) > fiveMinutes) {
-      console.log('[MailRoom] Initial auto-sync on page load');
-      syncMutation.mutate();
-      localStorage.setItem('lastMailSync', now.toString());
-    } else {
-      console.log('[MailRoom] Skipping sync - last sync was recent');
-      const elapsed = now - parseInt(lastSync);
-      const remaining = Math.ceil((fiveMinutes - elapsed) / 1000);
-      setNextSyncIn(remaining);
+    if (mailLogs.length === 0) return null;
+    
+    const successCount = mailLogs.filter(log => log.status === 'completed').length;
+    const failedCount = mailLogs.filter(log => log.status === 'failed').length;
+    
+    return {
+      total: mailLogs.length,
+      success: successCount,
+      failed: failedCount,
+      logs: mailLogs
+    };
+  };
+
+  const getMailTasks = (mailId) => {
+    return allTasks.filter(task => task.mail_id === mailId);
+  };
+
+  const columns = [
+    {
+      header: 'נושא',
+      accessorKey: 'subject',
+      cell: ({ row }) => (
+        <div className="flex items-center gap-2">
+          <Link
+            to={createPageUrl('MailView', { id: row.original.id })}
+            className="text-blue-600 hover:underline font-medium"
+          >
+            {row.original.subject || '(ללא נושא)'}
+          </Link>
+          {row.original.has_attachments && (
+            <Badge variant="outline" className="text-xs">
+              📎 {row.original.attachments?.length || 0}
+            </Badge>
+          )}
+        </div>
+      ),
+    },
+    {
+      header: 'שולח',
+      accessorKey: 'sender_email',
+      cell: ({ row }) => (
+        <span className="text-sm text-slate-600">{row.original.sender_email}</span>
+      ),
+    },
+    {
+      header: 'תאריך',
+      accessorKey: 'received_at',
+      cell: ({ row }) => {
+        const date = new Date(row.original.received_at);
+        return (
+          <span className="text-sm text-slate-500">
+            {format(date, 'dd/MM/yyyy HH:mm', { locale: he })}
+          </span>
+        );
+      },
+    },
+    {
+      header: 'אוטומציה',
+      accessorKey: 'automation_status',
+      cell: ({ row }) => {
+        const status = getMailAutomationStatus(row.original.id);
+        const tasks = getMailTasks(row.original.id);
+        
+        if (!status) {
+          return <Badge variant="outline" className="text-xs">לא רץ</Badge>;
+        }
+        
+        return (
+          <div className="flex items-center gap-2">
+            {status.success > 0 && (
+              <Badge variant="success" className="text-xs flex items-center gap-1">
+                <CheckCircle2 className="w-3 h-3" />
+                {status.success}
+              </Badge>
+            )}
+            {status.failed > 0 && (
+              <Badge variant="destructive" className="text-xs flex items-center gap-1">
+                <XCircle className="w-3 h-3" />
+                {status.failed}
+              </Badge>
+            )}
+            {tasks.length > 0 && (
+              <Badge variant="outline" className="text-xs">
+                📋 {tasks.length}
+              </Badge>
+            )}
+          </div>
+        );
+      },
+    },
+    {
+      header: 'סטטוס',
+      accessorKey: 'processing_status',
+      cell: ({ row }) => {
+        const statusConfig = {
+          pending: { label: 'ממתין', color: 'bg-yellow-100 text-yellow-800' },
+          processed: { label: 'עובד', color: 'bg-green-100 text-green-800' },
+          archived: { label: 'בארכיון', color: 'bg-gray-100 text-gray-800' }
+        };
+        const config = statusConfig[row.original.processing_status] || statusConfig.pending;
+        return <Badge className={config.color}>{config.label}</Badge>;
+      },
+    },
+  ];
+
+  const automationStats = {
+    total: automationLogs.length,
+    success: automationLogs.filter(l => l.status === 'completed').length,
+    failed: automationLogs.filter(l => l.status === 'failed').length,
+    successRate: automationLogs.length > 0 
+      ? ((automationLogs.filter(l => l.status === 'completed').length / automationLogs.length) * 100).toFixed(0)
+      : 0
+  };
+
+  const mails = data?.data || [];
+  const totalPages = data?.totalPages || 0;
+
+  useEffect(() => {
+    const stored = localStorage.getItem('lastMailSync');
+    if (stored) {
+      const lastSync = new Date(parseInt(stored));
+      setLastSyncTime(lastSync);
       
-      const lastSyncDate = new Date(parseInt(lastSync));
-      setLastSyncTime(lastSyncDate);
+      const elapsed = Math.floor((Date.now() - lastSync.getTime()) / 1000);
+      const remaining = Math.max(0, 300 - elapsed);
+      setNextSyncIn(remaining);
     }
 
-    const syncInterval = setInterval(() => {
-      console.log('[MailRoom] Auto-syncing from Gmail...');
-      syncMutation.mutate();
-      localStorage.setItem('lastMailSync', Date.now().toString());
-    }, fiveMinutes);
-
-    return () => clearInterval(syncInterval);
-  }, []);
-
-  useEffect(() => {
-    const countdown = setInterval(() => {
-      setNextSyncIn(prev => {
-        if (prev <= 1) return 300;
-        return prev - 1;
-      });
+    const interval = setInterval(() => {
+      setNextSyncIn((prev) => Math.max(0, prev - 1));
     }, 1000);
 
-    return () => clearInterval(countdown);
+    return () => clearInterval(interval);
   }, []);
 
-  const formatCountdown = (seconds) => {
+  const formatTime = (seconds) => {
     const mins = Math.floor(seconds / 60);
     const secs = seconds % 60;
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
-  const columns = [
-    {
-      accessorKey: "received_at",
-      header: "תאריך קבלה",
-      cell: ({ row }) => {
-        const date = row.getValue("received_at");
-        return date ? format(new Date(date), 'dd/MM/yyyy HH:mm', { locale: he }) : '-';
-      },
-    },
-    { accessorKey: "sender_email", header: "שולח" },
-    { 
-      accessorKey: "subject", 
-      header: "נושא", 
-      cell: ({ row }) => <span className="font-medium">{row.getValue("subject")}</span> 
-    },
-    {
-      accessorKey: "processing_status",
-      header: "סטטוס",
-      cell: ({ row }) => {
-        const status = row.getValue("processing_status");
-        const colors = { 
-          pending: "bg-blue-100 text-blue-800", 
-          processed: "bg-green-100 text-green-800", 
-          archived: "bg-gray-100 text-gray-800"
-        };
-        const labels = { pending: "חדש", processed: "טופל", archived: "בארכיון" };
-        return <Badge variant="secondary" className={colors[status] || ""}>{labels[status] || status}</Badge>;
-      },
-    },
-    {
-      id: "actions",
-      cell: ({ row }) => (
-        <Button 
-          variant="ghost" 
-          size="sm" 
-          onClick={(e) => {
-            e.stopPropagation();
-            navigate(createPageUrl(`MailView?id=${row.original.id}`));
-          }}
-        >
-          צפה
-        </Button>
-      )
-    }
-  ];
-
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-800 dark:text-slate-200">חדר דואר</h1>
-          <p className="text-slate-500 dark:text-slate-400 mt-1">ניהול ומיון דואר נכנס.</p>
-        </div>
-        <div className="flex gap-2">
-          <Link to={createPageUrl('ApprovalQueue')}>
-            <Button variant="outline" className="gap-2">
-              <CheckCircle className="w-4 h-4" />
-              תור אישורים
-            </Button>
-          </Link>
-          <Link to={createPageUrl('AutomationRules')}>
-            <Button variant="outline" className="gap-2">
-              <Settings className="w-4 h-4" />
-              חוקי אוטומציה
-            </Button>
-          </Link>
-        </div>
-      </div>
-      
-      <div className="flex justify-between items-center p-4 bg-slate-50 dark:bg-slate-900 rounded-md border">
-        <div className="flex items-center gap-3">
-          <div className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-400">
-            <Clock className="w-4 h-4" />
-            <span>
-              {syncMutation.isPending ? (
-                <span className="text-blue-600 font-medium">מסנכרן...</span>
-              ) : (
-                <>
-                  סנכרון הבא בעוד: <span className="font-mono font-bold">{formatCountdown(nextSyncIn)}</span>
-                </>
-              )}
-            </span>
-          </div>
-          
-          {lastSyncTime && (
-            <span className="text-xs text-slate-500">
-              סנכרון אחרון: {format(lastSyncTime, 'HH:mm', { locale: he })}
-            </span>
-          )}
-        </div>
+      <PageHeader
+        title="תיבת דואר נכנס"
+        subtitle="ניהול ועיבוד מיילים אוטומטי"
+        icon={<Mail className="w-6 h-6" />}
+      />
 
-        <div className="flex gap-2">
-          <Button 
-            className="bg-blue-600 hover:bg-blue-700 text-white" 
-            size="sm" 
-            onClick={() => syncMutation.mutate()} 
-            disabled={syncMutation.isPending}
-          >
-            {syncMutation.isPending ? (
-              <Loader2 className="w-4 h-4 animate-spin ml-2"/>
-            ) : (
-              <Download className="w-4 h-4 ml-2"/>
-            )}
-            סנכרן עכשיו
-          </Button>
-          
-          <Button 
-            variant="outline" 
-            size="sm" 
-            onClick={handleRefresh}
-            disabled={isLoading || isRefetching}
-          >
-            {(isLoading || isRefetching) ? (
-              <Loader2 className="w-4 h-4 ml-2 animate-spin" />
-            ) : (
-              <RefreshCw className="w-4 h-4 ml-2" />
-            )}
-            רענן טבלה
-          </Button>
-        </div>
-      </div>
-
-      <div className="grid gap-4 md:grid-cols-3">
-        <Card className="dark:bg-slate-800">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">דואר נכנס (ממתין)</CardTitle>
-            <Mail className="h-4 w-4 text-muted-foreground" />
+      <div className="grid gap-4 md:grid-cols-4">
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-sm font-medium">מיילים פעילים</CardTitle>
+            <Mail className="w-4 h-4 text-slate-500" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">
-              {activeTab === 'inbox' ? (data?.total || 0) : '--'}
-            </div>
+            <div className="text-2xl font-bold">{data?.total || 0}</div>
+            <p className="text-xs text-slate-500 mt-1">סה״כ {activeTab === 'inbox' ? 'ממתינים' : activeTab === 'processed' ? 'מעובדים' : 'בארכיון'}</p>
           </CardContent>
         </Card>
-        <Card className="dark:bg-slate-800">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">טופלו היום</CardTitle>
-            <CheckCircle className="h-4 w-4 text-muted-foreground" />
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-sm font-medium">אוטומציות רצו</CardTitle>
+            <Zap className="w-4 h-4 text-amber-500" />
           </CardHeader>
-          <CardContent><div className="text-2xl font-bold">--</div></CardContent>
+          <CardContent>
+            <div className="text-2xl font-bold">{automationStats.total}</div>
+            <p className="text-xs text-slate-500 mt-1">חוקים שהופעלו</p>
+          </CardContent>
         </Card>
-        <Card className="dark:bg-slate-800">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">זמן טיפול ממוצע</CardTitle>
-            <Clock className="h-4 w-4 text-muted-foreground" />
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-sm font-medium">אחוז הצלחה</CardTitle>
+            <CheckCircle2 className="w-4 h-4 text-green-600" />
           </CardHeader>
-          <CardContent><div className="text-2xl font-bold">--</div></CardContent>
+          <CardContent>
+            <div className="text-2xl font-bold text-green-600">{automationStats.successRate}%</div>
+            <p className="text-xs text-slate-500 mt-1">{automationStats.success} מתוך {automationStats.total}</p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-sm font-medium">כישלונות</CardTitle>
+            <AlertCircle className="w-4 h-4 text-red-500" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-red-600">{automationStats.failed}</div>
+            <p className="text-xs text-slate-500 mt-1">חוקים שנכשלו</p>
+          </CardContent>
         </Card>
       </div>
 
-      <Tabs defaultValue="inbox" className="w-full" onValueChange={(val) => { setActiveTab(val); setPage(1); }}>
-        <TabsList className="grid w-full grid-cols-3 lg:w-[400px]">
-          <TabsTrigger value="inbox">דואר נכנס</TabsTrigger>
-          <TabsTrigger value="processed">טופל</TabsTrigger>
-          <TabsTrigger value="archived">ארכיון</TabsTrigger>
-        </TabsList>
-        
-        {['inbox', 'processed', 'archived'].map(tab => (
-          <TabsContent key={tab} value={tab} className="mt-4">
-            <Card className="dark:bg-slate-800">
-              <CardContent className="p-0">
-                <DataTable 
-                  columns={columns} 
-                  data={data?.data || []} 
-                  searchKey="subject"
-                  onRowClick={(row) => navigate(createPageUrl(`MailView?id=${row.id}`))}
-                  page={page}
-                  totalPages={data?.totalPages || 1}
-                  onPageChange={setPage}
-                  isLoading={isLoading}
-                />
-              </CardContent>
-            </Card>
-          </TabsContent>
-        ))}
-      </Tabs>
+      <Card>
+        <CardContent className="pt-6">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-4">
+              <Button
+                onClick={() => syncMutation.mutate()}
+                disabled={syncMutation.isPending}
+                size="sm"
+                className="flex items-center gap-2"
+              >
+                {syncMutation.isPending ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    מסנכרן...
+                  </>
+                ) : (
+                  <>
+                    <RefreshCw className="w-4 h-4" />
+                    סנכרן עכשיו
+                  </>
+                )}
+              </Button>
+              <Button onClick={handleRefresh} size="sm" variant="outline">
+                <RefreshCw className="w-4 h-4" />
+              </Button>
+              {/* כפתורים שהיו במקור */}
+              <Link to={createPageUrl('ApprovalQueue')}>
+                <Button variant="outline" size="sm" className="gap-2">
+                  <CheckCircle className="w-4 h-4" />
+                  תור אישורים
+                </Button>
+              </Link>
+              <Link to={createPageUrl('AutomationRules')}>
+                <Button variant="outline" size="sm" className="gap-2">
+                  <Settings className="w-4 h-4" />
+                  חוקי אוטומציה
+                </Button>
+              </Link>
+            </div>
+            
+            {lastSyncTime && (
+              <div className="text-sm text-slate-500 flex items-center gap-2">
+                <Clock className="w-4 h-4" />
+                <span>סנכרון אחרון: {format(lastSyncTime, 'HH:mm', { locale: he })}</span>
+                <span className="text-slate-400">|</span>
+                <span>הבא בעוד: {formatTime(nextSyncIn)}</span>
+              </div>
+            )}
+          </div>
+
+          <Tabs value={activeTab} onValueChange={(val) => { setActiveTab(val); setPage(1); }}>
+            <TabsList className="grid w-full grid-cols-4">
+              <TabsTrigger value="inbox">
+                📥 ממתינים ({mails.length})
+              </TabsTrigger>
+              <TabsTrigger value="processed">
+                ✅ מעובדים
+              </TabsTrigger>
+              <TabsTrigger value="archived">
+                📦 ארכיון
+              </TabsTrigger>
+              <TabsTrigger value="automation">
+                ⚡ פעילות אוטומציה
+              </TabsTrigger>
+            </TabsList>
+
+            <TabsContent value="inbox">
+              <DataTable
+                columns={columns}
+                data={mails}
+                isLoading={isLoading}
+                page={page}
+                totalPages={totalPages}
+                onPageChange={setPage}
+              />
+            </TabsContent>
+
+            <TabsContent value="processed">
+              <DataTable
+                columns={columns}
+                data={mails}
+                isLoading={isLoading}
+                page={page}
+                totalPages={totalPages}
+                onPageChange={setPage}
+              />
+            </TabsContent>
+
+            <TabsContent value="archived">
+              <DataTable
+                columns={columns}
+                data={mails}
+                isLoading={isLoading}
+                page={page}
+                totalPages={totalPages}
+                onPageChange={setPage}
+              />
+            </TabsContent>
+
+            <TabsContent value="automation">
+              <div className="space-y-4">
+                {automationLogs.length === 0 ? (
+                  <div className="text-center py-12 text-slate-500">
+                    <Activity className="w-12 h-12 mx-auto mb-4 opacity-50" />
+                    <p>אין פעילות אוטומציה עדיין</p>
+                    <p className="text-sm mt-2">כאשר חוקי אוטומציה ירוצו, הפעילות תוצג כאן</p>
+                  </div>
+                ) : (
+                  automationLogs.slice(0, 50).map((log) => {
+                    const isSuccess = log.status === 'completed';
+                    const metadata = log.metadata || {};
+                    
+                    return (
+                      <Card key={log.id} className={isSuccess ? 'border-green-200' : 'border-red-200'}>
+                        <CardContent className="pt-6">
+                          <div className="flex items-start justify-between">
+                            <div className="flex-1">
+                              <div className="flex items-center gap-3 mb-2">
+                                {isSuccess ? (
+                                  <CheckCircle2 className="w-5 h-5 text-green-600" />
+                                ) : (
+                                  <XCircle className="w-5 h-5 text-red-600" />
+                                )}
+                                <h3 className="font-semibold">{metadata.rule_name || 'חוק לא ידוע'}</h3>
+                                <Badge variant={isSuccess ? 'success' : 'destructive'}>
+                                  {isSuccess ? 'הצליח' : 'נכשל'}
+                                </Badge>
+                              </div>
+                              
+                              {/* תיקון: לינק למייל */}
+                              <Link 
+                                to={createPageUrl('MailView', { id: metadata.mail_id })}
+                                className="text-sm text-blue-600 hover:underline mb-3 block"
+                              >
+                                📧 {metadata.mail_subject || 'ללא נושא'}
+                              </Link>
+                              
+                              {metadata.actions_summary && (
+                                <div className="text-sm text-slate-500 space-y-1">
+                                  <p className="font-medium">פעולות שבוצעו:</p>
+                                  <ul className="list-disc list-inside mr-4">
+                                    {metadata.actions_summary.map((action, idx) => (
+                                      <li key={idx}>
+                                        {action.action}: {action.status === 'success' ? '✅' : '❌'} 
+                                        {action.note && ` - ${action.note}`}
+                                      </li>
+                                    ))}
+                                  </ul>
+                                </div>
+                              )}
+                              
+                              {!isSuccess && metadata.error_message && (
+                                <div className="mt-3 p-3 bg-red-50 border border-red-200 rounded text-sm text-red-700">
+                                  <p className="font-medium">שגיאה:</p>
+                                  <p>{metadata.error_message}</p>
+                                </div>
+                              )}
+                            </div>
+                            
+                            <div className="text-right text-sm text-slate-500">
+                              <p>{format(new Date(log.created_at), 'dd/MM/yyyy', { locale: he })}</p>
+                              <p>{format(new Date(log.created_at), 'HH:mm:ss', { locale: he })}</p>
+                              {metadata.execution_time_ms && (
+                                <p className="mt-1 text-xs">⏱️ {metadata.execution_time_ms}ms</p>
+                              )}
+                            </div>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    );
+                  })
+                )}
+              </div>
+            </TabsContent>
+          </Tabs>
+        </CardContent>
+      </Card>
     </div>
   );
 }
