@@ -220,8 +220,21 @@ export default function Clients() {
       errors.push('שם הלקוח הוא שדה חובה');
     }
 
+    // Client number is required
+    if (!data.client_number || data.client_number.trim() === '') {
+      errors.push('מספר לקוח הוא שדה חובה');
+    }
+
+    // At least one contact method required (email or phone)
+    const hasEmail = data.email && data.email.trim() !== '';
+    const hasPhone = data.phone && data.phone.trim() !== '';
+
+    if (!hasEmail && !hasPhone) {
+      errors.push('חובה למלא לפחות אמצעי תקשורת אחד: אימייל או טלפון');
+    }
+
     // Email validation (if provided)
-    if (data.email && data.email.trim() !== '') {
+    if (hasEmail) {
       const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
       if (!emailRegex.test(data.email)) {
         errors.push('כתובת האימייל אינה תקינה');
@@ -229,7 +242,7 @@ export default function Clients() {
     }
 
     // Phone validation (basic - if provided)
-    if (data.phone && data.phone.trim() !== '') {
+    if (hasPhone) {
       const phoneRegex = /^[\d\s\-\+\(\)]+$/;
       if (!phoneRegex.test(data.phone)) {
         errors.push('מספר הטלפון אינו תקין');
@@ -554,11 +567,12 @@ export default function Clients() {
                 />
               </div>
               <div className="space-y-2">
-                <Label className="dark:text-slate-300">מספר לקוח</Label>
+                <Label className="dark:text-slate-300">מספר לקוח *</Label>
                 <Input
                   value={formData.client_number}
                   onChange={(e) => setFormData({ ...formData, client_number: e.target.value })}
                   placeholder="CL-2024-001"
+                  required
                   className="dark:bg-slate-900 dark:border-slate-600"
                 />
               </div>
@@ -605,19 +619,21 @@ export default function Clients() {
 
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label className="dark:text-slate-300">אימייל</Label>
+                <Label className="dark:text-slate-300">אימייל (לפחות אמצעי תקשורת אחד חובה)</Label>
                 <Input
                   type="email"
                   value={formData.email}
                   onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                  placeholder="example@domain.com"
                   className="dark:bg-slate-900 dark:border-slate-600"
                 />
               </div>
               <div className="space-y-2">
-                <Label className="dark:text-slate-300">טלפון</Label>
+                <Label className="dark:text-slate-300">טלפון (לפחות אמצעי תקשורת אחד חובה)</Label>
                 <Input
                   value={formData.phone}
                   onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                  placeholder="+972-50-1234567"
                   className="dark:bg-slate-900 dark:border-slate-600"
                 />
               </div>
