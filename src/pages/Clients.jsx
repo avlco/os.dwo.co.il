@@ -40,11 +40,13 @@ import {
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
+import { useToast } from "@/components/ui/use-toast";
 
 export default function Clients() {
   const { t, i18n } = useTranslation();
   const isRTL = i18n.language === 'he';
   const queryClient = useQueryClient();
+  const { toast } = useToast();
   const [searchTerm, setSearchTerm] = useState('');
   const [filterType, setFilterType] = useState('all');
   const [isDialogOpen, setIsDialogOpen] = useState(false);
@@ -112,6 +114,18 @@ export default function Clients() {
       queryClient.invalidateQueries(['clients']);
       setIsDialogOpen(false);
       resetForm();
+      toast({
+        title: "הלקוח נוסף בהצלחה",
+        description: `הלקוח "${formData.name}" נוצר במערכת`,
+      });
+    },
+    onError: (error) => {
+      console.error('Failed to create client:', error);
+      toast({
+        variant: "destructive",
+        title: "שגיאה ביצירת לקוח",
+        description: error.message || "אנא נסה שנית או פנה לתמיכה",
+      });
     },
   });
 
@@ -121,13 +135,59 @@ export default function Clients() {
       queryClient.invalidateQueries(['clients']);
       setIsDialogOpen(false);
       resetForm();
+      toast({
+        title: "הלקוח עודכן בהצלחה",
+        description: "השינויים נשמרו במערכת",
+      });
+    },
+    onError: (error) => {
+      console.error('Failed to update client:', error);
+      toast({
+        variant: "destructive",
+        title: "שגיאה בעדכון לקוח",
+        description: error.message || "אנא נסה שנית",
+      });
     },
   });
 
   const deleteMutation = useMutation({
-    mutationFn: (id) => base44.entities.Client.delete(id),
+    mutationFn: async (id) => {
+      // Check if client has active cases
+      const clientCases = cases.filter(c => c.client_id === id);
+
+      if (clientCases.length > 0) {
+        // Show warning with case count
+        const confirmed = window.confirm(
+          `ללקוח זה יש ${clientCases.length} תיקים פעילים.\n\n` +
+          `סימון הלקוח כלא פעיל יסתיר אותו מהרשימות אך ישמור את התיקים.\n\n` +
+          `האם להמשיך?`
+        );
+
+        if (!confirmed) {
+          throw new Error('USER_CANCELLED');
+        }
+      }
+
+      // Soft delete: set is_active to false
+      return base44.entities.Client.update(id, { is_active: false });
+    },
     onSuccess: () => {
       queryClient.invalidateQueries(['clients']);
+      toast({
+        title: "הלקוח סומן כלא פעיל",
+        description: "הלקוח הוסתר מהרשימות אך הנתונים נשמרו",
+      });
+    },
+    onError: (error) => {
+      // Don't show error if user cancelled
+      if (error.message !== 'USER_CANCELLED') {
+        console.error('Failed to delete client:', error);
+        toast({
+          variant: "destructive",
+          title: "שגיאה בעדכון סטטוס",
+          description: error.message || "אנא נסה שנית",
+        });
+      }
     },
   });
 
@@ -150,6 +210,38 @@ export default function Clients() {
       billing_currency: 'ILS',
     });
     setEditingClient(null);
+  };
+
+  const validateClientForm = (data) => {
+    const errors = [];
+
+    // Required fields
+    if (!data.name || data.name.trim() === '') {
+      errors.push('שם הלקוח הוא שדה חובה');
+    }
+
+    // Email validation (if provided)
+    if (data.email && data.email.trim() !== '') {
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(data.email)) {
+        errors.push('כתובת האימייל אינה תקינה');
+      }
+    }
+
+    // Phone validation (basic - if provided)
+    if (data.phone && data.phone.trim() !== '') {
+      const phoneRegex = /^[\d\s\-\+\(\)]+$/;
+      if (!phoneRegex.test(data.phone)) {
+        errors.push('מספר הטלפון אינו תקין');
+      }
+    }
+
+    // Hourly rate must be positive
+    if (data.hourly_rate && parseFloat(data.hourly_rate) < 0) {
+      errors.push('תעריף שעתי חייב להיות מספר חיובי');
+    }
+
+    return errors;
   };
 
   const openCreateDialog = () => {
@@ -181,6 +273,37 @@ export default function Clients() {
 
   const handleSubmit = (e) => {
     e.preventDefault();
+
+    // Validate form
+    const validationErrors = validateClientForm(formData);
+
+    if (validationErrors.length > 0) {
+      toast({
+        variant: "destructive",
+        title: "שגיאת ולידציה",
+        description: validationErrors.join(', '),
+      });
+      return;
+    }
+
+    // Check uniqueness of client_number (only when creating or changing number)
+    if (formData.client_number && formData.client_number.trim() !== '') {
+      const isDuplicate = clients.some(c =>
+        c.client_number === formData.client_number &&
+        (!editingClient || c.id !== editingClient.id)
+      );
+
+      if (isDuplicate) {
+        const duplicate = clients.find(c => c.client_number === formData.client_number);
+        toast({
+          variant: "destructive",
+          title: "מספר לקוח כבר קיים",
+          description: `הלקוח "${duplicate.name}" כבר משתמש במספר זה`,
+        });
+        return;
+      }
+    }
+
     if (editingClient) {
       updateMutation.mutate({ id: editingClient.id, data: formData });
     } else {
@@ -202,7 +325,8 @@ export default function Clients() {
       c.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       c.client_number?.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesType = filterType === 'all' || c.type === filterType;
-    return matchesSearch && matchesType;
+    const isActive = c.is_active !== false; // Filter out inactive clients
+    return matchesSearch && matchesType && isActive;
   });
 
   const columns = [
@@ -365,7 +489,7 @@ export default function Clients() {
         actionLabel={t('clients.new_client')}
       />
 
-      <div className="flex.flex-wrap gap-4 items-center">
+      <div className="flex flex-wrap gap-4 items-center">
         <div className="relative flex-1 min-w-[200px] max-w-md">
           <Search
             className={`absolute ${isRTL ? 'right-3' : 'left-3'} top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400`}

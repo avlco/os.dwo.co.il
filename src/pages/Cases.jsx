@@ -44,11 +44,13 @@ import {
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
+import { useToast } from "@/components/ui/use-toast";
 
 export default function Cases() {
   const { t, i18n } = useTranslation();
   const isRTL = i18n.language === 'he';
   const queryClient = useQueryClient();
+  const { toast } = useToast();
   const [searchTerm, setSearchTerm] = useState('');
   const [filterType, setFilterType] = useState('all');
   const [filterStatus, setFilterStatus] = useState('all');
@@ -127,6 +129,18 @@ export default function Cases() {
       queryClient.invalidateQueries(['cases']);
       setIsDialogOpen(false);
       resetForm();
+      toast({
+        title: "התיק נוסף בהצלחה",
+        description: `התיק "${formData.case_number}" נוצר במערכת`,
+      });
+    },
+    onError: (error) => {
+      console.error('Failed to create case:', error);
+      toast({
+        variant: "destructive",
+        title: "שגיאה ביצירת תיק",
+        description: error.message || "אנא נסה שנית או פנה לתמיכה",
+      });
     },
   });
 
@@ -136,6 +150,18 @@ export default function Cases() {
       queryClient.invalidateQueries(['cases']);
       setIsDialogOpen(false);
       resetForm();
+      toast({
+        title: "התיק עודכן בהצלחה",
+        description: "השינויים נשמרו במערכת",
+      });
+    },
+    onError: (error) => {
+      console.error('Failed to update case:', error);
+      toast({
+        variant: "destructive",
+        title: "שגיאה בעדכון תיק",
+        description: error.message || "אנא נסה שנית",
+      });
     },
   });
 
@@ -143,6 +169,18 @@ export default function Cases() {
     mutationFn: (id) => base44.entities.Case.delete(id),
     onSuccess: () => {
       queryClient.invalidateQueries(['cases']);
+      toast({
+        title: "התיק נמחק בהצלחה",
+        description: "התיק הוסר מהמערכת",
+      });
+    },
+    onError: (error) => {
+      console.error('Failed to delete case:', error);
+      toast({
+        variant: "destructive",
+        title: "שגיאה במחיקת תיק",
+        description: error.message || "אנא נסה שנית",
+      });
     },
   });
 
@@ -165,6 +203,45 @@ export default function Cases() {
       official_status_date: '',
     });
     setEditingCase(null);
+  };
+
+  const validateCaseForm = (data) => {
+    const errors = [];
+
+    // Required fields
+    if (!data.case_number || data.case_number.trim() === '') {
+      errors.push('מספר תיק הוא שדה חובה');
+    }
+
+    if (!data.title || data.title.trim() === '') {
+      errors.push('שם הנכס הוא שדה חובה');
+    }
+
+    // Date logic validation
+    if (data.filing_date && data.renewal_date) {
+      const filing = new Date(data.filing_date);
+      const renewal = new Date(data.renewal_date);
+
+      if (renewal <= filing) {
+        errors.push('תאריך חידוש חייב להיות אחרי תאריך ההגשה');
+      }
+    }
+
+    if (data.filing_date && data.expiry_date) {
+      const filing = new Date(data.filing_date);
+      const expiry = new Date(data.expiry_date);
+
+      if (expiry <= filing) {
+        errors.push('תאריך פקיעה חייב להיות אחרי תאריך ההגשה');
+      }
+    }
+
+    // Hourly rate validation
+    if (data.hourly_rate && parseFloat(data.hourly_rate) < 0) {
+      errors.push('תעריף שעתי חייב להיות מספר חיובי');
+    }
+
+    return errors;
   };
 
   const openCreateDialog = () => {
@@ -196,11 +273,44 @@ export default function Cases() {
 
   const handleSubmit = (e) => {
     e.preventDefault();
+
+    // Validate form
+    const validationErrors = validateCaseForm(formData);
+
+    if (validationErrors.length > 0) {
+      toast({
+        variant: "destructive",
+        title: "שגיאת ולידציה",
+        description: validationErrors.join(', '),
+      });
+      return;
+    }
+
+    // Check uniqueness of case_number
+    const isDuplicate = cases.some(c =>
+      c.case_number === formData.case_number &&
+      (!editingCase || c.id !== editingCase.id)
+    );
+
+    if (isDuplicate) {
+      toast({
+        variant: "destructive",
+        title: "מספר תיק כבר קיים",
+        description: `קיים כבר תיק במספר "${formData.case_number}"`,
+      });
+      return;
+    }
+
     const submitData = { ...formData };
 
     // Convert empty strings to null for optional fields
     if (!submitData.hourly_rate) submitData.hourly_rate = null;
     if (!submitData.assigned_lawyer_id) submitData.assigned_lawyer_id = null;
+    if (!submitData.client_id) submitData.client_id = null;
+    if (!submitData.filing_date || submitData.filing_date === '') submitData.filing_date = null;
+    if (!submitData.expiry_date || submitData.expiry_date === '') submitData.expiry_date = null;
+    if (!submitData.renewal_date || submitData.renewal_date === '') submitData.renewal_date = null;
+    if (!submitData.official_status_date || submitData.official_status_date === '') submitData.official_status_date = null;
 
     if (editingCase) {
       updateMutation.mutate({ id: editingCase.id, data: submitData });
