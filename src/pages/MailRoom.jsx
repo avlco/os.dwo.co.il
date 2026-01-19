@@ -455,9 +455,12 @@ export default function MailRoom() {
                                 </Badge>
                               </div>
                               
-                              <p className="text-sm text-slate-600 mb-3">
+                              <Link 
+                                to={createPageUrl('MailView', { id: metadata.mail_id })}
+                                className="text-sm text-blue-600 hover:underline mb-3 block"
+                              >
                                 📧 {metadata.mail_subject || 'ללא נושא'}
-                              </p>
+                              </Link>
                               
                               {metadata.actions_summary && (
                                 <div className="text-sm text-slate-500 space-y-1">
