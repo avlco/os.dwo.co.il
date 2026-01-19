@@ -25,7 +25,6 @@ export default function MailRoom() {
   const [nextSyncIn, setNextSyncIn] = useState(300);
   const pageSize = 50;
 
-  // שליפת מיילים
   const { data, isLoading, isRefetching, refetch } = useQuery({
     queryKey: ['mails', activeTab, page],
     queryFn: async () => {
@@ -66,7 +65,6 @@ export default function MailRoom() {
     staleTime: 1000 * 60 * 1,
   });
 
-  // 🆕 שליפת לוגים של אוטומציות
   const { data: automationLogs = [] } = useQuery({
     queryKey: ['automationLogs'],
     queryFn: async () => {
@@ -79,10 +77,9 @@ export default function MailRoom() {
         return [];
       }
     },
-    staleTime: 1000 * 30, // רענון כל 30 שניות
+    staleTime: 1000 * 30,
   });
 
-  // 🆕 שליפת משימות
   const { data: allTasks = [] } = useQuery({
     queryKey: ['tasks'],
     queryFn: () => base44.entities.Task.list('-created_date', 200),
@@ -127,7 +124,6 @@ export default function MailRoom() {
     }
   });
 
-  // 🆕 פונקציית עזר - קבל סטטוס אוטומציה למייל
   const getMailAutomationStatus = (mailId) => {
     const mailLogs = automationLogs.filter(log => log.metadata?.mail_id === mailId);
     
@@ -144,12 +140,10 @@ export default function MailRoom() {
     };
   };
 
-  // 🆕 פונקציית עזר - קבל משימות שנוצרו ממייל
   const getMailTasks = (mailId) => {
     return allTasks.filter(task => task.mail_id === mailId);
   };
 
-  // טורים לטבלת מיילים - עם עמודת סטטוס אוטומציה
   const columns = [
     {
       header: 'נושא',
@@ -189,7 +183,6 @@ export default function MailRoom() {
         );
       },
     },
-    // 🆕 עמודת סטטוס אוטומציה
     {
       header: 'אוטומציה',
       accessorKey: 'automation_status',
@@ -239,7 +232,6 @@ export default function MailRoom() {
     },
   ];
 
-  // 🆕 סטטיסטיקות אוטומציות
   const automationStats = {
     total: automationLogs.length,
     success: automationLogs.filter(l => l.status === 'completed').length,
@@ -284,7 +276,6 @@ export default function MailRoom() {
         icon={<Mail className="w-6 h-6" />}
       />
 
-      {/* 🆕 סטטיסטיקות אוטומציה */}
       <div className="grid gap-4 md:grid-cols-4">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
@@ -356,9 +347,17 @@ export default function MailRoom() {
               <Button onClick={handleRefresh} size="sm" variant="outline">
                 <RefreshCw className="w-4 h-4" />
               </Button>
-              <Link to="/settings">
-                <Button size="sm" variant="outline">
+              {/* כפתורים שהיו במקור */}
+              <Link to={createPageUrl('ApprovalQueue')}>
+                <Button variant="outline" size="sm" className="gap-2">
+                  <CheckCircle className="w-4 h-4" />
+                  תור אישורים
+                </Button>
+              </Link>
+              <Link to={createPageUrl('AutomationRules')}>
+                <Button variant="outline" size="sm" className="gap-2">
                   <Settings className="w-4 h-4" />
+                  חוקי אוטומציה
                 </Button>
               </Link>
             </div>
@@ -384,13 +383,11 @@ export default function MailRoom() {
               <TabsTrigger value="archived">
                 📦 ארכיון
               </TabsTrigger>
-              {/* 🆕 טאב אוטומציות */}
               <TabsTrigger value="automation">
                 ⚡ פעילות אוטומציה
               </TabsTrigger>
             </TabsList>
 
-            {/* טאבים קיימים */}
             <TabsContent value="inbox">
               <DataTable
                 columns={columns}
@@ -424,7 +421,6 @@ export default function MailRoom() {
               />
             </TabsContent>
 
-            {/* 🆕 טאב פעילות אוטומציה */}
             <TabsContent value="automation">
               <div className="space-y-4">
                 {automationLogs.length === 0 ? (
@@ -455,6 +451,7 @@ export default function MailRoom() {
                                 </Badge>
                               </div>
                               
+                              {/* תיקון: לינק למייל */}
                               <Link 
                                 to={createPageUrl('MailView', { id: metadata.mail_id })}
                                 className="text-sm text-blue-600 hover:underline mb-3 block"
