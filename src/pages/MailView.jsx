@@ -29,11 +29,38 @@ export default function MailView() {
   const urlParams = new URLSearchParams(window.location.search);
   const mailId = urlParams.get('id');
 
-  const { data: mail, isLoading } = useQuery({
+  const { data: mail, isLoading, error } = useQuery({
     queryKey: ['mail', mailId],
     queryFn: async () => {
-      const result = await base44.entities.Mail.filter({ id: mailId });
-      return Array.isArray(result) ? result : [result];
+      console.log('[MailView] 🔍 Fetching mail with ID:', mailId);
+
+      try {
+        // נסיון 1: filter
+        const result = await base44.entities.Mail.filter({ id: mailId });
+        console.log('[MailView] Filter result:', result);
+
+        if (result && (Array.isArray(result) ? result.length > 0 : result)) {
+          console.log('[MailView] ✅ Found mail via filter');
+          return Array.isArray(result) ? result : [result];
+        }
+
+        // נסיון 2: list עם סינון ידני
+        console.log('[MailView] ⚠️ Filter returned empty, trying list...');
+        const allMails = await base44.entities.Mail.list('-received_at', 100);
+        const mailsArray = Array.isArray(allMails) ? allMails : (allMails.data || []);
+        const foundMail = mailsArray.find(m => m.id === mailId);
+
+        if (foundMail) {
+          console.log('[MailView] ✅ Found mail via list');
+          return [foundMail];
+        }
+
+        console.error('[MailView] ❌ Mail not found in database');
+        return [];
+      } catch (error) {
+        console.error('[MailView] ❌ Error fetching mail:', error);
+        throw error;
+      }
     },
     enabled: !!mailId,
   });
@@ -174,14 +201,59 @@ export default function MailView() {
     );
   }
 
+  if (!mailId) {
+    return (
+      <div className="flex flex-col items-center justify-center py-16">
+        <Mail className="w-16 h-16 text-slate-300 mb-4" />
+        <p className="text-lg text-slate-500 mb-2">לא צוין מזהה מייל</p>
+        <Link to={createPageUrl('MailRoom')}>
+          <Button variant="link">חזרה לחדר דואר</Button>
+        </Link>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="flex flex-col items-center justify-center py-16">
+        <Mail className="w-16 h-16 text-red-300 mb-4" />
+        <p className="text-lg text-slate-500 mb-2">שגיאה בטעינת המייל</p>
+        <p className="text-sm text-slate-400 mb-4">{error.message}</p>
+        <div className="flex gap-2">
+          <Button onClick={() => window.location.reload()} variant="outline">
+            נסה שוב
+          </Button>
+          <Link to={createPageUrl('MailRoom')}>
+            <Button variant="link">חזרה לחדר דואר</Button>
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
   if (!currentMail) {
     return (
       <div className="flex flex-col items-center justify-center py-16">
         <Mail className="w-16 h-16 text-slate-300 mb-4" />
         <p className="text-lg text-slate-500 mb-2">מייל לא נמצא</p>
-        <Link to={createPageUrl('MailRoom')}>
-          <Button variant="link">חזרה לחדר דואר</Button>
-        </Link>
+        <p className="text-sm text-slate-400 mb-4">Mail ID: {mailId}</p>
+        <div className="flex gap-2">
+          <Button
+            onClick={() => {
+              console.log('=== Debug Info ===');
+              console.log('Mail ID:', mailId);
+              console.log('Query data:', mail);
+              console.log('Is loading:', isLoading);
+              toast({ description: 'פרטי debug הודפסו ל-Console (F12)' });
+            }}
+            variant="outline"
+          >
+            הצג פרטי debug
+          </Button>
+          <Link to={createPageUrl('MailRoom')}>
+            <Button variant="link">חזרה לחדר דואר</Button>
+          </Link>
+        </div>
       </div>
     );
   }
