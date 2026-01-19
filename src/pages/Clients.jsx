@@ -489,7 +489,7 @@ export default function Clients() {
         actionLabel={t('clients.new_client')}
       />
 
-      <div className="flex.flex-wrap gap-4 items-center">
+      <div className="flex flex-wrap gap-4 items-center">
         <div className="relative flex-1 min-w-[200px] max-w-md">
           <Search
             className={`absolute ${isRTL ? 'right-3' : 'left-3'} top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400`}
