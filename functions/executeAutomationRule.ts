@@ -76,6 +76,7 @@ async function logAutomationExecution(base44, logData) {
   try {
     await base44.entities.Activity.create({
       activity_type: 'automation_log',
+      title: `${logData.rule_name} - ${logData.execution_status}`,  // 🔥 הוספה!
       status: logData.execution_status === 'completed' ? 'completed' : 'failed',
       description: `${logData.rule_name} → ${logData.mail_subject}`,
       metadata: {
