@@ -1,14 +1,10 @@
 // @ts-nocheck
-import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { createClientFromRequest } from 'npm:@base44/sdk@0.8.6';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
-
-// שליפת משתני סביבה
-const getEnvVar = (key) => Deno.env.get(key) || '';
 
 // ========================================
 // ROLLBACK MANAGER
@@ -177,13 +173,27 @@ async function replaceTokens(template, context, supabase) {
     }
   }
   
-  return result.replace(/{[^}]+}/g, ''); // Clean unused tokens
+  return result.replace(/{[^}]+}/g, '');
 }
 
 function calculateDueDate(offsetDays) {
   const date = new Date();
   date.setDate(date.getDate() + (offsetDays || 0));
   return date.toISOString().split('T')[0];
+}
+
+function calculateEventDate(baseDate, timing) {
+  const date = new Date(baseDate || Date.now());
+  const offset = timing?.timing_offset || 0;
+  const unit = timing?.timing_unit || 'days';
+  const direction = timing?.timing_direction || 'after';
+  
+  let daysToAdd = unit === 'weeks' ? offset * 7 : offset;
+  if (direction === 'before') daysToAdd = -daysToAdd;
+  
+  date.setDate(date.getDate() + daysToAdd);
+  date.setHours(10, 0, 0, 0);
+  return date;
 }
 
 async function createApprovalActivity(supabase, data) {
@@ -198,8 +208,8 @@ async function createApprovalActivity(supabase, data) {
   }).select().single();
   if (error) throw error;
   
-  // Try sending notification (non-blocking)
   if (data.approver_email) {
+    // שימוש ב-invoke במקום fetch ישיר
     supabase.functions.invoke('sendEmail', {
       body: { to: data.approver_email, subject: `נדרש אישור: ${data.action_type}`, body: `אנא אשר את הפעולה במערכת.` }
     }).catch(console.error);
@@ -210,7 +220,7 @@ async function createApprovalActivity(supabase, data) {
 // ========================================
 // MAIN HANDLER
 // ========================================
-serve(async (req) => {
+Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
 
   const startTime = Date.now();
@@ -218,25 +228,10 @@ serve(async (req) => {
   let mailData = null;
   let ruleData = null;
   
-  // 1. Critical Environment Check
-  const supabaseUrl = getEnvVar('SUPABASE_URL');
-  const supabaseServiceKey = getEnvVar('SUPABASE_SERVICE_ROLE_KEY');
-  const supabaseAnonKey = getEnvVar('SUPABASE_ANON_KEY');
-
-  if (!supabaseUrl || !supabaseServiceKey) {
-    console.error('[AutoRule] ❌ CRITICAL: Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY env vars.');
-    return new Response(
-      JSON.stringify({ error: 'Server Configuration Error: Missing Database Secrets' }), 
-      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    );
-  }
+  // שימוש ב-SDK ליצירת קליינט (פותר את בעיית ה-ENV)
+  const supabaseClient = createClientFromRequest(req);
 
   try {
-    const authHeader = req.headers.get('Authorization') || '';
-    const supabaseClient = createClient(supabaseUrl, supabaseServiceKey, {
-      global: { headers: { Authorization: authHeader } }
-    });
-
     rollbackManager = new RollbackManager(supabaseClient);
     const { mailId, ruleId, testMode = false } = await req.json();
 
@@ -288,7 +283,7 @@ serve(async (req) => {
           body: await replaceTokens(actions.send_email.body_template, { mail, caseId, clientId }, supabaseClient)
         };
         
-        if (testMode) results.push({ action: 'send_email', status: 'test_skipped' });
+        if (testMode) results.push({ action: 'send_email', status: 'test_skipped', data: emailConfig });
         else if (rule.require_approval) {
           const act = await createApprovalActivity(supabaseClient, { ...emailConfig, automation_rule_id: ruleId, mail_id: mailId, case_id: caseId, client_id: clientId, action_type: 'send_email', action_config: emailConfig, approver_email: rule.approver_email, mail_subject: mail.subject, mail_from: mail.sender_email });
           rollbackManager.register({ type: 'approval', id: act.id });
@@ -347,28 +342,49 @@ serve(async (req) => {
       }
     }
 
+    // 4. Save File (Dropbox)
+    if (actions.save_file?.enabled) {
+      if (!mail.attachments || mail.attachments.length === 0) {
+        results.push({ action: 'save_file', status: 'skipped', reason: 'no_attachments' });
+      } else if (testMode) {
+        const folderPath = await replaceTokens(actions.save_file.path_template, { mail, caseId, clientId }, supabaseClient);
+        results.push({ action: 'save_file', status: 'test_skipped', data: { path: folderPath } });
+      } else {
+        const folderPath = await replaceTokens(actions.save_file.path_template, { mail, caseId, clientId }, supabaseClient);
+        // שימוש ב-invoke ללא צורך ב-env vars
+        const { error: dlError } = await supabaseClient.functions.invoke('downloadGmailAttachment', {
+          body: {
+            mail_id: mailId,
+            destination_path: folderPath
+          }
+        });
+        
+        if (dlError) throw new Error(`downloadGmailAttachment failed: ${dlError.message}`);
+        results.push({ action: 'save_file', status: 'success', uploaded: mail.attachments.length });
+      }
+    }
+
     const executionTime = Date.now() - startTime;
     if (!testMode) {
       await logAutomationExecution(supabaseClient, { rule_id: ruleId, rule_name: rule.name, mail_id: mailId, mail_subject: mail.subject, execution_status: 'completed', actions_summary: results, execution_time_ms: executionTime, metadata: { case_id: caseId, extracted: extractedInfo } });
       await updateRuleStats(supabaseClient, ruleId, true);
     }
 
-    return new Response(JSON.stringify({ success: true, results, summary: { total: results.length }, execution_time_ms: executionTime }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    return new Response(JSON.stringify({ success: true, results, summary: { total: results.length }, execution_time_ms: executionTime, extracted_info: extractedInfo }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
 
   } catch (error) {
     console.error('[AutoRule] ❌ Error:', error);
     if (rollbackManager && !req.json().then(b => b.testMode).catch(() => false)) await rollbackManager.rollbackAll();
     
-    // Log failure ONLY if we have valid supabase URL
-    if (mailData && ruleData && supabaseUrl && supabaseServiceKey) {
-      try {
-        const sb = createClient(supabaseUrl, supabaseServiceKey);
-        await logAutomationExecution(sb, {
+    // נסיון לוג ללא קריסה נוספת
+    try {
+      if (mailData && ruleData && supabaseClient) {
+        await logAutomationExecution(supabaseClient, {
           rule_id: ruleData.id, rule_name: ruleData.name, mail_id: mailData.id, mail_subject: mailData.subject,
           execution_status: 'failed', actions_summary: [], execution_time_ms: Date.now() - startTime, error_message: error.message
         });
-      } catch (e) { console.error('Failed to log error to DB:', e); }
-    }
+      }
+    } catch (e) { /* ignore log error */ }
 
     return new Response(JSON.stringify({ error: error.message, stack: error.stack }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
   }
