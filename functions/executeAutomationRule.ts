@@ -53,7 +53,6 @@ class RollbackManager {
       }
     }
     
-    // אם היו שגיאות ברולבק - שלח התראה
     if (errors.length > 0) {
       try {
         await this.base44.entities.Activity.create({
@@ -187,7 +186,7 @@ function extractFromMail(mail, config) {
   // Regex extraction
   if (config.regex) {
     try {
-      const regex = new RegExp(config.regex, 'i'); // case-insensitive
+      const regex = new RegExp(config.regex, 'i');
       const match = text.match(regex);
       const extracted = match ? (match[1] || match[0]) : null;
       if (extracted) {
@@ -263,13 +262,14 @@ function calculateDueDate(offsetDays) {
   return date.toISOString().split('T')[0];
 }
 
+// 🔥 תיקון #2: Approval עם Base44 functions
 async function createApprovalActivity(base44, data) {
   const expiresAt = new Date();
   expiresAt.setDate(expiresAt.getDate() + 7);
 
   const activity = await base44.entities.Activity.create({
     activity_type: 'approval_request',
-    title: `אישור: ${data.action_type} - ${data.mail_subject || 'ללא נושא'}`, // 🔥 הוספה!
+    title: `אישור: ${data.action_type} - ${data.mail_subject || 'ללא נושא'}`,
     case_id: data.case_id || null,
     client_id: data.client_id || null,
     status: 'pending',
@@ -286,31 +286,26 @@ async function createApprovalActivity(base44, data) {
     }
   });
 
-  
   console.log(`[Approval] Created approval request: ${activity.id}`);
   
-  // Send approval email (non-blocking)
+  // 🔥 תיקון: שליחת מייל דרך Base44
   if (data.approver_email) {
     try {
-      const supabaseUrl = Deno.env.get('SUPABASE_URL');
-      const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
-      
-      await fetch(`${supabaseUrl}/functions/v1/sendEmail`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${supabaseServiceKey}`
-        },
-        body: JSON.stringify({
-          to: data.approver_email,
-          subject: `נדרש אישור: ${data.action_type}`,
-          body: `אנא אשר את הפעולה במערכת.\n\nפרטים:\n${JSON.stringify(data, null, 2)}`
-        })
+      await base44.functions.invoke('sendEmail', {
+        to: data.approver_email,
+        subject: `אישור נדרש: ${data.action_type}`,
+        body: `
+          <h2>בקשת אישור לאוטומציה</h2>
+          <p><strong>פעולה:</strong> ${data.action_type}</p>
+          <p><strong>מייל:</strong> ${data.mail_subject}</p>
+          <p><strong>מאת:</strong> ${data.mail_from}</p>
+          <hr>
+          <pre>${JSON.stringify(data, null, 2)}</pre>
+        `,
       });
-      
-      console.log(`[Approval] Email sent to ${data.approver_email}`);
+      console.log(`[Approval] ✅ Email sent to ${data.approver_email}`);
     } catch (emailError) {
-      console.error('[Approval] Failed to send email:', emailError.message);
+      console.error('[Approval] ❌ Failed to send email:', emailError.message);
     }
   }
   
@@ -331,36 +326,31 @@ Deno.serve(async (req) => {
   let ruleData = null;
   
   try {
-    // יצירת Base44 client (לא Supabase!)
     const base44 = createClientFromRequest(req);
     rollbackManager = new RollbackManager(base44);
     
-    // Parse request body
-    // Parse request body - תמיכה ב-Base44 SDK format
-const rawBody = await req.json();
-console.log(`[AutoRule] 🔍 RAW REQUEST:`, JSON.stringify(rawBody));
+    const rawBody = await req.json();
+    console.log(`[AutoRule] 🔍 RAW REQUEST:`, JSON.stringify(rawBody));
 
-// Base44 SDK עוטף params ב-'body', אבל נתמוך בשניהם
-const params = rawBody.body || rawBody;
-const { mailId, ruleId, testMode = false } = params;
+    const params = rawBody.body || rawBody;
+    const { mailId, ruleId, testMode = false } = params;
 
-console.log(`[AutoRule] 🔍 PARSED PARAMS:`, { 
-  mailId, 
-  ruleId, 
-  testMode, 
-  testModeType: typeof testMode 
-});
+    console.log(`[AutoRule] 🔍 PARSED PARAMS:`, { 
+      mailId, 
+      ruleId, 
+      testMode, 
+      testModeType: typeof testMode 
+    });
 
-if (!mailId || !ruleId) {
-  throw new Error('mailId and ruleId are required');
-}
+    if (!mailId || !ruleId) {
+      throw new Error('mailId and ruleId are required');
+    }
 
-console.log(`\n[AutoRule] 🚀 Starting execution`);
-console.log(`[AutoRule] Mail ID: ${mailId}`);
-console.log(`[AutoRule] Rule ID: ${ruleId}`);
-console.log(`[AutoRule] Test Mode: ${testMode}`);
+    console.log(`\n[AutoRule] 🚀 Starting execution`);
+    console.log(`[AutoRule] Mail ID: ${mailId}`);
+    console.log(`[AutoRule] Rule ID: ${ruleId}`);
+    console.log(`[AutoRule] Test Mode: ${testMode}`);
 
-    // ✅ תיקון #1: שימוש ב-Base44 SDK במקום Supabase
     console.log('[AutoRule] 📧 Fetching mail...');
     const mail = await base44.entities.Mail.get(mailId);
     if (!mail) {
@@ -389,7 +379,6 @@ console.log(`[AutoRule] Test Mode: ${testMode}`);
         if (extracted) {
           extractedInfo[mapRule.target_field] = extracted;
           
-          // Link to Case by case_number
           if (mapRule.target_field === 'case_no') {
             try {
               const cases = await base44.entities.Case.filter({ case_number: extracted });
@@ -404,7 +393,6 @@ console.log(`[AutoRule] Test Mode: ${testMode}`);
             }
           }
           
-          // Link to Case by application_number (official number)
           if (mapRule.target_field === 'official_no' && !caseId) {
             try {
               const cases = await base44.entities.Case.filter({ application_number: extracted });
@@ -469,19 +457,18 @@ console.log(`[AutoRule] Test Mode: ${testMode}`);
           results.push({ action: 'send_email', status: 'pending_approval', approval_id: approvalActivity.id });
           console.log('[Action] ⏸️ Pending approval');
         } else {
-          // Send email via function
-const emailResult = await base44.functions.invoke('sendEmail', {
-  to: emailConfig.to,
-  subject: emailConfig.subject,
-  body: emailConfig.body
-});
+          const emailResult = await base44.functions.invoke('sendEmail', {
+            to: emailConfig.to,
+            subject: emailConfig.subject,
+            body: emailConfig.body
+          });
 
-if (emailResult.error) {
-  throw new Error(`sendEmail failed: ${emailResult.error}`);
-}
+          if (emailResult.error) {
+            throw new Error(`sendEmail failed: ${emailResult.error}`);
+          }
 
-results.push({ action: 'send_email', status: 'success', sent_to: to });
-console.log('[Action] ✅ Email sent successfully');
+          results.push({ action: 'send_email', status: 'success', sent_to: to });
+          console.log('[Action] ✅ Email sent successfully');
         }
       } else {
         results.push({ action: 'send_email', status: 'skipped', reason: 'no_recipients' });
@@ -537,7 +524,6 @@ console.log('[Action] ✅ Email sent successfully');
       
       let rate = actions.billing.hourly_rate || 800;
       
-      // Get hourly rate from case if available
       if (caseId) {
         try {
           const caseData = await base44.entities.Case.get(caseId);
@@ -682,7 +668,6 @@ console.log('[Action] ✅ Email sent successfully');
     console.error('\n[AutoRule] ❌ Error:', error);
     console.error('[AutoRule] Stack:', error.stack);
     
-    // Rollback if not in test mode
     if (rollbackManager) {
       const body = await req.clone().json().catch(() => ({}));
       if (!body.testMode) {
@@ -690,7 +675,6 @@ console.log('[Action] ✅ Email sent successfully');
       }
     }
     
-    // Log failure
     try {
       if (mailData && ruleData) {
         const base44 = createClientFromRequest(req);
