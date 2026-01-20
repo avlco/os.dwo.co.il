@@ -14,7 +14,7 @@ import { Badge } from "@/components/ui/badge";
 import { base44 } from '@/api/base44Client';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from "sonner";
-import { Plus, Edit, Trash2, X, Braces, ShieldCheck } from 'lucide-react';
+import { Plus, Edit, Trash2, X, Braces, ShieldCheck, Copy } from 'lucide-react';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -213,6 +213,22 @@ export default function AutomationRulesManager() {
     }
   });
 
+  // Duplicate functionality
+  const handleDuplicate = (rule) => {
+    // 1. Remove system fields
+    const { id, created_date, updated_date, created_by, ...ruleData } = rule;
+    
+    // 2. Prepare new data
+    const duplicatedRule = {
+      ...ruleData,
+      name: `${ruleData.name} (העתק)`,
+      is_active: false, // Safer to start inactive
+    };
+
+    // 3. Create
+    createMutation.mutate(duplicatedRule);
+  };
+
   const openCreate = () => {
     setCurrentRule(JSON.parse(JSON.stringify(defaultRule)));
     setSendersInput('');
@@ -315,15 +331,34 @@ export default function AutomationRulesManager() {
                       <ShieldCheck className="w-3 h-3" /> דורש אישור
                     </Badge>
                   )}
+                  {!rule.is_active && (
+                    <Badge variant="secondary" className="text-xs">
+                      לא פעיל
+                    </Badge>
+                  )}
                 </div>
                 <p className="text-sm text-slate-500">
                   {rule.map_config?.length || 0} כללי חילוץ • 
                   {Object.values(rule.action_bundle || {}).filter(a => a?.enabled).length} פעולות
                 </p>
               </div>
-              <Switch checked={rule.is_active} onCheckedChange={(c) => toggleActive(rule.id, c)} />
-              <Button variant="ghost" size="icon" onClick={() => openEdit(rule)}><Edit className="w-4 h-4" /></Button>
-              <Button variant="ghost" size="icon" className="text-red-500" onClick={() => deleteMutation.mutate(rule.id)}><Trash2 className="w-4 h-4" /></Button>
+              
+              <div className="flex items-center gap-1">
+                <Switch checked={rule.is_active} onCheckedChange={(c) => toggleActive(rule.id, c)} />
+                <div className="w-2" /> {/* Spacer */}
+                
+                <Button variant="ghost" size="icon" onClick={() => openEdit(rule)} title="ערוך חוק">
+                  <Edit className="w-4 h-4" />
+                </Button>
+                
+                <Button variant="ghost" size="icon" onClick={() => handleDuplicate(rule)} title="שכפל חוק">
+                  <Copy className="w-4 h-4" />
+                </Button>
+                
+                <Button variant="ghost" size="icon" className="text-red-500 hover:text-red-600 hover:bg-red-50" onClick={() => deleteMutation.mutate(rule.id)} title="מחק חוק">
+                  <Trash2 className="w-4 h-4" />
+                </Button>
+              </div>
             </div>
           ))}
         </div>
