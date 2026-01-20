@@ -76,9 +76,11 @@ async function logAutomationExecution(base44, logData) {
   try {
     await base44.entities.Activity.create({
       activity_type: 'automation_log',
-      title: `${logData.rule_name} - ${logData.execution_status}`,  // 🔥 הוספה!
+      title: `${logData.rule_name} - ${logData.execution_status}`,
       status: logData.execution_status === 'completed' ? 'completed' : 'failed',
       description: `${logData.rule_name} → ${logData.mail_subject}`,
+      case_id: logData.metadata?.case_id || null,
+      client_id: logData.metadata?.client_id || null,
       metadata: {
         rule_id: logData.rule_id,
         rule_name: logData.rule_name,
@@ -87,12 +89,10 @@ async function logAutomationExecution(base44, logData) {
         execution_status: logData.execution_status,
         actions_summary: logData.actions_summary,
         execution_time_ms: logData.execution_time_ms,
-        error_message: logData.error_message,
-        case_id: logData.metadata?.case_id,
-        client_id: logData.metadata?.client_id,
         logged_at: new Date().toISOString(),
       }
     });
+
     console.log('[Logger] ✅ Execution logged successfully');
   } catch (error) {
     console.error('[Logger] ❌ Failed to log execution:', error.message);
