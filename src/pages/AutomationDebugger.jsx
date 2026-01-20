@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation } from '@tanstack/react-query';
 import { base44 } from '@/api/base44Client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -14,7 +14,9 @@ import {
   Settings,
   Mail,
   FileText,
-  ArrowRight
+  ArrowRight,
+  Database,
+  Zap
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { createPageUrl } from '../utils';
@@ -23,8 +25,9 @@ export default function AutomationDebugger() {
   const [selectedRule, setSelectedRule] = useState(null);
   const [selectedMail, setSelectedMail] = useState(null);
   const [testResults, setTestResults] = useState(null);
+  const [simulationResult, setSimulationResult] = useState(null);
 
-  // שליפת כל החוקים
+  // Fetch data
   const { data: allRules = [] } = useQuery({
     queryKey: ['automationRules'],
     queryFn: async () => {
@@ -33,7 +36,6 @@ export default function AutomationDebugger() {
     },
   });
 
-  // שליפת מיילים אחרונים
   const { data: allMails = [] } = useQuery({
     queryKey: ['recentMails'],
     queryFn: async () => {
@@ -42,7 +44,6 @@ export default function AutomationDebugger() {
     },
   });
 
-  // שליפת לוגים
   const { data: automationLogs = [] } = useQuery({
     queryKey: ['automationLogs'],
     queryFn: async () => {
@@ -52,16 +53,35 @@ export default function AutomationDebugger() {
     },
   });
 
-  // בדיקת התאמה בין חוק למייל
+  // Server-side Simulation Mutation
+  const simulateRuleMutation = useMutation({
+    mutationFn: async ({ mailId, ruleId }) => {
+      const response = await base44.functions.invoke('executeAutomationRule', {
+        mailId,
+        ruleId,
+        testMode: true // Important: Dry run
+      });
+      
+      if (response.error) throw new Error(response.error.message || "Simulation failed");
+      if (response.data?.error) throw new Error(response.data.error);
+      
+      return response.data;
+    },
+    onSuccess: (data) => {
+      setSimulationResult(data);
+    },
+    onError: (err) => {
+      setSimulationResult({ error: err.message });
+    }
+  });
+
+  // Client-side Match Testing (Catch)
   const testRuleMatch = (rule, mail) => {
     const config = rule.catch_config || {};
     const matches = [];
     const failures = [];
 
-    console.log(`\n[Debugger] Testing Rule "${rule.name}" against Mail "${mail.subject}"`);
-    console.log('[Debugger] Rule config:', config);
-
-    // בדיקת sender
+    // Sender Check
     if (config.senders && Array.isArray(config.senders) && config.senders.length > 0) {
       const senderMatches = config.senders.some(sender => {
         const senderLower = sender.toLowerCase().trim();
@@ -70,101 +90,79 @@ export default function AutomationDebugger() {
       });
 
       if (senderMatches) {
-        matches.push(`✅ Sender: ${mail.sender_email} matches ${config.senders.join(', ')}`);
+        matches.push(`✅ Sender: "${mail.sender_email}" תואם לאחד השולחים המוגדרים`);
       } else {
-        failures.push(`❌ Sender: ${mail.sender_email} doesn't match ${config.senders.join(', ')}`);
+        failures.push(`❌ Sender: "${mail.sender_email}" לא ברשימת המורשים`);
       }
     } else {
-      matches.push('⚪ Sender: No sender filter configured');
+      matches.push('⚪ Sender: אין סינון שולח');
     }
 
-    // בדיקת subject
+    // Subject Check
     if (config.subject_contains && config.subject_contains.trim().length > 0) {
       const subjectKeyword = config.subject_contains.toLowerCase().trim();
       const mailSubject = (mail.subject || '').toLowerCase();
 
       if (mailSubject.includes(subjectKeyword)) {
-        matches.push(`✅ Subject: "${mail.subject}" contains "${config.subject_contains}"`);
+        matches.push(`✅ Subject: מכיל את הטקסט "${config.subject_contains}"`);
       } else {
-        failures.push(`❌ Subject: "${mail.subject}" doesn't contain "${config.subject_contains}"`);
+        failures.push(`❌ Subject: לא מכיל את הטקסט "${config.subject_contains}"`);
       }
     } else {
-      matches.push('⚪ Subject: No subject filter configured');
+      matches.push('⚪ Subject: אין סינון נושא');
     }
 
-    // בדיקת body
+    // Body Check
     if (config.body_contains && config.body_contains.trim().length > 0) {
       const bodyKeyword = config.body_contains.toLowerCase().trim();
       const mailBody = (mail.body_plain || mail.body_html || '').toLowerCase();
 
       if (mailBody.includes(bodyKeyword)) {
-        matches.push(`✅ Body contains "${config.body_contains}"`);
+        matches.push(`✅ Body: מכיל את הטקסט "${config.body_contains}"`);
       } else {
-        failures.push(`❌ Body doesn't contain "${config.body_contains}"`);
+        failures.push(`❌ Body: לא מכיל את הטקסט "${config.body_contains}"`);
       }
     } else {
-      matches.push('⚪ Body: No body filter configured');
+      matches.push('⚪ Body: אין סינון גוף הודעה');
     }
 
-    const isMatch = failures.length === 0 && matches.some(m => m.startsWith('✅'));
+    // MAP Phase Simulation (Client Side Preview)
+    const mapPreview = [];
+    if (rule.map_config && Array.isArray(rule.map_config)) {
+      rule.map_config.forEach(mapRule => {
+        const sourceText = mapRule.source === 'body' 
+          ? (mail.body_plain || mail.body_html || '') 
+          : mail.subject;
+        
+        if (mapRule.anchor_text && sourceText.includes(mapRule.anchor_text)) {
+           const extracted = sourceText.split(mapRule.anchor_text)[1]?.trim()?.split(/\s+/)[0];
+           mapPreview.push(`🔹 חילוץ (Map): "${mapRule.target_field}" -> "${extracted}"`);
+        } else if (mapRule.anchor_text) {
+           mapPreview.push(`🔸 חילוץ (Map): עוגן "${mapRule.anchor_text}" לא נמצא`);
+        }
+      });
+    }
 
-    console.log('[Debugger] Matches:', matches);
-    console.log('[Debugger] Failures:', failures);
-    console.log('[Debugger] Final result:', isMatch ? 'MATCH' : 'NO MATCH');
+    const isMatch = failures.length === 0;
 
-    return { isMatch, matches, failures };
+    return { isMatch, matches, failures, mapPreview };
   };
 
-  // בדיקת חוק מול כל המיילים
-  const testRuleAgainstAllMails = (rule) => {
-    console.log(`\n[Debugger] 🎯 Testing Rule "${rule.name}" against all mails...`);
-
-    const results = allMails.map(mail => {
-      const test = testRuleMatch(rule, mail);
-      return {
-        mail,
-        ...test
-      };
-    });
-
-    const matchingMails = results.filter(r => r.isMatch);
-
-    setTestResults({
-      type: 'rule',
-      rule,
-      results,
-      matchingCount: matchingMails.length,
-      totalCount: allMails.length
-    });
-
+  const handleTest = (rule, mail) => {
+    const result = testRuleMatch(rule, mail);
+    setTestResults({ rule, mail, ...result });
+    setSimulationResult(null); // Clear previous simulation
     setSelectedRule(rule);
-    setSelectedMail(null);
+    setSelectedMail(mail);
   };
 
-  // בדיקת מייל מול כל החוקים
-  const testMailAgainstAllRules = (mail) => {
-    console.log(`\n[Debugger] 📧 Testing Mail "${mail.subject}" against all rules...`);
-
-    const results = allRules.map(rule => {
-      const test = testRuleMatch(rule, mail);
-      return {
-        rule,
-        ...test
-      };
-    });
-
-    const matchingRules = results.filter(r => r.isMatch);
-
-    setTestResults({
-      type: 'mail',
-      mail,
-      results,
-      matchingCount: matchingRules.length,
-      totalCount: allRules.length
-    });
-
-    setSelectedMail(mail);
-    setSelectedRule(null);
+  const runServerSimulation = () => {
+    if (selectedRule && selectedMail) {
+      simulateRuleMutation.mutate({ 
+        mailId: selectedMail.id, 
+        ruleId: selectedRule.id 
+      });
+    }
   };
 
   return (
@@ -175,7 +173,7 @@ export default function AutomationDebugger() {
             Automation Debugger
           </h1>
           <p className="text-slate-500 dark:text-slate-400 mt-1">
-            כלי לבדיקה ודיבאג של חוקי אוטומציה
+            כלי דיאגנוסטיקה מתקדם לחוקים ומיילים
           </p>
         </div>
         <Link to={createPageUrl('MailRoom')}>
@@ -186,373 +184,185 @@ export default function AutomationDebugger() {
         </Link>
       </div>
 
-      <Tabs defaultValue="rules" className="w-full">
-        <TabsList className="grid w-full grid-cols-3">
-          <TabsTrigger value="rules">חוקים ({allRules.length})</TabsTrigger>
-          <TabsTrigger value="mails">מיילים ({allMails.length})</TabsTrigger>
-          <TabsTrigger value="logs">לוגים ({automationLogs.length})</TabsTrigger>
-        </TabsList>
-
-        {/* טאב חוקים */}
-        <TabsContent value="rules" className="space-y-4">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-lg">חוקי אוטומציה</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <ScrollArea className="h-[600px]">
-                  <div className="space-y-2">
-                    {allRules.map(rule => {
-                      const stats = rule.metadata?.stats || {};
-                      const isActive = rule.is_active === true;
-
-                      return (
-                        <Card
-                          key={rule.id}
-                          className={`cursor-pointer hover:border-blue-400 transition-colors ${
-                            selectedRule?.id === rule.id ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20' : ''
-                          }`}
-                          onClick={() => testRuleAgainstAllMails(rule)}
-                        >
-                          <CardContent className="p-4">
-                            <div className="flex items-start justify-between mb-2">
-                              <div className="flex-1">
-                                <div className="flex items-center gap-2">
-                                  <h3 className="font-semibold text-slate-800 dark:text-slate-200">
-                                    {rule.name}
-                                  </h3>
-                                  {isActive ? (
-                                    <Badge variant="success" className="bg-green-100 text-green-800">
-                                      פעיל
-                                    </Badge>
-                                  ) : (
-                                    <Badge variant="secondary">לא פעיל</Badge>
-                                  )}
-                                </div>
-                                <p className="text-xs text-slate-500 mt-1">
-                                  {rule.description || 'אין תיאור'}
-                                </p>
-                              </div>
-                              <Button
-                                size="sm"
-                                variant="ghost"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  testRuleAgainstAllMails(rule);
-                                }}
-                              >
-                                <Play className="w-4 h-4" />
-                              </Button>
-                            </div>
-
-                            <div className="grid grid-cols-3 gap-2 text-xs mt-3">
-                              <div>
-                                <span className="text-slate-500">ביצועים:</span>
-                                <p className="font-semibold">{stats.total_executions || 0}</p>
-                              </div>
-                              <div>
-                                <span className="text-slate-500">הצלחות:</span>
-                                <p className="font-semibold text-green-600">{stats.successful_executions || 0}</p>
-                              </div>
-                              <div>
-                                <span className="text-slate-500">כישלונות:</span>
-                                <p className="font-semibold text-red-600">{stats.failed_executions || 0}</p>
-                              </div>
-                            </div>
-
-                            {rule.catch_config && (
-                              <div className="mt-3 pt-3 border-t border-slate-200 dark:border-slate-700">
-                                <p className="text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">
-                                  תנאי CATCH:
-                                </p>
-                                <div className="space-y-1 text-xs">
-                                  {rule.catch_config.senders?.length > 0 && (
-                                    <div className="text-slate-600 dark:text-slate-400">
-                                      • שולח: {rule.catch_config.senders.join(', ')}
-                                    </div>
-                                  )}
-                                  {rule.catch_config.subject_contains && (
-                                    <div className="text-slate-600 dark:text-slate-400">
-                                      • נושא מכיל: "{rule.catch_config.subject_contains}"
-                                    </div>
-                                  )}
-                                  {rule.catch_config.body_contains && (
-                                    <div className="text-slate-600 dark:text-slate-400">
-                                      • גוף מכיל: "{rule.catch_config.body_contains}"
-                                    </div>
-                                  )}
-                                </div>
-                              </div>
-                            )}
-                          </CardContent>
-                        </Card>
-                      );
-                    })}
-                  </div>
-                </ScrollArea>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-lg">תוצאות בדיקה</CardTitle>
-              </CardHeader>
-              <CardContent>
-                {testResults?.type === 'rule' ? (
-                  <ScrollArea className="h-[600px]">
-                    <div className="space-y-4">
-                      <div className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-lg">
-                        <h3 className="font-semibold mb-2">בדיקת חוק: {testResults.rule.name}</h3>
-                        <p className="text-sm text-slate-600 dark:text-slate-400">
-                          נמצאו {testResults.matchingCount} מיילים תואמים מתוך {testResults.totalCount}
-                        </p>
-                      </div>
-
-                      {testResults.results.map((result, idx) => (
-                        <Card
-                          key={idx}
-                          className={result.isMatch ? 'border-green-500 bg-green-50 dark:bg-green-900/20' : ''}
-                        >
-                          <CardContent className="p-4">
-                            <div className="flex items-start gap-2 mb-2">
-                              {result.isMatch ? (
-                                <CheckCircle className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" />
-                              ) : (
-                                <XCircle className="w-5 h-5 text-slate-400 flex-shrink-0 mt-0.5" />
-                              )}
-                              <div className="flex-1">
-                                <p className="font-semibold text-sm">{result.mail.subject}</p>
-                                <p className="text-xs text-slate-500">מאת: {result.mail.sender_email}</p>
-                              </div>
-                            </div>
-
-                            <div className="space-y-1 text-xs mt-3">
-                              {result.matches.map((match, i) => (
-                                <div key={i} className="text-slate-600 dark:text-slate-400">
-                                  {match}
-                                </div>
-                              ))}
-                              {result.failures.map((failure, i) => (
-                                <div key={i} className="text-red-600 dark:text-red-400">
-                                  {failure}
-                                </div>
-                              ))}
-                            </div>
-                          </CardContent>
-                        </Card>
-                      ))}
-                    </div>
-                  </ScrollArea>
-                ) : (
-                  <div className="flex flex-col items-center justify-center h-[600px] text-slate-400">
-                    <Settings className="w-12 h-12 mb-2" />
-                    <p>בחר חוק כדי לבדוק אותו מול כל המיילים</p>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          </div>
-        </TabsContent>
-
-        {/* טאב מיילים */}
-        <TabsContent value="mails" className="space-y-4">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-lg">מיילים אחרונים</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <ScrollArea className="h-[600px]">
-                  <div className="space-y-2">
-                    {allMails.map(mail => (
-                      <Card
-                        key={mail.id}
-                        className={`cursor-pointer hover:border-blue-400 transition-colors ${
-                          selectedMail?.id === mail.id ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20' : ''
-                        }`}
-                        onClick={() => testMailAgainstAllRules(mail)}
-                      >
-                        <CardContent className="p-4">
-                          <div className="flex items-start justify-between">
-                            <div className="flex-1">
-                              <h3 className="font-semibold text-sm text-slate-800 dark:text-slate-200">
-                                {mail.subject}
-                              </h3>
-                              <p className="text-xs text-slate-500 mt-1">
-                                מאת: {mail.sender_email}
-                              </p>
-                              <Badge variant="secondary" className="mt-2 text-xs">
-                                {mail.processing_status || 'pending'}
-                              </Badge>
-                            </div>
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                testMailAgainstAllRules(mail);
-                              }}
-                            >
-                              <Play className="w-4 h-4" />
-                            </Button>
-                          </div>
-                        </CardContent>
-                      </Card>
-                    ))}
-                  </div>
-                </ScrollArea>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-lg">תוצאות בדיקה</CardTitle>
-              </CardHeader>
-              <CardContent>
-                {testResults?.type === 'mail' ? (
-                  <ScrollArea className="h-[600px]">
-                    <div className="space-y-4">
-                      <div className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-lg">
-                        <h3 className="font-semibold mb-2">בדיקת מייל: {testResults.mail.subject}</h3>
-                        <p className="text-sm text-slate-600 dark:text-slate-400">
-                          נמצאו {testResults.matchingCount} חוקים תואמים מתוך {testResults.totalCount}
-                        </p>
-                      </div>
-
-                      {testResults.results.map((result, idx) => (
-                        <Card
-                          key={idx}
-                          className={result.isMatch ? 'border-green-500 bg-green-50 dark:bg-green-900/20' : ''}
-                        >
-                          <CardContent className="p-4">
-                            <div className="flex items-start gap-2 mb-2">
-                              {result.isMatch ? (
-                                <CheckCircle className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" />
-                              ) : (
-                                <XCircle className="w-5 h-5 text-slate-400 flex-shrink-0 mt-0.5" />
-                              )}
-                              <div className="flex-1">
-                                <p className="font-semibold text-sm">{result.rule.name}</p>
-                                <Badge variant={result.rule.is_active ? 'success' : 'secondary'} className="mt-1">
-                                  {result.rule.is_active ? 'פעיל' : 'לא פעיל'}
-                                </Badge>
-                              </div>
-                            </div>
-
-                            <div className="space-y-1 text-xs mt-3">
-                              {result.matches.map((match, i) => (
-                                <div key={i} className="text-slate-600 dark:text-slate-400">
-                                  {match}
-                                </div>
-                              ))}
-                              {result.failures.map((failure, i) => (
-                                <div key={i} className="text-red-600 dark:text-red-400">
-                                  {failure}
-                                </div>
-                              ))}
-                            </div>
-                          </CardContent>
-                        </Card>
-                      ))}
-                    </div>
-                  </ScrollArea>
-                ) : (
-                  <div className="flex flex-col items-center justify-center h-[600px] text-slate-400">
-                    <Mail className="w-12 h-12 mb-2" />
-                    <p>בחר מייל כדי לבדוק אותו מול כל החוקים</p>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          </div>
-        </TabsContent>
-
-        {/* טאב לוגים */}
-        <TabsContent value="logs" className="space-y-4">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Left Column: Selection */}
+        <div className="space-y-6 lg:col-span-1">
           <Card>
             <CardHeader>
-              <CardTitle className="text-lg">היסטוריית ביצועים</CardTitle>
+              <CardTitle className="text-lg">1. בחר חוק לבדיקה</CardTitle>
             </CardHeader>
-            <CardContent>
-              <ScrollArea className="h-[700px]">
-                <div className="space-y-2">
-                  {automationLogs.length === 0 ? (
-                    <div className="flex flex-col items-center justify-center py-16 text-slate-400">
-                      <FileText className="w-12 h-12 mb-2" />
-                      <p>אין לוגים של אוטומציות</p>
+            <CardContent className="p-0">
+              <ScrollArea className="h-[300px]">
+                <div className="divide-y">
+                  {allRules.map(rule => (
+                    <div 
+                      key={rule.id}
+                      onClick={() => setSelectedRule(rule)}
+                      className={`p-3 cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors ${selectedRule?.id === rule.id ? 'bg-blue-50 dark:bg-blue-900/20 border-r-4 border-blue-500' : ''}`}
+                    >
+                      <p className="font-medium text-sm">{rule.name}</p>
+                      <div className="flex items-center gap-2 mt-1">
+                        <Badge variant="outline" className="text-xs">{rule.is_active ? 'פעיל' : 'לא פעיל'}</Badge>
+                      </div>
                     </div>
-                  ) : (
-                    automationLogs.map(log => {
-                      const metadata = log.metadata || {};
-                      const isSuccess = log.status === 'completed';
-
-                      return (
-                        <Card key={log.id} className={isSuccess ? 'border-green-300' : 'border-red-300'}>
-                          <CardContent className="p-4">
-                            <div className="flex items-start gap-2">
-                              {isSuccess ? (
-                                <CheckCircle className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" />
-                              ) : (
-                                <AlertCircle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
-                              )}
-                              <div className="flex-1">
-                                <h3 className="font-semibold text-sm">{log.description}</h3>
-                                <p className="text-xs text-slate-500 mt-1">
-                                  {new Date(log.created_at).toLocaleString('he-IL')}
-                                </p>
-
-                                {metadata.actions_summary && (
-                                  <div className="grid grid-cols-4 gap-2 mt-3 text-xs">
-                                    <div>
-                                      <span className="text-slate-500">סה"כ:</span>
-                                      <p className="font-semibold">{metadata.actions_summary.total || 0}</p>
-                                    </div>
-                                    <div>
-                                      <span className="text-slate-500">הצלחות:</span>
-                                      <p className="font-semibold text-green-600">
-                                        {metadata.actions_summary.success || 0}
-                                      </p>
-                                    </div>
-                                    <div>
-                                      <span className="text-slate-500">כישלונות:</span>
-                                      <p className="font-semibold text-red-600">
-                                        {metadata.actions_summary.failed || 0}
-                                      </p>
-                                    </div>
-                                    <div>
-                                      <span className="text-slate-500">ממתין לאישור:</span>
-                                      <p className="font-semibold text-yellow-600">
-                                        {metadata.actions_summary.pending_approval || 0}
-                                      </p>
-                                    </div>
-                                  </div>
-                                )}
-
-                                {metadata.error_message && (
-                                  <div className="mt-3 p-2 bg-red-50 dark:bg-red-900/20 rounded text-xs text-red-700 dark:text-red-300">
-                                    <strong>שגיאה:</strong> {metadata.error_message}
-                                  </div>
-                                )}
-
-                                {metadata.execution_time_ms && (
-                                  <p className="text-xs text-slate-500 mt-2">
-                                    זמן ביצוע: {metadata.execution_time_ms}ms
-                                  </p>
-                                )}
-                              </div>
-                            </div>
-                          </CardContent>
-                        </Card>
-                      );
-                    })
-                  )}
+                  ))}
                 </div>
               </ScrollArea>
             </CardContent>
           </Card>
-        </TabsContent>
-      </Tabs>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-lg">2. בחר מייל לבדיקה</CardTitle>
+            </CardHeader>
+            <CardContent className="p-0">
+              <ScrollArea className="h-[300px]">
+                <div className="divide-y">
+                  {allMails.map(mail => (
+                    <div 
+                      key={mail.id}
+                      onClick={() => {
+                        setSelectedMail(mail);
+                        if (selectedRule) handleTest(selectedRule, mail);
+                      }}
+                      className={`p-3 cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors ${selectedMail?.id === mail.id ? 'bg-blue-50 dark:bg-blue-900/20 border-r-4 border-blue-500' : ''}`}
+                    >
+                      <p className="font-medium text-sm truncate">{mail.subject || '(ללא נושא)'}</p>
+                      <p className="text-xs text-slate-500">{mail.sender_email}</p>
+                    </div>
+                  ))}
+                </div>
+              </ScrollArea>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Right Column: Results */}
+        <div className="lg:col-span-2 space-y-6">
+          {selectedRule && selectedMail ? (
+            <>
+              {/* Client Side Analysis */}
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between pb-2">
+                  <CardTitle className="text-lg">ניתוח מקומי (Client-Side)</CardTitle>
+                  <Button onClick={() => handleTest(selectedRule, selectedMail)} size="sm" variant="outline">
+                    רענן בדיקה
+                  </Button>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-4">
+                    <div className="bg-slate-50 dark:bg-slate-900 p-4 rounded-lg">
+                      <h3 className="font-semibold mb-2">שלב 1: Catch (סינון)</h3>
+                      <div className="space-y-1 text-sm">
+                        {testResults?.matches.map((m, i) => <div key={i} className="text-green-700 dark:text-green-400">{m}</div>)}
+                        {testResults?.failures.map((f, i) => <div key={i} className="text-red-600 dark:text-red-400">{f}</div>)}
+                      </div>
+                      
+                      {testResults?.isMatch ? (
+                         <div className="mt-2 flex items-center text-green-600 font-bold gap-2">
+                           <CheckCircle className="w-5 h-5" /> המייל מתאים לחוק
+                         </div>
+                      ) : (
+                         <div className="mt-2 flex items-center text-red-600 font-bold gap-2">
+                           <XCircle className="w-5 h-5" /> המייל לא מתאים
+                         </div>
+                      )}
+                    </div>
+
+                    <div className="bg-slate-50 dark:bg-slate-900 p-4 rounded-lg">
+                      <h3 className="font-semibold mb-2">שלב 2: Map (חילוץ)</h3>
+                      {testResults?.mapPreview && testResults.mapPreview.length > 0 ? (
+                        <div className="space-y-1 text-sm text-slate-700 dark:text-slate-300">
+                          {testResults.mapPreview.map((m, i) => <div key={i}>{m}</div>)}
+                        </div>
+                      ) : (
+                        <p className="text-sm text-slate-500">לא הוגדרו כללי חילוץ או שלא נמצאו נתונים.</p>
+                      )}
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Server Side Simulation */}
+              <Card className="border-blue-200 dark:border-blue-800">
+                <CardHeader className="flex flex-row items-center justify-between pb-2 bg-blue-50/50 dark:bg-blue-900/10">
+                  <div className="flex items-center gap-2">
+                    <Zap className="w-5 h-5 text-blue-600" />
+                    <CardTitle className="text-lg">סימולציית שרת (Server-Side)</CardTitle>
+                  </div>
+                  <Button 
+                    onClick={runServerSimulation} 
+                    disabled={simulateRuleMutation.isPending}
+                    className="bg-blue-600 hover:bg-blue-700"
+                  >
+                    {simulateRuleMutation.isPending ? 'מריץ סימולציה...' : 'הפעל סימולציה מלאה'}
+                  </Button>
+                </CardHeader>
+                <CardContent className="pt-4">
+                  {!simulationResult ? (
+                    <p className="text-slate-500 text-center py-4">
+                      לחץ על הכפתור כדי לבצע הרצה "יבשה" (Dry Run) בשרת.
+                      <br/>
+                      הפעולה תבדוק את ה-Dispatch ותחזיר את הפעולות שהיו מבוצעות, ללא שינוי בנתונים.
+                    </p>
+                  ) : simulationResult.error ? (
+                    <div className="p-4 bg-red-50 text-red-700 rounded-lg border border-red-200">
+                      <div className="flex items-center gap-2 font-bold mb-2">
+                        <AlertCircle className="w-5 h-5" /> שגיאה בביצוע:
+                      </div>
+                      <pre className="text-xs whitespace-pre-wrap">{simulationResult.error}</pre>
+                    </div>
+                  ) : (
+                    <div className="space-y-4">
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="p-3 bg-white border rounded shadow-sm">
+                           <span className="text-xs text-slate-500">זמן ריצה</span>
+                           <p className="font-mono">{simulationResult.execution_time_ms}ms</p>
+                        </div>
+                        <div className="p-3 bg-white border rounded shadow-sm">
+                           <span className="text-xs text-slate-500">סטטוס</span>
+                           <p className="font-bold text-blue-600">Simulated Success</p>
+                        </div>
+                      </div>
+
+                      <div>
+                        <h4 className="font-semibold mb-2 text-sm">פעולות שהיו מבוצעות:</h4>
+                        <div className="space-y-2">
+                          {simulationResult.results?.map((res, idx) => (
+                            <div key={idx} className={`p-3 rounded border ${res.status === 'success' ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'}`}>
+                              <div className="flex justify-between">
+                                <span className="font-bold text-sm uppercase">{res.action}</span>
+                                <Badge variant={res.status === 'success' ? 'outline' : 'destructive'}>{res.status}</Badge>
+                              </div>
+                              {res.status === 'failed' && (
+                                <p className="text-xs text-red-600 mt-1">{res.error}</p>
+                              )}
+                              {res.data && (
+                                <pre className="text-[10px] mt-2 bg-white/50 p-1 rounded overflow-auto">
+                                  {JSON.stringify(res.data, null, 2)}
+                                </pre>
+                              )}
+                              {/* הצגת הערות מיוחדות */}
+                              {res.status === 'test_skipped' && (
+                                <p className="text-xs text-slate-500 mt-1">פעולה זו דורשת כתיבה ל-DB ולכן דולגה במצב טסט.</p>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </>
+          ) : (
+            <div className="h-full flex flex-col items-center justify-center text-slate-400 border-2 border-dashed rounded-xl min-h-[400px]">
+              <Settings className="w-16 h-16 mb-4 opacity-20" />
+              <p className="text-lg">בחר חוק ומייל מהתפריט הצדדי כדי להתחיל</p>
+            </div>
+          )}
+        </div>
+      </div>
     </div>
   );
 }
