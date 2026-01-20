@@ -270,14 +270,14 @@ async function replaceTokens(template, context, supabase) {
   if (context.caseId) {
     const { data: caseData } = await supabase
       .from('Case')
-      .select('case_number, title, case_type, official_number')
+      .select('case_number, title, case_type, application_number')
       .eq('id', context.caseId)
-      .single();
+      .maybeSingle(); // תיקון כאן
     
     result = result.replace(/{Case_No}/g, caseData?.case_number || '');
     result = result.replace(/{Case_Title}/g, caseData?.title || '');
     result = result.replace(/{Case_Type}/g, caseData?.case_type || '');
-    result = result.replace(/{Official_No}/g, caseData?.official_number || '');
+    result = result.replace(/{Official_No}/g, caseData?.application_number || ''); // תיקון כאן
   }
   
   if (context.clientId) {
@@ -285,7 +285,7 @@ async function replaceTokens(template, context, supabase) {
       .from('Client')
       .select('name, email')
       .eq('id', context.clientId)
-      .single();
+      .maybeSingle(); // תיקון כאן
     
     result = result.replace(/{Client_Name}/g, clientData?.name || '');
     result = result.replace(/{Client_Email}/g, clientData?.email || '');
@@ -442,7 +442,7 @@ serve(async (req) => {
               .from('Case')
               .select('id, client_id, case_number')
               .eq('case_number', extracted)
-              .single();
+              .maybeSingle(); // תיקון כאן
             
             if (caseData) {
               caseId = caseData.id;
@@ -451,16 +451,18 @@ serve(async (req) => {
             }
           }
           
+          // תיקון: חיפוש ב-application_number (במקום official_number) ושימוש ב-maybeSingle
           if (mapRule.target_field === 'official_no' && !caseId) {
             const { data: caseData } = await supabaseClient
               .from('Case')
               .select('id, client_id')
-              .eq('official_number', extracted)
-              .single();
+              .eq('application_number', extracted) // תיקון כאן
+              .maybeSingle(); // תיקון כאן
             
             if (caseData) {
               caseId = caseData.id;
               clientId = caseData.client_id;
+              console.log(`[AutoRule] 🎯 Matched Official No: ${extracted}`);
             }
           }
         }
@@ -478,14 +480,13 @@ serve(async (req) => {
     // ביצוע פעולות
     // ========================================
 
-    // 1️⃣ SEND EMAIL (מתוקן)
+    // 1️⃣ SEND EMAIL
     if (actions.send_email?.enabled) {
       console.log('[AutoRule] 📧 Processing: send_email');
       
       if (testMode) {
         results.push({ action: 'send_email', status: 'test_skipped' });
       } else {
-        // תיקון: המרת recipients לכתובות מייל אמיתיות
         const recipientEmails = await resolveRecipients(
           actions.send_email.recipients || [], 
           { caseId, clientId }, 
@@ -501,11 +502,6 @@ serve(async (req) => {
             subject: await replaceTokens(actions.send_email.subject_template || '', { mail, caseId, clientId }, supabaseClient),
             body: await replaceTokens(actions.send_email.body_template || '', { mail, caseId, clientId }, supabaseClient),
           };
-          
-          console.log('[AutoRule] 📧 Email config:', { 
-            to: emailConfig.to, 
-            subject: emailConfig.subject?.substring(0, 50) 
-          });
 
           if (rule.require_approval) {
             const activity = await createApprovalActivity(supabaseClient, {
@@ -529,15 +525,10 @@ serve(async (req) => {
                 body: emailConfig,
               });
               
-              if (error) {
-                console.error('[AutoRule] ❌ sendEmail error:', error);
-                throw new Error(`send_email failed: ${error.message}`);
-              }
+              if (error) throw new Error(`send_email failed: ${error.message}`);
               
               results.push({ action: 'send_email', status: 'success', to: emailConfig.to });
-              console.log(`[AutoRule] ✅ Email sent to: ${emailConfig.to}`);
             } catch (emailError) {
-              console.error('[AutoRule] ❌ Email sending failed:', emailError);
               results.push({ action: 'send_email', status: 'failed', error: emailError.message });
             }
           }
@@ -589,7 +580,6 @@ serve(async (req) => {
           
           rollbackManager.register({ type: 'create_task', id: task.id });
           results.push({ action: 'create_task', status: 'success', task_id: task.id });
-          console.log(`[AutoRule] ✅ Created Task ${task.id}`);
         }
       }
     }
@@ -608,14 +598,14 @@ serve(async (req) => {
             .from('Case')
             .select('hourly_rate')
             .eq('id', caseId)
-            .single();
+            .maybeSingle(); // תיקון כאן
           
           if (caseData?.hourly_rate) {
             hourlyRate = caseData.hourly_rate;
           }
         }
 
-        const totalAmount = actions.billing.hours * hourlyRate;
+        const totalAmount = (actions.billing.hours || 0) * hourlyRate;
 
         if (rule.require_approval) {
           const activity = await createApprovalActivity(supabaseClient, {
@@ -652,7 +642,6 @@ serve(async (req) => {
           
           rollbackManager.register({ type: 'billing', id: timeEntry.id });
           results.push({ action: 'billing', status: 'success', totalAmount });
-          console.log(`[AutoRule] ✅ Logged ${actions.billing.hours}h = ₪${totalAmount}`);
         }
       }
     }
@@ -687,10 +676,8 @@ serve(async (req) => {
           }
           
           results.push({ action: 'save_file', status: 'success', uploaded: mail.attachments.length });
-          console.log(`[AutoRule] ✅ Uploaded ${mail.attachments.length} file(s)`);
         } catch (error) {
           results.push({ action: 'save_file', status: 'failed', error: error.message });
-          console.error('[AutoRule] ❌ save_file failed:', error.message);
         }
       }
     }
@@ -707,8 +694,6 @@ serve(async (req) => {
           const eventDate = calculateEventDate(mail.received_at, actions.calendar_event);
           
           // TODO: Implement Google Calendar API call
-          console.log(`[AutoRule] 📆 Would create: "${eventTitle}" on ${eventDate.toISOString()}`);
-          
           results.push({ 
             action: 'calendar_event', 
             status: 'success',
@@ -751,7 +736,6 @@ serve(async (req) => {
         
         rollbackManager.register({ type: 'create_alert', id: activity.id });
         results.push({ action: 'create_alert', status: 'success', activity_id: activity.id });
-        console.log(`[AutoRule] ✅ Created Alert ${activity.id}`);
       }
     }
 
@@ -770,10 +754,6 @@ serve(async (req) => {
       skipped: results.filter(r => r.status === 'skipped').length,
     };
 
-    console.log(`[AutoRule] 🏁 Complete in ${executionTime}ms`);
-    console.log(`[AutoRule] 📊 Summary:`, actionsSummary);
-
-    // שמירת לוג
     if (!testMode) {
       await logAutomationExecution(supabaseClient, {
         rule_id: ruleId,
@@ -805,22 +785,17 @@ serve(async (req) => {
     
     const executionTime = Date.now() - startTime;
     
-    // Rollback
     if (rollbackManager) {
-      console.log('[AutoRule] 🔄 Initiating rollback...');
       try {
         await rollbackManager.rollbackAll();
-        console.log('[AutoRule] ✅ Rollback complete');
       } catch (rollbackError) {
         console.error('[AutoRule] ❌ Rollback failed:', rollbackError);
       }
     }
     
-    // שמירת לוג כישלון
     if (mailData && ruleData) {
       try {
         const supabaseClient = createClient(supabaseUrl, supabaseServiceKey);
-        
         await logAutomationExecution(supabaseClient, {
           rule_id: ruleData.id,
           rule_name: ruleData.name,
@@ -832,7 +807,6 @@ serve(async (req) => {
           error_message: error.message,
           metadata: {},
         });
-        
         await updateRuleStats(supabaseClient, ruleData.id, false);
       } catch (logError) {
         console.error('[AutoRule] Failed to log error:', logError);
