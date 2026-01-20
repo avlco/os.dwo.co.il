@@ -149,6 +149,221 @@ async function updateRuleStats(supabase, ruleId, success) {
 }
 
 // ========================================
+// RECIPIENT RESOLUTION
+// ========================================
+
+/**
+ * ממיר רשימת recipients (client, lawyer) לכתובות מייל אמיתיות
+ */
+async function resolveRecipients(recipients, context, supabase) {
+  const emails = [];
+  
+  console.log('[AutoRule] 📬 Resolving recipients:', recipients);
+  
+  for (const recipient of recipients) {
+    try {
+      if (recipient === 'client') {
+        // שלוף מייל של הלקוח
+        if (context.clientId) {
+          const { data: client } = await supabase
+            .from('Client')
+            .select('email, name')
+            .eq('id', context.clientId)
+            .single();
+          
+          if (client?.email) {
+            emails.push(client.email);
+            console.log(`[AutoRule] ✅ Client email: ${client.email}`);
+          } else {
+            console.log('[AutoRule] ⚠️ Client has no email');
+          }
+        } else {
+          console.log('[AutoRule] ⚠️ No clientId to resolve client email');
+        }
+      }
+      
+      if (recipient === 'lawyer') {
+        // שלוף מייל של עו"ד אחראי על התיק
+        if (context.caseId) {
+          const { data: caseData } = await supabase
+            .from('Case')
+            .select('assigned_lawyer_id')
+            .eq('id', context.caseId)
+            .single();
+          
+          if (caseData?.assigned_lawyer_id) {
+            const { data: lawyer } = await supabase
+              .from('User')
+              .select('email, full_name')
+              .eq('id', caseData.assigned_lawyer_id)
+              .single();
+            
+            if (lawyer?.email) {
+              emails.push(lawyer.email);
+              console.log(`[AutoRule] ✅ Lawyer email: ${lawyer.email}`);
+            }
+          } else {
+            console.log('[AutoRule] ⚠️ Case has no assigned lawyer');
+          }
+        } else {
+          console.log('[AutoRule] ⚠️ No caseId to resolve lawyer email');
+        }
+      }
+      
+      // תמיכה בכתובת מייל ישירה
+      if (recipient.includes('@')) {
+        emails.push(recipient);
+        console.log(`[AutoRule] ✅ Direct email: ${recipient}`);
+      }
+      
+    } catch (error) {
+      console.error(`[AutoRule] ❌ Failed to resolve recipient "${recipient}":`, error.message);
+    }
+  }
+  
+  // הסר כפילויות
+  const uniqueEmails = [...new Set(emails)];
+  console.log(`[AutoRule] 📧 Resolved ${uniqueEmails.length} email(s):`, uniqueEmails);
+  
+  return uniqueEmails;
+}
+
+// ========================================
+// HELPER FUNCTIONS
+// ========================================
+
+function extractFromMail(mail, config) {
+  if (!config) return null;
+  
+  const source = config.source || 'subject';
+  const text = source === 'body' ? (mail.body_plain || mail.body_html || '') : mail.subject;
+  
+  if (!text) return null;
+  
+  if (config.regex) {
+    const match = text.match(new RegExp(config.regex));
+    return match ? match[1] || match[0] : null;
+  }
+  
+  if (config.anchor_text) {
+    const index = text.indexOf(config.anchor_text);
+    if (index === -1) return null;
+    
+    const afterAnchor = text.substring(index + config.anchor_text.length).trim();
+    const words = afterAnchor.split(/\s+/);
+    return words[0] || null;
+  }
+  
+  return null;
+}
+
+async function replaceTokens(template, context, supabase) {
+  if (!template) return '';
+  
+  let result = template;
+  
+  result = result.replace(/{Mail_Subject}/g, context.mail?.subject || '');
+  result = result.replace(/{Mail_From}/g, context.mail?.sender_email || '');
+  result = result.replace(/{Mail_Body}/g, context.mail?.body_plain || '');
+  result = result.replace(/{Mail_Date}/g, context.mail?.received_at ? new Date(context.mail.received_at).toLocaleDateString('he-IL') : '');
+  
+  if (context.caseId) {
+    const { data: caseData } = await supabase
+      .from('Case')
+      .select('case_number, title, case_type, official_number')
+      .eq('id', context.caseId)
+      .single();
+    
+    result = result.replace(/{Case_No}/g, caseData?.case_number || '');
+    result = result.replace(/{Case_Title}/g, caseData?.title || '');
+    result = result.replace(/{Case_Type}/g, caseData?.case_type || '');
+    result = result.replace(/{Official_No}/g, caseData?.official_number || '');
+  }
+  
+  if (context.clientId) {
+    const { data: clientData } = await supabase
+      .from('Client')
+      .select('name, email')
+      .eq('id', context.clientId)
+      .single();
+    
+    result = result.replace(/{Client_Name}/g, clientData?.name || '');
+    result = result.replace(/{Client_Email}/g, clientData?.email || '');
+  }
+  
+  return result;
+}
+
+function calculateDueDate(offsetDays) {
+  const date = new Date();
+  date.setDate(date.getDate() + (offsetDays || 0));
+  return date.toISOString().split('T')[0];
+}
+
+function calculateEventDate(baseDate, timing) {
+  const date = new Date(baseDate);
+  const offset = timing.timing_offset || 0;
+  const unit = timing.timing_unit || 'days';
+  const direction = timing.timing_direction || 'after';
+  
+  let daysToAdd = unit === 'weeks' ? offset * 7 : offset;
+  if (direction === 'before') daysToAdd = -daysToAdd;
+  
+  date.setDate(date.getDate() + daysToAdd);
+  date.setHours(10, 0, 0, 0);
+  
+  return date;
+}
+
+async function createApprovalActivity(supabase, data) {
+  const expiresAt = new Date();
+  expiresAt.setDate(expiresAt.getDate() + 7);
+
+  const { data: activity, error } = await supabase
+    .from('Activity')
+    .insert({
+      activity_type: 'approval_request',
+      case_id: data.case_id,
+      status: 'pending',
+      description: `בקשת אישור: ${data.action_type}`,
+      metadata: {
+        automation_rule_id: data.automation_rule_id,
+        mail_id: data.mail_id,
+        client_id: data.client_id,
+        action_type: data.action_type,
+        action_config: data.action_config,
+        approver_email: data.approver_email,
+        requested_by: data.requested_by,
+        mail_subject: data.mail_subject,
+        mail_from: data.mail_from,
+        expires_at: expiresAt.toISOString(),
+      },
+    })
+    .select()
+    .single();
+
+  if (error) throw error;
+  
+  // שלח מייל למאשר
+  await supabase.functions.invoke('sendEmail', {
+    body: {
+      to: data.approver_email,
+      subject: `בקשת אישור: ${data.action_type}`,
+      body: `
+        <div dir="rtl">
+          <h2>בקשת אישור חדשה</h2>
+          <p><strong>סוג פעולה:</strong> ${data.action_type}</p>
+          <p><strong>מייל מקורי:</strong> ${data.mail_subject}</p>
+          <p><strong>שולח:</strong> ${data.mail_from}</p>
+        </div>
+      `,
+    },
+  });
+
+  return activity;
+}
+
+// ========================================
 // MAIN HANDLER
 // ========================================
 serve(async (req) => {
@@ -252,7 +467,8 @@ serve(async (req) => {
       }
     }
 
-    const { data: { user } } = await supabaseClient.auth.getUser();
+    const { data: userData } = await supabaseClient.auth.getUser();
+    const user = userData?.user;
     const userId = user?.id || mail.user_id;
 
     const results = [];
@@ -262,42 +478,69 @@ serve(async (req) => {
     // ביצוע פעולות
     // ========================================
 
-    // 1️⃣ SEND EMAIL
+    // 1️⃣ SEND EMAIL (מתוקן)
     if (actions.send_email?.enabled) {
       console.log('[AutoRule] 📧 Processing: send_email');
       
       if (testMode) {
         results.push({ action: 'send_email', status: 'test_skipped' });
       } else {
-        const emailConfig = {
-          to: await replaceTokens(actions.send_email.to, { mail, caseId, clientId }, supabaseClient),
-          subject: await replaceTokens(actions.send_email.subject_template, { mail, caseId, clientId }, supabaseClient),
-          body: await replaceTokens(actions.send_email.body_template, { mail, caseId, clientId }, supabaseClient),
-        };
-
-        if (rule.require_approval) {
-          const activity = await createApprovalActivity(supabaseClient, {
-            automation_rule_id: ruleId,
-            mail_id: mailId,
-            case_id: caseId,
-            client_id: clientId,
-            action_type: 'send_email',
-            action_config: emailConfig,
-            approver_email: rule.approver_email,
-            requested_by: user?.email || 'system',
-            mail_subject: mail.subject,
-            mail_from: mail.sender_email,
-          });
-          
-          rollbackManager.register({ type: 'approval', id: activity.id });
-          results.push({ action: 'send_email', status: 'pending_approval', activityId: activity.id });
+        // תיקון: המרת recipients לכתובות מייל אמיתיות
+        const recipientEmails = await resolveRecipients(
+          actions.send_email.recipients || [], 
+          { caseId, clientId }, 
+          supabaseClient
+        );
+        
+        if (recipientEmails.length === 0) {
+          console.log('[AutoRule] ⚠️ No valid recipients found');
+          results.push({ action: 'send_email', status: 'skipped', reason: 'no_recipients' });
         } else {
-          const { error } = await supabaseClient.functions.invoke('sendEmail', {
-            body: emailConfig,
-          });
+          const emailConfig = {
+            to: recipientEmails.join(', '),
+            subject: await replaceTokens(actions.send_email.subject_template || '', { mail, caseId, clientId }, supabaseClient),
+            body: await replaceTokens(actions.send_email.body_template || '', { mail, caseId, clientId }, supabaseClient),
+          };
           
-          if (error) throw new Error(`send_email failed: ${error.message}`);
-          results.push({ action: 'send_email', status: 'success' });
+          console.log('[AutoRule] 📧 Email config:', { 
+            to: emailConfig.to, 
+            subject: emailConfig.subject?.substring(0, 50) 
+          });
+
+          if (rule.require_approval) {
+            const activity = await createApprovalActivity(supabaseClient, {
+              automation_rule_id: ruleId,
+              mail_id: mailId,
+              case_id: caseId,
+              client_id: clientId,
+              action_type: 'send_email',
+              action_config: emailConfig,
+              approver_email: rule.approver_email,
+              requested_by: user?.email || 'system',
+              mail_subject: mail.subject,
+              mail_from: mail.sender_email,
+            });
+            
+            rollbackManager.register({ type: 'approval', id: activity.id });
+            results.push({ action: 'send_email', status: 'pending_approval', activityId: activity.id });
+          } else {
+            try {
+              const { error } = await supabaseClient.functions.invoke('sendEmail', {
+                body: emailConfig,
+              });
+              
+              if (error) {
+                console.error('[AutoRule] ❌ sendEmail error:', error);
+                throw new Error(`send_email failed: ${error.message}`);
+              }
+              
+              results.push({ action: 'send_email', status: 'success', to: emailConfig.to });
+              console.log(`[AutoRule] ✅ Email sent to: ${emailConfig.to}`);
+            } catch (emailError) {
+              console.error('[AutoRule] ❌ Email sending failed:', emailError);
+              results.push({ action: 'send_email', status: 'failed', error: emailError.message });
+            }
+          }
         }
       }
     }
@@ -538,7 +781,7 @@ serve(async (req) => {
         mail_id: mailId,
         mail_subject: mail.subject,
         execution_status: 'completed',
-        actions_summary: actionsSummary,
+        actions_summary: results,
         execution_time_ms: executionTime,
         metadata: { case_id: caseId, client_id: clientId },
       });
@@ -584,7 +827,7 @@ serve(async (req) => {
           mail_id: mailData.id,
           mail_subject: mailData.subject,
           execution_status: 'failed',
-          actions_summary: { total: 0, success: 0, failed: 1, pending_approval: 0 },
+          actions_summary: [],
           execution_time_ms: executionTime,
           error_message: error.message,
           metadata: {},
@@ -608,136 +851,3 @@ serve(async (req) => {
     );
   }
 });
-
-// ========================================
-// HELPER FUNCTIONS
-// ========================================
-
-function extractFromMail(mail, config) {
-  if (!config) return null;
-  
-  const source = config.source || 'subject';
-  const text = source === 'body' ? (mail.body_plain || mail.body_html || '') : mail.subject;
-  
-  if (!text) return null;
-  
-  if (config.regex) {
-    const match = text.match(new RegExp(config.regex));
-    return match ? match[1] || match[0] : null;
-  }
-  
-  if (config.anchor_text) {
-    const index = text.indexOf(config.anchor_text);
-    if (index === -1) return null;
-    
-    const afterAnchor = text.substring(index + config.anchor_text.length).trim();
-    const words = afterAnchor.split(/\s+/);
-    return words[0] || null;
-  }
-  
-  return null;
-}
-
-async function replaceTokens(template, context, supabase) {
-  if (!template) return '';
-  
-  let result = template;
-  
-  result = result.replace(/{Mail_Subject}/g, context.mail?.subject || '');
-  result = result.replace(/{Mail_From}/g, context.mail?.sender_email || '');
-  result = result.replace(/{Mail_Body}/g, context.mail?.body_plain || '');
-  
-  if (context.caseId) {
-    const { data: caseData } = await supabase
-      .from('Case')
-      .select('case_number, title, case_type, official_number')
-      .eq('id', context.caseId)
-      .single();
-    
-    result = result.replace(/{Case_No}/g, caseData?.case_number || '');
-    result = result.replace(/{Case_Title}/g, caseData?.title || '');
-    result = result.replace(/{Official_No}/g, caseData?.official_number || '');
-  }
-  
-  if (context.clientId) {
-    const { data: clientData } = await supabase
-      .from('Client')
-      .select('name, email')
-      .eq('id', context.clientId)
-      .single();
-    
-    result = result.replace(/{Client_Name}/g, clientData?.name || '');
-    result = result.replace(/{Client_Email}/g, clientData?.email || '');
-  }
-  
-  return result;
-}
-
-function calculateDueDate(offsetDays) {
-  const date = new Date();
-  date.setDate(date.getDate() + (offsetDays || 0));
-  return date.toISOString().split('T')[0];
-}
-
-function calculateEventDate(baseDate, timing) {
-  const date = new Date(baseDate);
-  const offset = timing.timing_offset || 0;
-  const unit = timing.timing_unit || 'days';
-  const direction = timing.timing_direction || 'after';
-  
-  let daysToAdd = unit === 'weeks' ? offset * 7 : offset;
-  if (direction === 'before') daysToAdd = -daysToAdd;
-  
-  date.setDate(date.getDate() + daysToAdd);
-  date.setHours(10, 0, 0, 0);
-  
-  return date;
-}
-
-async function createApprovalActivity(supabase, data) {
-  const expiresAt = new Date();
-  expiresAt.setDate(expiresAt.getDate() + 7);
-
-  const { data: activity, error } = await supabase
-    .from('Activity')
-    .insert({
-      activity_type: 'approval_request',
-      case_id: data.case_id,
-      status: 'pending',
-      description: `בקשת אישור: ${data.action_type}`,
-      metadata: {
-        automation_rule_id: data.automation_rule_id,
-        mail_id: data.mail_id,
-        client_id: data.client_id,
-        action_type: data.action_type,
-        action_config: data.action_config,
-        approver_email: data.approver_email,
-        requested_by: data.requested_by,
-        mail_subject: data.mail_subject,
-        mail_from: data.mail_from,
-        expires_at: expiresAt.toISOString(),
-      },
-    })
-    .select()
-    .single();
-
-  if (error) throw error;
-  
-  // שלח מייל למאשר
-  await supabase.functions.invoke('sendEmail', {
-    body: {
-      to: data.approver_email,
-      subject: `בקשת אישור: ${data.action_type}`,
-      body: `
-        <div dir="rtl">
-          <h2>בקשת אישור חדשה</h2>
-          <p><strong>סוג פעולה:</strong> ${data.action_type}</p>
-          <p><strong>מייל מקורי:</strong> ${data.mail_subject}</p>
-          <p><strong>שולח:</strong> ${data.mail_from}</p>
-        </div>
-      `,
-    },
-  });
-
-  return activity;
-}
