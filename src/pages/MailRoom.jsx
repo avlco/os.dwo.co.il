@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query';
 import { base44 } from '../api/base44Client';
 import { PageHeader } from "../components/ui/PageHeader";
@@ -124,6 +124,10 @@ export default function MailRoom() {
     }
   });
 
+  // Ref לגישה ל-mutation בתוך useEffect
+  const syncMutationRef = useRef(syncMutation);
+  syncMutationRef.current = syncMutation;
+
   const getMailAutomationStatus = (mailId) => {
     const mailLogs = automationLogs.filter(log => log.metadata?.mail_id === mailId);
     
@@ -244,6 +248,7 @@ export default function MailRoom() {
   const mails = data?.data || [];
   const totalPages = data?.totalPages || 0;
 
+  // תיקון: סנכרון אוטומטי כל 5 דקות
   useEffect(() => {
     const stored = localStorage.getItem('lastMailSync');
     if (stored) {
@@ -256,7 +261,18 @@ export default function MailRoom() {
     }
 
     const interval = setInterval(() => {
-      setNextSyncIn((prev) => Math.max(0, prev - 1));
+      setNextSyncIn((prev) => {
+        // כשמגיעים ל-0, מפעילים סנכרון ומאפסים
+        if (prev <= 1) {
+          // בדיקה שלא כבר בסנכרון
+          if (!syncMutationRef.current.isPending) {
+            console.log('[MailRoom] ⏰ Auto-sync triggered');
+            syncMutationRef.current.mutate();
+          }
+          return 300; // איפוס ל-5 דקות
+        }
+        return prev - 1;
+      });
     }, 1000);
 
     return () => clearInterval(interval);
@@ -347,7 +363,6 @@ export default function MailRoom() {
               <Button onClick={handleRefresh} size="sm" variant="outline">
                 <RefreshCw className="w-4 h-4" />
               </Button>
-              {/* כפתורים שהיו במקור */}
               <Link to={createPageUrl('ApprovalQueue')}>
                 <Button variant="outline" size="sm" className="gap-2">
                   <CheckCircle className="w-4 h-4" />
@@ -451,7 +466,6 @@ export default function MailRoom() {
                                 </Badge>
                               </div>
                               
-                              {/* תיקון: לינק למייל */}
                               <Link 
                                 to={createPageUrl('MailView', { id: metadata.mail_id })}
                                 className="text-sm text-blue-600 hover:underline mb-3 block"
