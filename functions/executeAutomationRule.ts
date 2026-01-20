@@ -266,17 +266,26 @@ function calculateDueDate(offsetDays) {
 async function createApprovalActivity(base44, data) {
   const expiresAt = new Date();
   expiresAt.setDate(expiresAt.getDate() + 7);
-  
+
   const activity = await base44.entities.Activity.create({
     activity_type: 'approval_request',
-    case_id: data.case_id,
+    title: `אישור: ${data.action_type} - ${data.mail_subject || 'ללא נושא'}`, // 🔥 הוספה!
+    case_id: data.case_id || null,
+    client_id: data.client_id || null,
     status: 'pending',
     description: `בקשת אישור: ${data.action_type}`,
-    metadata: { 
-      ...data, 
-      expires_at: expiresAt.toISOString() 
+    metadata: {
+      automation_rule_id: data.automation_rule_id,
+      mail_id: data.mail_id,
+      action_type: data.action_type,
+      action_config: data.action_config,
+      approver_email: data.approver_email,
+      mail_subject: data.mail_subject,
+      mail_from: data.mail_from,
+      expires_at: expiresAt.toISOString(),
     }
   });
+
   
   console.log(`[Approval] Created approval request: ${activity.id}`);
   
