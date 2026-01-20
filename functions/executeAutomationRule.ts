@@ -89,6 +89,7 @@ async function logAutomationExecution(base44, logData) {
         actions_summary: logData.actions_summary,
         execution_time_ms: logData.execution_time_ms,
         logged_at: new Date().toISOString(),
+        // 🔥 אל תכלול expires_at בלוג!
       }
     });
 
