@@ -248,7 +248,7 @@ export default function MailRoom() {
   const mails = data?.data || [];
   const totalPages = data?.totalPages || 0;
 
-  // תיקון: סנכרון אוטומטי כל 5 דקות
+  // סנכרון אוטומטי כל 5 דקות
   useEffect(() => {
     const stored = localStorage.getItem('lastMailSync');
     if (stored) {
@@ -377,14 +377,22 @@ export default function MailRoom() {
               </Link>
             </div>
             
-            {lastSyncTime && (
-              <div className="text-sm text-slate-500 flex items-center gap-2">
-                <Clock className="w-4 h-4" />
-                <span>סנכרון אחרון: {format(lastSyncTime, 'HH:mm', { locale: he })}</span>
-                <span className="text-slate-400">|</span>
-                <span>הבא בעוד: {formatTime(nextSyncIn)}</span>
-              </div>
-            )}
+            {/* תצוגת טיימר - מוצג תמיד */}
+            <div className="text-sm text-slate-500 flex items-center gap-2">
+              <Clock className="w-4 h-4" />
+              {lastSyncTime ? (
+                <>
+                  <span>סנכרון אחרון: {format(lastSyncTime, 'HH:mm', { locale: he })}</span>
+                  <span className="text-slate-400">|</span>
+                </>
+              ) : (
+                <>
+                  <span>טרם בוצע סנכרון</span>
+                  <span className="text-slate-400">|</span>
+                </>
+              )}
+              <span className="font-medium">סנכרון הבא בעוד: {formatTime(nextSyncIn)}</span>
+            </div>
           </div>
 
           <Tabs value={activeTab} onValueChange={(val) => { setActiveTab(val); setPage(1); }}>
@@ -473,7 +481,7 @@ export default function MailRoom() {
                                 📧 {metadata.mail_subject || 'ללא נושא'}
                               </Link>
                               
-                              {metadata.actions_summary && (
+                              {metadata.actions_summary && Array.isArray(metadata.actions_summary) && (
                                 <div className="text-sm text-slate-500 space-y-1">
                                   <p className="font-medium">פעולות שבוצעו:</p>
                                   <ul className="list-disc list-inside mr-4">
