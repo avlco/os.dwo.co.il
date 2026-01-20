@@ -326,16 +326,29 @@ Deno.serve(async (req) => {
     rollbackManager = new RollbackManager(base44);
     
     // Parse request body
-    const { mailId, ruleId, testMode = false } = await req.json();
+    // Parse request body - תמיכה ב-Base44 SDK format
+const rawBody = await req.json();
+console.log(`[AutoRule] 🔍 RAW REQUEST:`, JSON.stringify(rawBody));
 
-    if (!mailId || !ruleId) {
-      throw new Error('mailId and ruleId are required');
-    }
+// Base44 SDK עוטף params ב-'body', אבל נתמוך בשניהם
+const params = rawBody.body || rawBody;
+const { mailId, ruleId, testMode = false } = params;
 
-    console.log(`\n[AutoRule] 🚀 Starting execution`);
-    console.log(`[AutoRule] Mail ID: ${mailId}`);
-    console.log(`[AutoRule] Rule ID: ${ruleId}`);
-    console.log(`[AutoRule] Test Mode: ${testMode}`);
+console.log(`[AutoRule] 🔍 PARSED PARAMS:`, { 
+  mailId, 
+  ruleId, 
+  testMode, 
+  testModeType: typeof testMode 
+});
+
+if (!mailId || !ruleId) {
+  throw new Error('mailId and ruleId are required');
+}
+
+console.log(`\n[AutoRule] 🚀 Starting execution`);
+console.log(`[AutoRule] Mail ID: ${mailId}`);
+console.log(`[AutoRule] Rule ID: ${ruleId}`);
+console.log(`[AutoRule] Test Mode: ${testMode}`);
 
     // ✅ תיקון #1: שימוש ב-Base44 SDK במקום Supabase
     console.log('[AutoRule] 📧 Fetching mail...');
