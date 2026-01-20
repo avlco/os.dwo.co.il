@@ -1,7 +1,5 @@
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.0';
-
-const supabaseUrl = Deno.env.get('SUPABASE_URL');
-const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+// @ts-nocheck
+import { createClientFromRequest } from 'npm:@base44/sdk@0.8.6';
 
 // ========================================
 // CRYPTO HELPERS (for decrypting tokens)
@@ -32,6 +30,9 @@ async function decrypt(text) {
 
 Deno.serve(async (req) => {
   try {
+    // יצירת Base44 client
+    const base44 = createClientFromRequest(req);
+
     const { to, subject, body, from } = await req.json();
 
     if (!to || !subject || !body) {
@@ -41,20 +42,16 @@ Deno.serve(async (req) => {
       );
     }
 
-    const supabase = createClient(supabaseUrl, supabaseServiceKey);
-
     console.log(`[SendEmail] Attempting to send email to: ${to}`);
     console.log(`[SendEmail] Subject: ${subject}`);
 
     // שלב 1: חפש Gmail integration (OAuth2)
-    const { data: gmailConnections, error: gmailError } = await supabase
-      .from('IntegrationConnection')
-      .select('*')
-      .eq('provider', 'google')
-      .eq('is_active', true)
-      .limit(1);
+    const gmailConnections = await base44.entities.IntegrationConnection.filter({
+      provider: 'google',
+      is_active: true
+    });
 
-    if (!gmailError && gmailConnections && gmailConnections.length > 0) {
+    if (gmailConnections && gmailConnections.length > 0) {
       const gmailConn = gmailConnections[0];
 
       console.log('[SendEmail] Using Gmail API to send email');
@@ -122,14 +119,12 @@ Deno.serve(async (req) => {
     }
 
     // שלב 2: אם אין Gmail, חפש SMTP
-    const { data: smtpConnections, error: smtpError } = await supabase
-      .from('IntegrationConnection')
-      .select('*')
-      .eq('provider', 'smtp')
-      .eq('is_active', true)
-      .limit(1);
+    const smtpConnections = await base44.entities.IntegrationConnection.filter({
+      provider: 'smtp',
+      is_active: true
+    });
 
-    if (!smtpError && smtpConnections && smtpConnections.length > 0) {
+    if (smtpConnections && smtpConnections.length > 0) {
       const smtpConfig = smtpConnections[0].metadata;
 
       if (!smtpConfig?.smtp_host || !smtpConfig?.smtp_username) {
