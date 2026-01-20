@@ -14,13 +14,17 @@ import { Badge } from "@/components/ui/badge";
 import { base44 } from '@/api/base44Client';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from "sonner";
-import { Plus, Edit, Trash2, X, Braces, ShieldCheck } from 'lucide-react';
+import { Plus, Edit, Trash2, X, Braces, ShieldCheck, Copy, Wand2 } from 'lucide-react';
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+
+// ייבוא הרכיבים הנלווים שקיימים במערכת
+import RuleOptimizationBanner from '../mailrules/RuleOptimizationBanner';
+import RuleOnboardingWizard from '../mailrules/RuleOnboardingWizard';
 
 const AVAILABLE_TOKENS = [
   { key: '{Case_No}', label: 'מספר תיק' },
@@ -61,7 +65,8 @@ const defaultRule = {
   }
 };
 
-// Token insertion button
+// --- עוזרי ממשק (UI Helpers) ---
+
 function TokenButton({ onInsert }) {
   return (
     <DropdownMenu>
@@ -72,11 +77,7 @@ function TokenButton({ onInsert }) {
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start" className="dark:bg-slate-800">
         {AVAILABLE_TOKENS.map(token => (
-          <DropdownMenuItem 
-            key={token.key} 
-            onClick={() => onInsert(token.key)}
-            className="dark:text-slate-200 dark:hover:bg-slate-700"
-          >
+          <DropdownMenuItem key={token.key} onClick={() => onInsert(token.key)} className="dark:text-slate-200">
             <code className="text-xs bg-slate-100 dark:bg-slate-700 px-1 rounded ml-2">{token.key}</code>
             {token.label}
           </DropdownMenuItem>
@@ -86,7 +87,6 @@ function TokenButton({ onInsert }) {
   );
 }
 
-// Input with token support
 function TokenInput({ value, onChange, placeholder, className }) {
   const inputRef = React.useRef(null);
   const handleInsertToken = (token) => {
@@ -103,7 +103,6 @@ function TokenInput({ value, onChange, placeholder, className }) {
   );
 }
 
-// Textarea with token support
 function TokenTextarea({ value, onChange, placeholder, className }) {
   const textareaRef = React.useRef(null);
   const handleInsertToken = (token) => {
@@ -120,7 +119,6 @@ function TokenTextarea({ value, onChange, placeholder, className }) {
   );
 }
 
-// Multi-select recipients component
 function RecipientsSelect({ value = [], onChange }) {
   const toggleRecipient = (recipient) => {
     if (value.includes(recipient)) {
@@ -132,12 +130,7 @@ function RecipientsSelect({ value = [], onChange }) {
   return (
     <div className="flex flex-wrap gap-2">
       {RECIPIENT_OPTIONS.map(opt => (
-        <Badge 
-          key={opt.value}
-          variant={value.includes(opt.value) ? "default" : "outline"}
-          className="cursor-pointer"
-          onClick={() => toggleRecipient(opt.value)}
-        >
+        <Badge key={opt.value} variant={value.includes(opt.value) ? "default" : "outline"} className="cursor-pointer" onClick={() => toggleRecipient(opt.value)}>
           {opt.label}
         </Badge>
       ))}
@@ -145,34 +138,32 @@ function RecipientsSelect({ value = [], onChange }) {
   );
 }
 
-// Timing selector component
 function TimingSelector({ direction, offset, unit, onDirectionChange, onOffsetChange, onUnitChange }) {
   return (
     <div className="flex items-center gap-2 flex-wrap">
       <Select value={direction} onValueChange={onDirectionChange}>
         <SelectTrigger className="w-24"><SelectValue /></SelectTrigger>
-        <SelectContent>
-          <SelectItem value="before">לפני</SelectItem>
-          <SelectItem value="after">אחרי</SelectItem>
-        </SelectContent>
+        <SelectContent><SelectItem value="before">לפני</SelectItem><SelectItem value="after">אחרי</SelectItem></SelectContent>
       </Select>
       <Input type="number" value={offset} onChange={e => onOffsetChange(parseInt(e.target.value) || 0)} className="w-20" />
       <Select value={unit} onValueChange={onUnitChange}>
         <SelectTrigger className="w-24"><SelectValue /></SelectTrigger>
-        <SelectContent>
-          <SelectItem value="days">ימים</SelectItem>
-          <SelectItem value="weeks">שבועות</SelectItem>
-        </SelectContent>
+        <SelectContent><SelectItem value="days">ימים</SelectItem><SelectItem value="weeks">שבועות</SelectItem></SelectContent>
       </Select>
       <span className="text-sm text-slate-500">מתאריך המייל</span>
     </div>
   );
 }
 
+// --- המרכיב הראשי ---
+
 export default function AutomationRulesManager() {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
-  const [isModalOpen, setIsModalOpen] = useState(false);
+  
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [isWizardOpen, setIsWizardOpen] = useState(false);
+  
   const [currentRule, setCurrentRule] = useState(defaultRule);
   const [activeTab, setActiveTab] = useState("catch");
   const [sendersInput, setSendersInput] = useState('');
@@ -192,7 +183,8 @@ export default function AutomationRulesManager() {
     onSuccess: () => {
       queryClient.invalidateQueries(['automationRules']);
       toast.success(t('settings.rule_created_success'));
-      setIsModalOpen(false);
+      setIsEditModalOpen(false);
+      setIsWizardOpen(false);
     }
   });
 
@@ -201,7 +193,7 @@ export default function AutomationRulesManager() {
     onSuccess: () => {
       queryClient.invalidateQueries(['automationRules']);
       toast.success(t('settings.rule_updated_success'));
-      setIsModalOpen(false);
+      setIsEditModalOpen(false);
     }
   });
 
@@ -213,13 +205,16 @@ export default function AutomationRulesManager() {
     }
   });
 
-  const openCreate = () => {
-    setCurrentRule(JSON.parse(JSON.stringify(defaultRule)));
-    setSendersInput('');
-    setActiveTab("catch");
-    setIsModalOpen(true);
+  // פונקציית השכפול
+  const handleDuplicate = (rule) => {
+    const { id, created_date, updated_date, created_by, ...ruleData } = rule;
+    const duplicatedRule = {
+      ...ruleData,
+      name: `${ruleData.name} (העתק)`,
+      is_active: false,
+    };
+    createMutation.mutate(duplicatedRule);
   };
-
   const openEdit = (rule) => {
     const mapConfig = rule.map_config?.length > 0 ? rule.map_config : [{ ...defaultMapRow }];
     const mergedRule = {
@@ -238,7 +233,7 @@ export default function AutomationRulesManager() {
     setCurrentRule(mergedRule);
     setSendersInput((rule.catch_config?.senders || []).join(', '));
     setActiveTab("catch");
-    setIsModalOpen(true);
+    setIsEditModalOpen(true);
   };
 
   const handleSave = () => {
@@ -296,40 +291,84 @@ export default function AutomationRulesManager() {
   if (isLoading) return <Card className="p-6 text-center dark:bg-slate-800">{t('common.loading')}</Card>;
 
   return (
-    <Card className="dark:bg-slate-800 dark:border-slate-700">
-      <CardHeader className="flex flex-row items-center justify-between pb-3">
-        <CardTitle className="text-xl dark:text-slate-100">{t('settings.automation_rules')}</CardTitle>
-        <Button onClick={openCreate} className="gap-1"><Plus className="w-4 h-4" />{t('settings.new_rule')}</Button>
-      </CardHeader>
-      <CardContent>
-        <div className="divide-y dark:divide-slate-700">
-          {rules.length === 0 ? (
-            <p className="text-center text-slate-400 py-8">{t('settings.no_automation_rules')}</p>
-          ) : rules.map(rule => (
-            <div key={rule.id} className="flex items-center gap-4 py-3">
-              <div className="flex-1">
-                <div className="flex items-center gap-2">
-                  <p className="font-medium dark:text-slate-200">{rule.name}</p>
-                  {rule.require_approval && (
-                    <Badge variant="outline" className="text-xs gap-1">
-                      <ShieldCheck className="w-3 h-3" /> דורש אישור
-                    </Badge>
-                  )}
-                </div>
-                <p className="text-sm text-slate-500">
-                  {rule.map_config?.length || 0} כללי חילוץ • 
-                  {Object.values(rule.action_bundle || {}).filter(a => a?.enabled).length} פעולות
-                </p>
-              </div>
-              <Switch checked={rule.is_active} onCheckedChange={(c) => toggleActive(rule.id, c)} />
-              <Button variant="ghost" size="icon" onClick={() => openEdit(rule)}><Edit className="w-4 h-4" /></Button>
-              <Button variant="ghost" size="icon" className="text-red-500" onClick={() => deleteMutation.mutate(rule.id)}><Trash2 className="w-4 h-4" /></Button>
-            </div>
-          ))}
-        </div>
-      </CardContent>
+    <>
+      {/* Banner for Optimization Suggestions */}
+      <RuleOptimizationBanner onEditRule={(ruleId) => {
+        const rule = rules.find(r => r.id === ruleId);
+        if (rule) openEdit(rule);
+      }} />
 
-      <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
+      <Card className="dark:bg-slate-800 dark:border-slate-700">
+        <CardHeader className="flex flex-row items-center justify-between pb-3">
+          <CardTitle className="text-xl dark:text-slate-100">{t('settings.automation_rules')}</CardTitle>
+          <div className="flex gap-2">
+            <Button onClick={() => setIsWizardOpen(true)} className="gap-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700">
+              <Wand2 className="w-4 h-4" />
+              {t('settings.new_rule')} (אשף)
+            </Button>
+            <Button variant="outline" onClick={() => {
+              setCurrentRule(JSON.parse(JSON.stringify(defaultRule)));
+              setSendersInput('');
+              setIsEditModalOpen(true);
+            }}>
+              <Plus className="w-4 h-4 ml-1" /> הגדרה ידנית
+            </Button>
+          </div>
+        </CardHeader>
+        <CardContent>
+          <div className="divide-y dark:divide-slate-700">
+            {rules.length === 0 ? (
+              <div className="text-center py-12">
+                <p className="text-slate-400 mb-4">{t('settings.no_automation_rules')}</p>
+                <Button variant="outline" onClick={() => setIsWizardOpen(true)}>
+                  התחל עם אשף ההגדרות
+                </Button>
+              </div>
+            ) : rules.map(rule => (
+              <div key={rule.id} className="flex items-center gap-4 py-3">
+                <div className="flex-1">
+                  <div className="flex items-center gap-2">
+                    <p className="font-medium dark:text-slate-200">{rule.name}</p>
+                    {rule.require_approval && (
+                      <Badge variant="outline" className="text-xs gap-1">
+                        <ShieldCheck className="w-3 h-3" /> דורש אישור
+                      </Badge>
+                    )}
+                    {!rule.is_active && (
+                      <Badge variant="secondary" className="text-xs">
+                        לא פעיל
+                      </Badge>
+                    )}
+                  </div>
+                  <p className="text-sm text-slate-500">
+                    {rule.map_config?.length || 0} כללי חילוץ • 
+                    {Object.values(rule.action_bundle || {}).filter(a => a?.enabled).length} פעולות
+                  </p>
+                </div>
+                
+                <div className="flex items-center gap-1">
+                  <Switch checked={rule.is_active} onCheckedChange={(c) => toggleActive(rule.id, c)} />
+                  <div className="w-2" /> {/* Spacer */}
+                  
+                  <Button variant="ghost" size="icon" onClick={() => openEdit(rule)} title="ערוך חוק">
+                    <Edit className="w-4 h-4" />
+                  </Button>
+                  
+                  <Button variant="ghost" size="icon" onClick={() => handleDuplicate(rule)} title="שכפל חוק">
+                    <Copy className="w-4 h-4" />
+                  </Button>
+                  
+                  <Button variant="ghost" size="icon" className="text-red-500 hover:text-red-600 hover:bg-red-50" onClick={() => deleteMutation.mutate(rule.id)} title="מחק חוק">
+                    <Trash2 className="w-4 h-4" />
+                  </Button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
+
+      <Dialog open={isEditModalOpen} onOpenChange={setIsEditModalOpen}>
         <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto dark:bg-slate-800">
           <DialogHeader>
             <DialogTitle>{currentRule.id ? t('settings.edit_rule') : t('settings.new_rule')}</DialogTitle>
@@ -567,11 +606,26 @@ export default function AutomationRulesManager() {
             </TabsContent>
           </Tabs>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setIsModalOpen(false)}>{t('common.cancel')}</Button>
+            <Button variant="outline" onClick={() => setIsEditModalOpen(false)}>{t('common.cancel')}</Button>
             <Button onClick={handleSave}>{t('settings.save_rule')}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </Card>
+
+      {/* Wizard Overlay */}
+      {isWizardOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80">
+          <div className="w-full max-w-4xl p-4">
+            <RuleOnboardingWizard 
+              onClose={() => setIsWizardOpen(false)}
+              onRuleCreated={() => {
+                setIsWizardOpen(false);
+                toast.success(t('settings.rule_created_success'));
+              }}
+            />
+          </div>
+        </div>
+      )}
+    </>
   );
 }
