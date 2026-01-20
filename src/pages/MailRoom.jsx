@@ -1,10 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query';
-import { base44 } from '@/api/base44Client';
+import { base44 } from '../api/base44Client';
 import { PageHeader } from "../components/ui/PageHeader";
 import { DataTable } from "../components/ui/DataTable";
 import { Button } from "../components/ui/button";
-import { Mail, RefreshCw, CheckCircle, Clock, Download, Loader2, Settings, Activity, Zap, AlertCircle, CheckCircle2, XCircle, Bug } from 'lucide-react';
+import { Mail, RefreshCw, CheckCircle, Clock, Download, Loader2, Settings, Activity, Zap, AlertCircle, CheckCircle2, XCircle } from 'lucide-react';
 import { createPageUrl } from '../utils';
 import { useNavigate, Link } from 'react-router-dom';
 import { format } from 'date-fns';
@@ -373,12 +373,6 @@ export default function MailRoom() {
                 <Button variant="outline" size="sm" className="gap-2">
                   <Settings className="w-4 h-4" />
                   חוקי אוטומציה
-                </Button>
-              </Link>
-              <Link to={createPageUrl('AutomationDebugger')}>
-                <Button variant="outline" size="sm" className="gap-2">
-                  <Bug className="w-4 h-4" />
-                  דיבאג
                 </Button>
               </Link>
             </div>
