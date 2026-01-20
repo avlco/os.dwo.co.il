@@ -715,11 +715,9 @@ Deno.serve(async (req) => {
             
             // 🆕 תיקון קריטי: שימוש ב-base44.functions.invoke
             const automationResult = await base44.functions.invoke('executeAutomationRule', {
-              body: {
                 mailId: mail.id,
                 ruleId: rule.id,
                 testMode: false  // false = ביצוע אמיתי!
-              }
             });
             
             totalRulesExecuted++;
