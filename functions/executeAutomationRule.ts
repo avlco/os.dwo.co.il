@@ -73,6 +73,26 @@ class RollbackManager {
 // ========================================
 async function logAutomationExecution(base44, logData) {
   try {
+    // 🔥 בנה metadata נקי - רק שדות עם ערכים אמיתיים!
+    const metadata = {
+      rule_id: logData.rule_id,
+      rule_name: logData.rule_name,
+      mail_id: logData.mail_id,
+      mail_subject: logData.mail_subject,
+      execution_status: logData.execution_status,
+      actions_summary: logData.actions_summary,
+      execution_time_ms: logData.execution_time_ms,
+      logged_at: new Date().toISOString()
+    };
+    
+    // הוסף רק אם קיימים
+    if (logData.metadata?.case_id) {
+      metadata.case_id_ref = logData.metadata.case_id;
+    }
+    if (logData.metadata?.client_id) {
+      metadata.client_id_ref = logData.metadata.client_id;
+    }
+    
     await base44.entities.Activity.create({
       activity_type: 'automation_log',
       title: `${logData.rule_name} - ${logData.execution_status}`,
@@ -80,17 +100,7 @@ async function logAutomationExecution(base44, logData) {
       description: `${logData.rule_name} → ${logData.mail_subject}`,
       case_id: logData.metadata?.case_id || null,
       client_id: logData.metadata?.client_id || null,
-      metadata: {
-        rule_id: logData.rule_id,
-        rule_name: logData.rule_name,
-        mail_id: logData.mail_id,
-        mail_subject: logData.mail_subject,
-        execution_status: logData.execution_status,
-        actions_summary: logData.actions_summary,
-        execution_time_ms: logData.execution_time_ms,
-        logged_at: new Date().toISOString(),
-        // 🔥 אל תכלול expires_at בלוג!
-      }
+      metadata: metadata
     });
 
     console.log('[Logger] ✅ Execution logged successfully');
