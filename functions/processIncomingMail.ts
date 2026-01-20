@@ -689,73 +689,61 @@ Deno.serve(async (req) => {
       }
     }
 
-    console.log(`[Automation] 🤖 Starting automation processing for ${savedMails.length} new mails`);
+    // 🔥 תיקון קריטי: אוטומציה ברקע - לא חוסמת את הסנכרון!
+    console.log(`[Automation] 🚀 Starting async automation for ${savedMails.length} new mails`);
+    
+    // הפעל אוטומציה ברקע
+    setTimeout(async () => {
+      let totalRulesExecuted = 0;
+      let totalRulesSuccess = 0;
+      let totalRulesFailed = 0;
 
-    // 🆕 לוגיקת אוטומציה מתוקנת - שימוש ב-base44.functions.invoke
-    let totalRulesExecuted = 0;
-    let totalRulesSuccess = 0;
-    let totalRulesFailed = 0;
-
-    for (const mail of savedMails) {
-      try {
-        console.log(`\n[Automation] 📧 Processing mail ID ${mail.id}: "${mail.subject}"`);
-        
-        const matchingRules = await findMatchingRules(mail, base44);
-        
-        if (matchingRules.length === 0) {
-          console.log(`[Automation] ⚠️ No matching rules for mail ${mail.id}`);
-          continue;
-        }
-        
-        console.log(`[Automation] 🎯 Found ${matchingRules.length} matching rule(s) for mail ${mail.id}`);
-        
-        for (const rule of matchingRules) {
-          try {
-            console.log(`[Automation] ▶️ Executing rule "${rule.name}" (ID: ${rule.id}) on mail ${mail.id}`);
-            
-            // 🆕 תיקון קריטי: שימוש ב-base44.functions.invoke
-            const automationResult = await base44.functions.invoke('executeAutomationRule', {
+      for (const mail of savedMails) {
+        try {
+          console.log(`[Automation] 📧 Processing mail ID ${mail.id}: "${mail.subject}"`);
+          
+          const matchingRules = await findMatchingRules(mail, base44);
+          
+          if (matchingRules.length === 0) {
+            console.log(`[Automation] ⚠️ No matching rules for mail ${mail.id}`);
+            continue;
+          }
+          
+          console.log(`[Automation] 🎯 Found ${matchingRules.length} matching rule(s) for mail ${mail.id}`);
+          
+          for (const rule of matchingRules) {
+            try {
+              console.log(`[Automation] ▶️ Executing rule "${rule.name}" (ID: ${rule.id}) on mail ${mail.id}`);
+              
+              const automationResult = await base44.functions.invoke('executeAutomationRule', {
                 mailId: mail.id,
                 ruleId: rule.id,
-                testMode: false  // false = ביצוע אמיתי!
-            });
-            
-            totalRulesExecuted++;
-            
-            if (automationResult.error) {
-              console.error(`[Automation] ❌ Rule "${rule.name}" failed for mail ${mail.id}:`, automationResult.error);
+                testMode: false
+              });
+              
+              totalRulesExecuted++;
+              
+              if (automationResult.error) {
+                console.error(`[Automation] ❌ Rule "${rule.name}" failed:`, automationResult.error);
+                totalRulesFailed++;
+              } else {
+                console.log(`[Automation] ✅ Rule "${rule.name}" executed successfully`);
+                totalRulesSuccess++;
+              }
+              
+            } catch (ruleError) {
+              console.error(`[Automation] ❌ Exception executing rule "${rule.name}":`, ruleError);
               totalRulesFailed++;
-            } else {
-              console.log(`[Automation] ✅ Rule "${rule.name}" executed successfully`);
-              console.log(`[Automation] Result:`, JSON.stringify(automationResult.data || automationResult));
-              totalRulesSuccess++;
             }
-            
-          } catch (ruleError) {
-            console.error(`[Automation] ❌ Exception executing rule "${rule.name}" on mail ${mail.id}:`, ruleError);
-            totalRulesFailed++;
           }
+          
+        } catch (error) {
+          console.error(`[Automation] ❌ Failed to process automation for mail ${mail.id}:`, error);
         }
-        
-      } catch (error) {
-        console.error(`[Automation] ❌ Failed to process automation for mail ${mail.id}:`, error);
       }
-    }
 
-    console.log(`\n[Automation] 📊 Automation Summary:`);
-    console.log(`  - New mails processed: ${savedMails.length}`);
-    console.log(`  - Rules executed: ${totalRulesExecuted}`);
-    console.log(`  - Successful: ${totalRulesSuccess}`);
-    console.log(`  - Failed: ${totalRulesFailed}`);
-
-    // 🆕 אזהרה אם שום חוק לא רץ
-    if (totalRulesExecuted === 0 && savedMails.length > 0) {
-      console.log(`\n⚠️ [ALERT] No rules executed despite ${savedMails.length} new mails!`);
-      console.log('Possible reasons:');
-      console.log('  1. No active rules in system');
-      console.log('  2. No rules matched the mails');
-      console.log('  3. findMatchingRules() failed silently');
-    }
+      console.log(`[Automation] 📊 Summary: Executed: ${totalRulesExecuted}, Success: ${totalRulesSuccess}, Failed: ${totalRulesFailed}`);
+    }, 0); // רץ מיד אבל לא חוסם!
 
     const syncMode = gmailSync?.sync_mode || 'unknown';
     console.log(`[Sync] ✅ COMPLETE - Saved ${savedMails.length} new mail(s) | Mode: ${syncMode}`);
@@ -767,11 +755,7 @@ Deno.serve(async (req) => {
         fetched: newEmails.length,
         sync_mode: syncMode,
         existing_in_db: existingMailItems.length,
-        automation: {
-          rules_executed: totalRulesExecuted,
-          success: totalRulesSuccess,
-          failed: totalRulesFailed
-        }
+        automation_started: savedMails.length > 0
       }), 
       { status: 200, headers }
     );
