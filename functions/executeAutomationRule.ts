@@ -447,24 +447,18 @@ Deno.serve(async (req) => {
           console.log('[Action] ⏸️ Pending approval');
         } else {
           // Send email via function
-          const supabaseUrl = Deno.env.get('SUPABASE_URL');
-          const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
-          
-          const emailResponse = await fetch(`${supabaseUrl}/functions/v1/sendEmail`, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${supabaseServiceKey}`
-            },
-            body: JSON.stringify(emailConfig)
-          });
-          
-          if (!emailResponse.ok) {
-            throw new Error(`sendEmail failed: ${await emailResponse.text()}`);
-          }
-          
-          results.push({ action: 'send_email', status: 'success', sent_to: to });
-          console.log('[Action] ✅ Email sent successfully');
+const emailResult = await base44.functions.invoke('sendEmail', {
+  to: emailConfig.to,
+  subject: emailConfig.subject,
+  body: emailConfig.body
+});
+
+if (emailResult.error) {
+  throw new Error(`sendEmail failed: ${emailResult.error}`);
+}
+
+results.push({ action: 'send_email', status: 'success', sent_to: to });
+console.log('[Action] ✅ Email sent successfully');
         }
       } else {
         results.push({ action: 'send_email', status: 'skipped', reason: 'no_recipients' });
