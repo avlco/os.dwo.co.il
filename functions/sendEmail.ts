@@ -63,15 +63,19 @@ Deno.serve(async (req) => {
         throw new Error('Failed to decrypt Gmail access token');
       }
 
-      // יצירת המייל ב-RFC 2822 format
-      const emailLines = [
-        `To: ${to}`,
-        `Subject: ${subject}`,
-        'Content-Type: text/html; charset=utf-8',
-        'MIME-Version: 1.0',
-        '',
-        body
-      ];
+     // קידוד הנושא ב-UTF-8 (RFC 2047)
+const subjectBase64 = btoa(unescape(encodeURIComponent(subject)));
+const encodedSubject = `=?UTF-8?B?${subjectBase64}?=`;
+
+// יצירת המייל ב-RFC 2822 format
+const emailLines = [
+  `To: ${to}`,
+  `Subject: ${encodedSubject}`,
+  'Content-Type: text/html; charset=utf-8',
+  'MIME-Version: 1.0',
+  '',
+  body
+];
 
       const emailContent = emailLines.join('\r\n');
 
