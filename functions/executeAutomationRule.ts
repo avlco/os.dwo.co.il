@@ -11,7 +11,7 @@ const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? '';
 const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
 
 // ========================================
-// ROLLBACK MANAGER (משולב)
+// ROLLBACK MANAGER
 // ========================================
 class RollbackManager {
   constructor(supabase) {
@@ -76,7 +76,7 @@ class RollbackManager {
 }
 
 // ========================================
-// LOGGING HELPERS (משתמש ב-Activity)
+// LOGGING HELPERS
 // ========================================
 async function logAutomationExecution(supabase, logData) {
   try {
@@ -152,18 +152,19 @@ async function updateRuleStats(supabase, ruleId, success) {
 // RECIPIENT RESOLUTION
 // ========================================
 
-/**
- * ממיר רשימת recipients (client, lawyer) לכתובות מייל אמיתיות
- */
 async function resolveRecipients(recipients, context, supabase) {
   const emails = [];
   
   console.log('[AutoRule] 📬 Resolving recipients:', recipients);
   
+  if (!Array.isArray(recipients)) {
+      console.warn('[AutoRule] Recipients is not an array');
+      return [];
+  }
+
   for (const recipient of recipients) {
     try {
       if (recipient === 'client') {
-        // שלוף מייל של הלקוח
         if (context.clientId) {
           const { data: client } = await supabase
             .from('Client')
@@ -174,16 +175,9 @@ async function resolveRecipients(recipients, context, supabase) {
           if (client?.email) {
             emails.push(client.email);
             console.log(`[AutoRule] ✅ Client email: ${client.email}`);
-          } else {
-            console.log('[AutoRule] ⚠️ Client has no email');
           }
-        } else {
-          console.log('[AutoRule] ⚠️ No clientId to resolve client email');
         }
-      }
-      
-      if (recipient === 'lawyer') {
-        // שלוף מייל של עו"ד אחראי על התיק
+      } else if (recipient === 'lawyer') {
         if (context.caseId) {
           const { data: caseData } = await supabase
             .from('Case')
@@ -202,26 +196,17 @@ async function resolveRecipients(recipients, context, supabase) {
               emails.push(lawyer.email);
               console.log(`[AutoRule] ✅ Lawyer email: ${lawyer.email}`);
             }
-          } else {
-            console.log('[AutoRule] ⚠️ Case has no assigned lawyer');
           }
-        } else {
-          console.log('[AutoRule] ⚠️ No caseId to resolve lawyer email');
         }
-      }
-      
-      // תמיכה בכתובת מייל ישירה
-      if (recipient.includes('@')) {
+      } else if (recipient && recipient.includes('@')) {
         emails.push(recipient);
         console.log(`[AutoRule] ✅ Direct email: ${recipient}`);
       }
-      
     } catch (error) {
       console.error(`[AutoRule] ❌ Failed to resolve recipient "${recipient}":`, error.message);
     }
   }
   
-  // הסר כפילויות
   const uniqueEmails = [...new Set(emails)];
   console.log(`[AutoRule] 📧 Resolved ${uniqueEmails.length} email(s):`, uniqueEmails);
   
@@ -241,8 +226,13 @@ function extractFromMail(mail, config) {
   if (!text) return null;
   
   if (config.regex) {
-    const match = text.match(new RegExp(config.regex));
-    return match ? match[1] || match[0] : null;
+    try {
+        const match = text.match(new RegExp(config.regex));
+        return match ? match[1] || match[0] : null;
+    } catch (e) {
+        console.error("Regex error:", e);
+        return null;
+    }
   }
   
   if (config.anchor_text) {
@@ -250,7 +240,8 @@ function extractFromMail(mail, config) {
     if (index === -1) return null;
     
     const afterAnchor = text.substring(index + config.anchor_text.length).trim();
-    const words = afterAnchor.split(/\s+/);
+    // Split by whitespace or comma/semicolon to get the first token
+    const words = afterAnchor.split(/[\s,;]+/);
     return words[0] || null;
   }
   
@@ -272,12 +263,17 @@ async function replaceTokens(template, context, supabase) {
       .from('Case')
       .select('case_number, title, case_type, application_number')
       .eq('id', context.caseId)
-      .maybeSingle(); // תיקון כאן
+      .maybeSingle(); // FIX: Prevent 400 error
     
-    result = result.replace(/{Case_No}/g, caseData?.case_number || '');
-    result = result.replace(/{Case_Title}/g, caseData?.title || '');
-    result = result.replace(/{Case_Type}/g, caseData?.case_type || '');
-    result = result.replace(/{Official_No}/g, caseData?.application_number || ''); // תיקון כאן
+    if (caseData) {
+        result = result.replace(/{Case_No}/g, caseData.case_number || '');
+        result = result.replace(/{Case_Title}/g, caseData.title || '');
+        result = result.replace(/{Case_Type}/g, caseData.case_type || '');
+        result = result.replace(/{Official_No}/g, caseData.application_number || '');
+    } else {
+        // Clear placeholders if case not found but ID exists (edge case)
+        result = result.replace(/{Case_No}|{Case_Title}|{Case_Type}|{Official_No}/g, '');
+    }
   }
   
   if (context.clientId) {
@@ -285,11 +281,18 @@ async function replaceTokens(template, context, supabase) {
       .from('Client')
       .select('name, email')
       .eq('id', context.clientId)
-      .maybeSingle(); // תיקון כאן
+      .maybeSingle();
     
-    result = result.replace(/{Client_Name}/g, clientData?.name || '');
-    result = result.replace(/{Client_Email}/g, clientData?.email || '');
+    if (clientData) {
+        result = result.replace(/{Client_Name}/g, clientData.name || '');
+        result = result.replace(/{Client_Email}/g, clientData.email || '');
+    } else {
+        result = result.replace(/{Client_Name}|{Client_Email}/g, '');
+    }
   }
+  
+  // Clean up any remaining tokens
+  result = result.replace(/{[^}]+}/g, '');
   
   return result;
 }
@@ -301,15 +304,16 @@ function calculateDueDate(offsetDays) {
 }
 
 function calculateEventDate(baseDate, timing) {
-  const date = new Date(baseDate);
-  const offset = timing.timing_offset || 0;
-  const unit = timing.timing_unit || 'days';
-  const direction = timing.timing_direction || 'after';
+  const date = new Date(baseDate || Date.now());
+  const offset = timing?.timing_offset || 0;
+  const unit = timing?.timing_unit || 'days';
+  const direction = timing?.timing_direction || 'after';
   
   let daysToAdd = unit === 'weeks' ? offset * 7 : offset;
   if (direction === 'before') daysToAdd = -daysToAdd;
   
   date.setDate(date.getDate() + daysToAdd);
+  // Default to 10:00 AM
   date.setHours(10, 0, 0, 0);
   
   return date;
@@ -344,21 +348,29 @@ async function createApprovalActivity(supabase, data) {
 
   if (error) throw error;
   
-  // שלח מייל למאשר
-  await supabase.functions.invoke('sendEmail', {
-    body: {
-      to: data.approver_email,
-      subject: `בקשת אישור: ${data.action_type}`,
-      body: `
-        <div dir="rtl">
-          <h2>בקשת אישור חדשה</h2>
-          <p><strong>סוג פעולה:</strong> ${data.action_type}</p>
-          <p><strong>מייל מקורי:</strong> ${data.mail_subject}</p>
-          <p><strong>שולח:</strong> ${data.mail_from}</p>
-        </div>
-      `,
-    },
-  });
+  // Try sending email notification to approver
+  try {
+      if (data.approver_email) {
+          await supabase.functions.invoke('sendEmail', {
+            body: {
+              to: data.approver_email,
+              subject: `נדרש אישור: ${data.action_type}`,
+              body: `
+                <div dir="rtl" style="font-family: Arial, sans-serif;">
+                  <h2>בקשת אישור חדשה במערכת IPMS</h2>
+                  <p><strong>סוג פעולה:</strong> ${data.action_type}</p>
+                  <p><strong>מייל מקורי:</strong> ${data.mail_subject}</p>
+                  <p><strong>שולח:</strong> ${data.mail_from}</p>
+                  <p>אנא היכנס למערכת כדי לאשר או לדחות את הפעולה.</p>
+                </div>
+              `,
+            },
+          });
+      }
+  } catch (e) {
+      console.warn("Failed to send approval email notification:", e);
+      // Don't fail the transaction just because email failed
+  }
 
   return activity;
 }
@@ -379,9 +391,10 @@ serve(async (req) => {
   try {
     const authHeader = req.headers.get('Authorization') || '';
     
+    // Create client with environment variables
     const supabaseClient = createClient(
       supabaseUrl,
-      Deno.env.get('SUPABASE_ANON_KEY') ?? '',
+      supabaseServiceKey,
       {
         global: {
           headers: { Authorization: authHeader },
@@ -399,7 +412,7 @@ serve(async (req) => {
 
     console.log(`[AutoRule] 🚀 Starting: Mail ${mailId} + Rule ${ruleId}${testMode ? ' [TEST]' : ''}`);
 
-    // שלוף מייל
+    // Fetch Mail
     const { data: mail, error: mailError } = await supabaseClient
       .from('Mail')
       .select('*')
@@ -411,7 +424,7 @@ serve(async (req) => {
     }
     mailData = mail;
 
-    // שלוף חוק
+    // Fetch Rule
     const { data: rule, error: ruleError } = await supabaseClient
       .from('AutomationRule')
       .select('*')
@@ -423,46 +436,62 @@ serve(async (req) => {
     }
     ruleData = rule;
 
-    console.log(`[AutoRule] 📧 Mail: "${mail.subject}"`);
-    console.log(`[AutoRule] 📋 Rule: "${rule.name}"`);
-
-    // חילוץ מזהים
+    // --- MAP PHASE (Extraction & Linking) ---
     let caseId = null;
     let clientId = null;
+    let extractedInfo = {};
 
     if (rule.map_config && Array.isArray(rule.map_config)) {
       for (const mapRule of rule.map_config) {
         const extracted = extractFromMail(mail, mapRule);
         
         if (extracted) {
-          console.log(`[AutoRule] ✅ Extracted: "${extracted}"`);
+          console.log(`[AutoRule] ✅ Extracted: "${extracted}" for target: ${mapRule.target_field}`);
+          extractedInfo[mapRule.target_field] = extracted;
           
+          // Case Number Link
           if (mapRule.target_field === 'case_no') {
             const { data: caseData } = await supabaseClient
               .from('Case')
               .select('id, client_id, case_number')
               .eq('case_number', extracted)
-              .maybeSingle(); // תיקון כאן
+              .maybeSingle();
             
             if (caseData) {
               caseId = caseData.id;
               clientId = caseData.client_id;
-              console.log(`[AutoRule] 🎯 Matched Case: ${caseData.case_number}`);
+              console.log(`[AutoRule] 🎯 Matched Case by Number: ${caseData.case_number}`);
             }
           }
           
-          // תיקון: חיפוש ב-application_number (במקום official_number) ושימוש ב-maybeSingle
+          // Official/Application Number Link
           if (mapRule.target_field === 'official_no' && !caseId) {
+            // FIX: Search in application_number column
             const { data: caseData } = await supabaseClient
               .from('Case')
-              .select('id, client_id')
-              .eq('application_number', extracted) // תיקון כאן
-              .maybeSingle(); // תיקון כאן
+              .select('id, client_id, application_number')
+              .eq('application_number', extracted)
+              .maybeSingle();
             
             if (caseData) {
               caseId = caseData.id;
               clientId = caseData.client_id;
-              console.log(`[AutoRule] 🎯 Matched Official No: ${extracted}`);
+              console.log(`[AutoRule] 🎯 Matched Case by App Number: ${extracted}`);
+            }
+          }
+
+          // Client Reference Link
+          if (mapRule.target_field === 'client_ref' && !caseId) {
+            const { data: caseData } = await supabaseClient
+               .from('Case')
+               .select('id, client_id')
+               .eq('client_reference', extracted)
+               .maybeSingle();
+
+            if (caseData) {
+               caseId = caseData.id;
+               clientId = caseData.client_id;
+               console.log(`[AutoRule] 🎯 Matched Case by Client Ref: ${extracted}`);
             }
           }
         }
@@ -471,66 +500,57 @@ serve(async (req) => {
 
     const { data: userData } = await supabaseClient.auth.getUser();
     const user = userData?.user;
-    const userId = user?.id || mail.user_id;
 
     const results = [];
     const actions = rule.action_bundle || {};
 
     // ========================================
-    // ביצוע פעולות
+    // ACTION DISPATCH
     // ========================================
 
     // 1️⃣ SEND EMAIL
     if (actions.send_email?.enabled) {
       console.log('[AutoRule] 📧 Processing: send_email');
       
-      if (testMode) {
-        results.push({ action: 'send_email', status: 'test_skipped' });
-      } else {
-        const recipientEmails = await resolveRecipients(
-          actions.send_email.recipients || [], 
-          { caseId, clientId }, 
-          supabaseClient
-        );
-        
-        if (recipientEmails.length === 0) {
-          console.log('[AutoRule] ⚠️ No valid recipients found');
-          results.push({ action: 'send_email', status: 'skipped', reason: 'no_recipients' });
-        } else {
-          const emailConfig = {
-            to: recipientEmails.join(', '),
-            subject: await replaceTokens(actions.send_email.subject_template || '', { mail, caseId, clientId }, supabaseClient),
-            body: await replaceTokens(actions.send_email.body_template || '', { mail, caseId, clientId }, supabaseClient),
-          };
+      const recipientEmails = await resolveRecipients(
+        actions.send_email.recipients || [], 
+        { caseId, clientId }, 
+        supabaseClient
+      );
+      
+      const emailConfig = {
+        to: recipientEmails.join(', '),
+        subject: await replaceTokens(actions.send_email.subject_template || '', { mail, caseId, clientId }, supabaseClient),
+        body: await replaceTokens(actions.send_email.body_template || '', { mail, caseId, clientId }, supabaseClient),
+      };
 
-          if (rule.require_approval) {
-            const activity = await createApprovalActivity(supabaseClient, {
-              automation_rule_id: ruleId,
-              mail_id: mailId,
-              case_id: caseId,
-              client_id: clientId,
-              action_type: 'send_email',
-              action_config: emailConfig,
-              approver_email: rule.approver_email,
-              requested_by: user?.email || 'system',
-              mail_subject: mail.subject,
-              mail_from: mail.sender_email,
-            });
-            
-            rollbackManager.register({ type: 'approval', id: activity.id });
-            results.push({ action: 'send_email', status: 'pending_approval', activityId: activity.id });
-          } else {
-            try {
-              const { error } = await supabaseClient.functions.invoke('sendEmail', {
-                body: emailConfig,
-              });
-              
-              if (error) throw new Error(`send_email failed: ${error.message}`);
-              
-              results.push({ action: 'send_email', status: 'success', to: emailConfig.to });
-            } catch (emailError) {
-              results.push({ action: 'send_email', status: 'failed', error: emailError.message });
-            }
+      if (recipientEmails.length === 0) {
+          results.push({ action: 'send_email', status: 'skipped', reason: 'no_recipients' });
+      } else if (testMode) {
+          results.push({ action: 'send_email', status: 'test_skipped', data: emailConfig });
+      } else {
+        if (rule.require_approval) {
+          const activity = await createApprovalActivity(supabaseClient, {
+            automation_rule_id: ruleId,
+            mail_id: mailId,
+            case_id: caseId,
+            client_id: clientId,
+            action_type: 'send_email',
+            action_config: emailConfig,
+            approver_email: rule.approver_email,
+            requested_by: user?.email || 'system',
+            mail_subject: mail.subject,
+            mail_from: mail.sender_email,
+          });
+          rollbackManager.register({ type: 'approval', id: activity.id });
+          results.push({ action: 'send_email', status: 'pending_approval', activityId: activity.id });
+        } else {
+          try {
+            const { error } = await supabaseClient.functions.invoke('sendEmail', { body: emailConfig });
+            if (error) throw new Error(`send_email failed: ${error.message}`);
+            results.push({ action: 'send_email', status: 'success', to: emailConfig.to });
+          } catch (emailError) {
+            results.push({ action: 'send_email', status: 'failed', error: emailError.message });
           }
         }
       }
@@ -540,19 +560,20 @@ serve(async (req) => {
     if (actions.create_task?.enabled) {
       console.log('[AutoRule] 📝 Processing: create_task');
       
-      if (testMode) {
-        results.push({ action: 'create_task', status: 'test_skipped' });
-      } else {
-        const taskConfig = {
-          title: await replaceTokens(actions.create_task.title, { mail, caseId, clientId }, supabaseClient),
-          description: await replaceTokens(actions.create_task.description, { mail, caseId, clientId }, supabaseClient),
-          case_id: caseId,
-          due_date: calculateDueDate(actions.create_task.due_offset_days),
-          assigned_to: actions.create_task.assigned_to,
-          priority: actions.create_task.priority || 'medium',
-          status: 'pending',
-        };
+      const taskConfig = {
+        title: await replaceTokens(actions.create_task.title, { mail, caseId, clientId }, supabaseClient),
+        description: await replaceTokens(actions.create_task.description, { mail, caseId, clientId }, supabaseClient),
+        case_id: caseId,
+        client_id: clientId,
+        due_date: calculateDueDate(actions.create_task.due_offset_days),
+        assigned_to: actions.create_task.assigned_to,
+        priority: actions.create_task.priority || 'medium',
+        status: 'pending',
+      };
 
+      if (testMode) {
+        results.push({ action: 'create_task', status: 'test_skipped', data: taskConfig });
+      } else {
         if (rule.require_approval) {
           const activity = await createApprovalActivity(supabaseClient, {
             automation_rule_id: ruleId,
@@ -566,18 +587,11 @@ serve(async (req) => {
             mail_subject: mail.subject,
             mail_from: mail.sender_email,
           });
-          
           rollbackManager.register({ type: 'approval', id: activity.id });
           results.push({ action: 'create_task', status: 'pending_approval', activityId: activity.id });
         } else {
-          const { data: task, error } = await supabaseClient
-            .from('Task')
-            .insert(taskConfig)
-            .select()
-            .single();
-          
+          const { data: task, error } = await supabaseClient.from('Task').insert(taskConfig).select().single();
           if (error) throw new Error(`create_task failed: ${error.message}`);
-          
           rollbackManager.register({ type: 'create_task', id: task.id });
           results.push({ action: 'create_task', status: 'success', task_id: task.id });
         }
@@ -588,25 +602,26 @@ serve(async (req) => {
     if (actions.billing?.enabled) {
       console.log('[AutoRule] 💰 Processing: billing');
       
+      let hourlyRate = actions.billing.hourly_rate || 800;
+      if (caseId) {
+        const { data: caseData } = await supabaseClient.from('Case').select('hourly_rate').eq('id', caseId).maybeSingle();
+        if (caseData?.hourly_rate) hourlyRate = caseData.hourly_rate;
+      }
+
+      const totalAmount = (actions.billing.hours || 0) * hourlyRate;
+      const billingConfig = {
+          case_id: caseId,
+          description: await replaceTokens(actions.billing.description_template, { mail, caseId, clientId }, supabaseClient),
+          hours: actions.billing.hours,
+          hourly_rate: hourlyRate,
+          total_amount: totalAmount,
+          date: new Date().toISOString().split('T')[0],
+          billable: true,
+      };
+
       if (testMode) {
-        results.push({ action: 'billing', status: 'test_skipped' });
+        results.push({ action: 'billing', status: 'test_skipped', data: billingConfig });
       } else {
-        let hourlyRate = actions.billing.hourly_rate || 800;
-        
-        if (caseId) {
-          const { data: caseData } = await supabaseClient
-            .from('Case')
-            .select('hourly_rate')
-            .eq('id', caseId)
-            .maybeSingle(); // תיקון כאן
-          
-          if (caseData?.hourly_rate) {
-            hourlyRate = caseData.hourly_rate;
-          }
-        }
-
-        const totalAmount = (actions.billing.hours || 0) * hourlyRate;
-
         if (rule.require_approval) {
           const activity = await createApprovalActivity(supabaseClient, {
             automation_rule_id: ruleId,
@@ -614,46 +629,32 @@ serve(async (req) => {
             case_id: caseId,
             client_id: clientId,
             action_type: 'billing',
-            action_config: { hours: actions.billing.hours, hourly_rate: hourlyRate, totalAmount },
+            action_config: billingConfig,
             approver_email: rule.approver_email,
             requested_by: user?.email || 'system',
             mail_subject: mail.subject,
             mail_from: mail.sender_email,
           });
-          
           rollbackManager.register({ type: 'approval', id: activity.id });
           results.push({ action: 'billing', status: 'pending_approval', activityId: activity.id });
         } else {
-          const { data: timeEntry, error } = await supabaseClient
-            .from('TimeEntry')
-            .insert({
-              case_id: caseId,
-              description: await replaceTokens(actions.billing.description_template, { mail, caseId, clientId }, supabaseClient),
-              hours: actions.billing.hours,
-              hourly_rate: hourlyRate,
-              total_amount: totalAmount,
-              date: new Date().toISOString().split('T')[0],
-              billable: true,
-            })
-            .select()
-            .single();
-          
+          const { data: timeEntry, error } = await supabaseClient.from('TimeEntry').insert(billingConfig).select().single();
           if (error) throw new Error(`billing failed: ${error.message}`);
-          
           rollbackManager.register({ type: 'billing', id: timeEntry.id });
           results.push({ action: 'billing', status: 'success', totalAmount });
         }
       }
     }
 
-    // 4️⃣ SAVE FILE
+    // 4️⃣ SAVE FILE (Dropbox)
     if (actions.save_file?.enabled) {
       console.log('[AutoRule] 🗂️ Processing: save_file');
       
       if (!mail.attachments || mail.attachments.length === 0) {
         results.push({ action: 'save_file', status: 'skipped', reason: 'no_attachments' });
       } else if (testMode) {
-        results.push({ action: 'save_file', status: 'test_skipped' });
+        const folderPath = await replaceTokens(actions.save_file.path_template, { mail, caseId, clientId }, supabaseClient);
+        results.push({ action: 'save_file', status: 'test_skipped', data: { path: folderPath, fileCount: mail.attachments.length } });
       } else {
         const folderPath = await replaceTokens(actions.save_file.path_template, { mail, caseId, clientId }, supabaseClient);
         
@@ -671,10 +672,7 @@ serve(async (req) => {
             })
           });
           
-          if (!dropboxResult.ok) {
-            throw new Error(await dropboxResult.text());
-          }
-          
+          if (!dropboxResult.ok) throw new Error(await dropboxResult.text());
           results.push({ action: 'save_file', status: 'success', uploaded: mail.attachments.length });
         } catch (error) {
           results.push({ action: 'save_file', status: 'failed', error: error.message });
@@ -685,23 +683,14 @@ serve(async (req) => {
     // 5️⃣ CALENDAR EVENT
     if (actions.calendar_event?.enabled) {
       console.log('[AutoRule] 📅 Processing: calendar_event');
-      
+      const eventTitle = await replaceTokens(actions.calendar_event.title_template, { mail, caseId, clientId }, supabaseClient);
+      const eventDate = calculateEventDate(mail.received_at, actions.calendar_event);
+
       if (testMode) {
-        results.push({ action: 'calendar_event', status: 'test_skipped' });
+        results.push({ action: 'calendar_event', status: 'test_skipped', data: { title: eventTitle, date: eventDate } });
       } else {
-        try {
-          const eventTitle = await replaceTokens(actions.calendar_event.title_template, { mail, caseId, clientId }, supabaseClient);
-          const eventDate = calculateEventDate(mail.received_at, actions.calendar_event);
-          
-          // TODO: Implement Google Calendar API call
-          results.push({ 
-            action: 'calendar_event', 
-            status: 'success',
-            note: 'Calendar integration pending'
-          });
-        } catch (error) {
-          results.push({ action: 'calendar_event', status: 'failed', error: error.message });
-        }
+        // Placeholder for calendar logic
+        results.push({ action: 'calendar_event', status: 'success', note: 'Calendar integration pending' });
       }
     }
 
@@ -709,42 +698,36 @@ serve(async (req) => {
     if (actions.create_alert?.enabled) {
       console.log('[AutoRule] 🚨 Processing: create_alert');
       
+      const alertMessage = await replaceTokens(actions.create_alert.message_template, { mail, caseId, clientId }, supabaseClient);
+      const alertDate = calculateEventDate(mail.received_at, actions.create_alert);
+      const alertConfig = {
+          activity_type: actions.create_alert.alert_type || 'reminder',
+          case_id: caseId,
+          status: 'pending',
+          description: alertMessage,
+          due_date: alertDate.toISOString().split('T')[0],
+          metadata: {
+            mail_id: mailId,
+            automation_rule_id: ruleId,
+            recipients: actions.create_alert.recipients || [],
+          }
+      };
+
       if (testMode) {
-        results.push({ action: 'create_alert', status: 'test_skipped' });
+        results.push({ action: 'create_alert', status: 'test_skipped', data: alertConfig });
       } else {
-        const alertMessage = await replaceTokens(actions.create_alert.message_template, { mail, caseId, clientId }, supabaseClient);
-        const alertDate = calculateEventDate(mail.received_at, actions.create_alert);
-        
-        const { data: activity, error } = await supabaseClient
-          .from('Activity')
-          .insert({
-            activity_type: actions.create_alert.alert_type || 'reminder',
-            case_id: caseId,
-            status: 'pending',
-            description: alertMessage,
-            due_date: alertDate.toISOString().split('T')[0],
-            metadata: {
-              mail_id: mailId,
-              automation_rule_id: ruleId,
-              recipients: actions.create_alert.recipients || [],
-            }
-          })
-          .select()
-          .single();
-        
+        const { data: activity, error } = await supabaseClient.from('Activity').insert(alertConfig).select().single();
         if (error) throw new Error(`create_alert failed: ${error.message}`);
-        
         rollbackManager.register({ type: 'create_alert', id: activity.id });
         results.push({ action: 'create_alert', status: 'success', activity_id: activity.id });
       }
     }
 
     // ========================================
-    // סיכום
+    // SUMMARY
     // ========================================
     
     const executionTime = Date.now() - startTime;
-    
     const actionsSummary = {
       total: results.length,
       success: results.filter(r => r.status === 'success').length,
@@ -754,6 +737,9 @@ serve(async (req) => {
       skipped: results.filter(r => r.status === 'skipped').length,
     };
 
+    console.log(`[AutoRule] 🏁 Complete in ${executionTime}ms. Summary:`, actionsSummary);
+
+    // Save Log if not test mode
     if (!testMode) {
       await logAutomationExecution(supabaseClient, {
         rule_id: ruleId,
@@ -763,9 +749,8 @@ serve(async (req) => {
         execution_status: 'completed',
         actions_summary: results,
         execution_time_ms: executionTime,
-        metadata: { case_id: caseId, client_id: clientId },
+        metadata: { case_id: caseId, client_id: clientId, extracted: extractedInfo },
       });
-      
       await updateRuleStats(supabaseClient, ruleId, actionsSummary.failed === 0);
     }
 
@@ -776,6 +761,7 @@ serve(async (req) => {
         summary: actionsSummary,
         execution_time_ms: executionTime,
         test_mode: testMode,
+        extracted_info: extractedInfo
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
@@ -783,20 +769,19 @@ serve(async (req) => {
   } catch (error) {
     console.error('[AutoRule] ❌ Error:', error);
     
-    const executionTime = Date.now() - startTime;
-    
-    if (rollbackManager) {
-      try {
-        await rollbackManager.rollbackAll();
-      } catch (rollbackError) {
-        console.error('[AutoRule] ❌ Rollback failed:', rollbackError);
-      }
+    // Rollback only if not test mode
+    if (rollbackManager && !req.json().then(b => b.testMode).catch(() => false)) {
+      try { await rollbackManager.rollbackAll(); } catch (e) { console.error('Rollback failed', e); }
     }
     
+    const executionTime = Date.now() - startTime;
+    
+    // Log failure
     if (mailData && ruleData) {
       try {
-        const supabaseClient = createClient(supabaseUrl, supabaseServiceKey);
-        await logAutomationExecution(supabaseClient, {
+        // Re-create client for logging (in case the error was with the client itself)
+        const supabase = createClient(supabaseUrl, supabaseServiceKey);
+        await logAutomationExecution(supabase, {
           rule_id: ruleData.id,
           rule_name: ruleData.name,
           mail_id: mailData.id,
@@ -807,21 +792,12 @@ serve(async (req) => {
           error_message: error.message,
           metadata: {},
         });
-        await updateRuleStats(supabaseClient, ruleData.id, false);
-      } catch (logError) {
-        console.error('[AutoRule] Failed to log error:', logError);
-      }
+      } catch (logError) { console.error('Logging failed', logError); }
     }
     
     return new Response(
-      JSON.stringify({ 
-        error: error.message,
-        rolled_back: true,
-      }),
-      { 
-        status: 400, 
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
-      }
+      JSON.stringify({ error: error.message, rolled_back: true }),
+      { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }
 });
