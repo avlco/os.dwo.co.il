@@ -566,13 +566,14 @@ let description = actions.billing.descriptiontemplate
 
 const billingData = {
   case_id: caseId,
+  client_id: clientId,
   description: description,
   hours: actions.billing.hours,
   rate: rate,
   date_worked: new Date().toISOString().split('T')[0],
   is_billable: true,
   billed: false,
-  user_email: mail.sender_email, // ⭐ עורך הדין ששלח את המייל
+  user_email: mail.sender_email?.match(/<(.+?)>/)?.[1] || mail.sender_email,
   task_id: null // יתמלא ידנית אם צריך
 };
 
