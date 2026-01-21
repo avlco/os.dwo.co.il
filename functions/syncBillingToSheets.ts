@@ -1,8 +1,39 @@
 // @ts-nocheck
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.6';
 
-const SHEET_ID = 'YOUR_GOOGLE_SHEET_ID_HERE'; // ⭐ שים את ה-ID האמיתי!
-const API_KEY = Deno.env.get('GOOGLE_SHEETS_API_KEY');
+const SHEET_ID = '1jmCeZQgJHIiCPy9HZo0XGOEl_xQyb23DPmhNehdrV54'; // ⭐ ה-ID שלך!
+
+// 🔐 פונקציות פענוח
+async function getCryptoKey() {
+  const envKey = Deno.env.get('ENCRYPTION_KEY');
+  if (!envKey) throw new Error('ENCRYPTION_KEY is missing');
+  
+  const encoder = new TextEncoder();
+  const keyString = envKey.padEnd(32, '0').slice(0, 32);
+  const keyBuffer = encoder.encode(keyString);
+  
+  return await crypto.subtle.importKey(
+    'raw',
+    keyBuffer,
+    { name: 'AES-GCM' },
+    false,
+    ['encrypt', 'decrypt']
+  );
+}
+
+async function decrypt(text) {
+  if (!text) return null;
+  const parts = text.split(':');
+  if (parts.length !== 2) return text;
+  
+  const [ivHex, encryptedHex] = parts;
+  const key = await getCryptoKey();
+  const iv = new Uint8Array(ivHex.match(/.{1,2}/g).map(byte => parseInt(byte, 16)));
+  const encrypted = new Uint8Array(encryptedHex.match(/.{1,2}/g).map(byte => parseInt(byte, 16)));
+  const decrypted = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, encrypted);
+  
+  return new TextDecoder().decode(decrypted);
+}
 
 Deno.serve(async (req) => {
   const corsHeaders = {
@@ -27,10 +58,26 @@ Deno.serve(async (req) => {
       throw new Error('timeEntryId is required');
     }
 
-    // ⭐ בדוק שיש API Key
-    if (!API_KEY) {
-      throw new Error('GOOGLE_SHEETS_API_KEY is missing in environment variables');
+    // 🔑 שלוף Google OAuth token (במקום API Key!)
+    console.log('[SheetsSync] 🔍 Looking for Google OAuth connection...');
+    const gmailConnections = await base44.entities.IntegrationConnection.filter({
+      provider: 'google',
+      isactive: true
+    });
+    
+    if (!gmailConnections || gmailConnections.length === 0) {
+      throw new Error('No active Google connection found. Please connect via Settings.');
     }
+    
+    const connection = gmailConnections[0];
+    console.log('[SheetsSync] ✅ Google connection found');
+    
+    // פענח את ה-access token
+    const accessToken = await decrypt(connection.access_token_encrypted);
+    if (!accessToken) {
+      throw new Error('Failed to decrypt Google access token');
+    }
+    console.log('[SheetsSync] ✅ Access token decrypted');
 
     // שלוף TimeEntry
     const timeEntry = await base44.entities.TimeEntry.get(timeEntryId);
@@ -65,7 +112,7 @@ Deno.serve(async (req) => {
     let userEmail = timeEntry.user_email || '';
     const emailMatch = userEmail.match(/<(.+?)>/);
     if (emailMatch) {
-      userEmail = emailMatch[1]; // חלץ רק את האימייל
+      userEmail = emailMatch[1];
     }
 
     // שלוף User (עו"ד)
@@ -82,28 +129,29 @@ Deno.serve(async (req) => {
 
     // 🔥 בנה שורה
     const row = [
-      lawyer?.name || userEmail || '', // שם עו״ד
-      client ? `${client.id} - ${client.name}` : '', // לקוח
-      caseData?.case_number || '', // מס׳ תיק
-      timeEntry.date_worked || new Date().toISOString().split('T')[0], // תאריך
-      timeEntry.hours || 0, // סה"כ שעות
-      'שעות', // יחידה
-      timeEntry.description || '', // פירוט
-      (timeEntry.hours || 0) * (timeEntry.rate || 0), // סה"כ לחיוב
-      '₪ + מע"מ', // מטבע
-      timeEntry.invoice_id || '', // חשבון עסקה
-      '' // הערות
+      lawyer?.name || userEmail || '',
+      client ? `${client.id} - ${client.name}` : '',
+      caseData?.case_number || '',
+      timeEntry.date_worked || new Date().toISOString().split('T')[0],
+      timeEntry.hours || 0,
+      'שעות',
+      timeEntry.description || '',
+      (timeEntry.hours || 0) * (timeEntry.rate || 0),
+      '₪ + מע"מ',
+      timeEntry.invoice_id || '',
+      ''
     ];
 
     console.log('[SheetsSync] Row data:', row);
 
-    // שלח לגוגל
-    const sheetsUrl = `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/A:K:append?valueInputOption=USER_ENTERED&key=${API_KEY}`;
+    // 🎯 שלח לגוגל עם OAuth token (לא API Key!)
+    const sheetsUrl = `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/A:K:append?valueInputOption=USER_ENTERED`;
     
-    console.log('[SheetsSync] Sending to Google Sheets...');
+    console.log('[SheetsSync] Sending to Google Sheets with OAuth...');
     const response = await fetch(sheetsUrl, {
       method: 'POST',
       headers: {
+        'Authorization': `Bearer ${accessToken}`, // ⭐ זה ההבדל!
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
