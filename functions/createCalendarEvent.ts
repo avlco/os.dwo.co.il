@@ -7,6 +7,30 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+async function getCryptoKey() {
+  const envKey = Deno.env.get("ENCRYPTION_KEY");
+  if (!envKey) throw new Error("ENCRYPTION_KEY is missing");
+  const encoder = new TextEncoder();
+  const keyString = envKey.padEnd(32, '0').slice(0, 32);
+  const keyBuffer = encoder.encode(keyString);
+  return await crypto.subtle.importKey("raw", keyBuffer, { name: "AES-GCM" }, false, ["encrypt", "decrypt"]);
+}
+
+async function decrypt(text) {
+  if (!text) return null;
+  const parts = text.split(':');
+  if (parts.length !== 2) return text;
+
+  const [ivHex, encryptedHex] = parts;
+  const key = await getCryptoKey();
+
+  const iv = new Uint8Array(ivHex.match(/.{1,2}/g).map(byte => parseInt(byte, 16)));
+  const encrypted = new Uint8Array(encryptedHex.match(/.{1,2}/g).map(byte => parseInt(byte, 16)));
+
+  const decrypted = await crypto.subtle.decrypt({ name: "AES-GCM", iv }, key, encrypted);
+  return new TextDecoder().decode(decrypted);
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
@@ -20,23 +44,36 @@ Deno.serve(async (req) => {
       title, 
       description, 
       start_date, 
-      duration_minutes = 60,  // default 1 שעה
+      duration_minutes = 60,
       case_id, 
       client_id,
-      reminder_minutes = 1440  // 24 שעות לפני
+      reminder_minutes = 1440
     } = body;
 
-    // שלוף Gmail integration (כמו ב-syncBillingToSheets)
-    const gmailIntegration = await base44.integrations.Gmail.get();
-    if (!gmailIntegration?.access_token) {
-      throw new Error('No Gmail integration found');
+    console.log('[Calendar] Creating event:', title);
+
+    // Get Google OAuth connection (same as syncBillingToSheets)
+    const gmailConnections = await base44.entities.IntegrationConnection.filter({
+      provider: 'google',
+      is_active: true
+    });
+    
+    if (!gmailConnections || gmailConnections.length === 0) {
+      throw new Error('No active Google connection found.');
+    }
+    
+    const connection = gmailConnections[0];
+    const accessToken = await decrypt(connection.access_token_encrypted);
+
+    if (!accessToken) {
+      throw new Error('Failed to decrypt access token');
     }
 
-    // חשב end_date
+    // Calculate end_date
     const start = new Date(start_date);
     const end = new Date(start.getTime() + duration_minutes * 60 * 1000);
 
-    // בנה event
+    // Build event
     const event = {
       summary: title,
       description: description || '',
@@ -56,13 +93,15 @@ Deno.serve(async (req) => {
       }
     };
 
-    // שלח ל-Google Calendar API
+    console.log('[Calendar] Sending to Google API...');
+
+    // Send to Google Calendar API
     const response = await fetch(
       `https://www.googleapis.com/calendar/v3/calendars/primary/events`,
       {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${gmailIntegration.access_token}`,
+          'Authorization': `Bearer ${accessToken}`,
           'Content-Type': 'application/json'
         },
         body: JSON.stringify(event)
@@ -75,20 +114,7 @@ Deno.serve(async (req) => {
     }
 
     const calendarEvent = await response.json();
-    
-    // שמור Activity במערכת לצורך tracking
-    await base44.entities.Activity.create({
-      activity_type: 'calendar_event_created',
-      title: `אירוע קלנדר נוצר: ${title}`,
-      case_id: case_id || null,
-      client_id: client_id || null,
-      status: 'completed',
-      metadata: {
-        google_event_id: calendarEvent.id,
-        start_date: start_date,
-        duration_minutes: duration_minutes
-      }
-    });
+    console.log('[Calendar] ✅ Event created:', calendarEvent.id);
 
     return new Response(
       JSON.stringify({ 
@@ -100,7 +126,7 @@ Deno.serve(async (req) => {
     );
 
   } catch (error) {
-    console.error('[createCalendarEvent] Error:', error);
+    console.error('[Calendar] Error:', error);
     return new Response(
       JSON.stringify({ error: error.message }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
