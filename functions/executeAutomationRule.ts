@@ -73,22 +73,6 @@ class RollbackManager {
 // ========================================
 async function logAutomationExecution(base44, logData) {
   try {
-    // ✅ FIX: Convert action objects to strings (Base44 schema expects string array)
-    const actionsSummaryStrings = (logData.actions_summary || []).map(action => {
-      if (typeof action === 'string') return action;
-      // Convert object to descriptive string
-      const status = action.status === 'success' ? '✅' :
-                     action.status === 'failed' ? '❌' :
-                     action.status === 'pending_approval' ? '⏸️' : '⏭️';
-      let detail = '';
-      if (action.sent_to) detail = ` (${action.sent_to.join(', ')})`;
-      if (action.id) detail = ` (ID: ${action.id})`;
-      if (action.amount) detail += ` ₪${action.amount}`;
-      if (action.hours) detail = ` ${action.hours}h${detail}`;
-      if (action.error) detail = `: ${action.error}`;
-      return `${action.action}: ${status}${detail}`;
-    });
-
     await base44.entities.Activity.create({
       activity_type: 'automation_log',
       type: 'automation_log',
@@ -104,8 +88,8 @@ async function logAutomationExecution(base44, logData) {
         mail_id: logData.mail_id,
         mail_subject: logData.mail_subject,
         execution_status: logData.execution_status,
-        // ✅ FIX: actions_summary is now an array of strings (not objects)
-        actions_summary: actionsSummaryStrings,
+        // ✅ תיקון לוגים: החזרנו למערך רגיל (הסרנו את JSON.stringify)
+        actions_summary: logData.actions_summary || [],
         execution_time_ms: logData.execution_time_ms,
         error_message: logData.error_message,
         case_id_ref: logData.metadata?.case_id,
@@ -681,10 +665,10 @@ Deno.serve(async (req) => {
         title: await replaceTokens(actions.create_calendar_event.title_template || 'תזכורת אוטומטית', { mail, caseId, clientId }, base44),
         description: await replaceTokens(actions.create_calendar_event.description_template || '', { mail, caseId, clientId }, base44),
         start_date: calculateDueDate(actions.create_calendar_event.days_ahead || 30),
-        duration_minutes: actions.create_calendar_event.duration_minutes || 60,
+        duration_minutes: actions.calendar_event.duration_minutes || 60,
         case_id: caseId,
         client_id: clientId,
-        reminder_minutes: actions.create_calendar_event.reminder_minutes || 1440
+        reminder_minutes: actions.calendar_event.reminder_minutes || 1440
       };
       
       console.log('[Action] Event data:', eventData);
