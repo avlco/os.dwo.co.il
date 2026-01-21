@@ -547,15 +547,23 @@ Deno.serve(async (req) => {
         }
       }
       
-      const billingData = {
-        case_id: caseId,
-        description: await replaceTokens(actions.billing.description_template, { mail, caseId, clientId }, base44),
-        hours: actions.billing.hours,
-        rate: rate,
-        date_worked: new Date().toISOString().split('T')[0],
-        is_billable: true,
-        billed: false
-      };
+      // 🔥 בנה description מפורט
+let description = actions.billing.descriptiontemplate 
+  ? await replaceTokens(actions.billing.descriptiontemplate, { mail, caseId, clientId }, base44)
+  : mail.subject; // ברירת מחדל: נושא המייל
+
+const billingData = {
+  case_id: caseId,
+  description: description,
+  hours: actions.billing.hours,
+  rate: rate,
+  date_worked: new Date().toISOString().split('T')[0],
+  is_billable: true,
+  billed: false,
+  user_email: mail.sender_email, // ⭐ עורך הדין ששלח את המייל
+  task_id: null // יתמלא ידנית אם צריך
+};
+
       
       console.log(`[Action] Billing data:`, billingData);
       
