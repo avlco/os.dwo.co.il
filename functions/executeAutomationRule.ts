@@ -706,6 +706,25 @@ Deno.serve(async (req) => {
               google_event_id: calendarResult?.google_event_id,
               link: calendarResult?.htmlLink 
             });
+
+             // Create Deadline in system
+            if (caseId) {
+              try {
+                const deadlineData = {
+                  case_id: caseId,
+                  deadline_type: 'custom',
+                  description: eventData.title,
+                  due_date: eventData.start_date,
+                  status: 'pending',
+                  assigned_to_email: userEmail,
+                  is_critical: false
+                };
+                const deadline = await base44.entities.Deadline.create(deadlineData);
+                console.log('[Action] ✅ Deadline created:', deadline.id);
+              } catch (deadlineError) {
+                console.error('[Action] ⚠️ Deadline creation failed:', deadlineError.message);
+              }
+            }
             
             rollbackManager.register({ 
               type: 'calendar_event', 
