@@ -44,7 +44,6 @@ Deno.serve(async (req) => {
   try {
     console.log('[SheetsSync] 🚀 Starting...');
     
-    // ⭐ בדיוק כמו sendEmail!
     const base44 = createClientFromRequest(req);
     
     const { timeEntryId } = await req.json();
@@ -54,7 +53,6 @@ Deno.serve(async (req) => {
       throw new Error('timeEntryId is required');
     }
 
-    // ⭐ בדיוק כמו sendEmail - שורות 47-50!
     console.log('[SheetsSync] 🔍 Looking for Google OAuth connection...');
     const gmailConnections = await base44.entities.IntegrationConnection.filter({
       provider: 'google',
@@ -68,7 +66,6 @@ Deno.serve(async (req) => {
     const connection = gmailConnections[0];
     console.log('[SheetsSync] ✅ Google connection found');
     
-    // פענח את ה-access token (בדיוק כמו sendEmail)
     const accessToken = await decrypt(connection.access_token_encrypted);
     if (!accessToken) {
       throw new Error('Failed to decrypt Google access token');
@@ -123,13 +120,38 @@ Deno.serve(async (req) => {
       }
     }
 
+    // ⭐ תיקון #1: שם עו"ד מלא
+    let lawyerName = '';
+    if (lawyer) {
+      lawyerName = lawyer.name || 
+                   (lawyer.first_name && lawyer.last_name ? `${lawyer.first_name} ${lawyer.last_name}` : '') ||
+                   lawyer.first_name ||
+                   lawyer.full_name ||
+                   userEmail;
+    } else {
+      lawyerName = userEmail;
+    }
+    
+    // ⭐ תיקון #2: מספר לקוח (6 ספרות) במקום ID
+    let clientDisplay = '';
+    if (client) {
+      const clientNumber = client.client_number || client.number || client.client_id || '';
+      clientDisplay = clientNumber ? `${clientNumber} - ${client.name}` : client.name;
+    }
+    
+    console.log('[SheetsSync] 📝 Extracted data:', {
+      lawyerName,
+      clientDisplay,
+      caseNumber: caseData?.case_number
+    });
+
     // בנה שורה
     const totalAmount = (timeEntry.hours || 0) * (timeEntry.rate || 0);
     const currency = '₪ + מע"מ';
     
     const row = [
-      lawyer?.name || userEmail || '',
-      client ? `${client.id} - ${client.name}` : '',
+      lawyerName,
+      clientDisplay,
       caseData?.case_number || '',
       timeEntry.date_worked || new Date().toISOString().split('T')[0],
       timeEntry.hours || 0,
