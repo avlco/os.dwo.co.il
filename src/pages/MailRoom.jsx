@@ -69,7 +69,7 @@ export default function MailRoom() {
     queryKey: ['automationLogs'],
     queryFn: async () => {
       try {
-        const allActivities = await base44.entities.Activity.list('-created_at', 500);
+        const allActivities = await base44.entities.Activity.list('-created_date', 500);
         const logsArray = Array.isArray(allActivities) ? allActivities : (allActivities.data || []);
         return logsArray.filter(a => a.activity_type === 'automation_log');
       } catch (error) {
@@ -510,8 +510,9 @@ export default function MailRoom() {
                             </div>
                             
                             <div className="text-right text-sm text-slate-500">
-                              <p>{format(new Date(log.created_at), 'dd/MM/yyyy', { locale: he })}</p>
-                              <p>{format(new Date(log.created_at), 'HH:mm:ss', { locale: he })}</p>
+                              <p>{format(new Date(log.created_date), 'dd/MM/yyyy', { locale: he })}</p>
+                              <p>{format(new Date(log.created_date), 'HH:mm:ss', { locale: he })}</p>
+
                               {metadata.execution_time_ms && (
                                 <p className="mt-1 text-xs">⏱️ {metadata.execution_time_ms}ms</p>
                               )}
