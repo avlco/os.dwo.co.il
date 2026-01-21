@@ -42,161 +42,117 @@ Deno.serve(async (req) => {
     console.log('[SheetsSync] 🚀 Starting...');
     
     const base44 = createClientFromRequest(req);
-    
     const { timeEntryId } = await req.json();
-    console.log('[SheetsSync] TimeEntry ID:', timeEntryId);
     
     if (!timeEntryId) {
       throw new Error('timeEntryId is required');
     }
 
     // Google OAuth connection
-    console.log('[SheetsSync] 🔍 Looking for Google OAuth connection...');
     const gmailConnections = await base44.entities.IntegrationConnection.filter({
       provider: 'google',
       is_active: true
     });
     
     if (!gmailConnections || gmailConnections.length === 0) {
-      throw new Error('No active Google connection found. Please connect via Settings.');
+      throw new Error('No active Google connection found.');
     }
     
     const connection = gmailConnections[0];
-    console.log('[SheetsSync] ✅ Google connection found');
-    
     const accessToken = await decrypt(connection.access_token_encrypted);
-    if (!accessToken) {
-      throw new Error('Failed to decrypt Google access token');
-    }
-    console.log('[SheetsSync] ✅ Access token decrypted');
 
-    // שלוף TimeEntry
+    // Fetch TimeEntry
     const timeEntry = await base44.entities.TimeEntry.get(timeEntryId);
-    if (!timeEntry) {
-      throw new Error(`TimeEntry not found: ${timeEntryId}`);
-    }
-    console.log('[SheetsSync] ✅ TimeEntry found');
+    if (!timeEntry) throw new Error(`TimeEntry not found: ${timeEntryId}`);
 
-    // שלוף Case
+    // Fetch Case
     let caseData = null;
     if (timeEntry.case_id) {
-      try {
-        caseData = await base44.entities.Case.get(timeEntry.case_id);
-        console.log('[SheetsSync] ✅ Case found:', caseData?.case_number);
-      } catch (e) {
-        console.error('[SheetsSync] Failed to get case:', e.message);
-      }
+      try { caseData = await base44.entities.Case.get(timeEntry.case_id); } catch (e) {}
     }
 
-    // שלוף Client
+    // Fetch Client
     let client = null;
     if (caseData?.client_id) {
-      try {
-        client = await base44.entities.Client.get(caseData.client_id);
-        console.log('[SheetsSync] ✅ Client found:', client?.name);
-      } catch (e) {
-        console.error('[SheetsSync] Failed to get client:', e.message);
-      }
+      try { client = await base44.entities.Client.get(caseData.client_id); } catch (e) {}
     }
 
-    // ⭐ שלוף עו"ד מטפל מה-Case (לא מה-TimeEntry!)
-    let lawyer = null;
+    // Fetch Lawyer
     let lawyerName = '';
-    
     if (caseData?.assigned_lawyer_id) {
       try {
-        lawyer = await base44.entities.User.get(caseData.assigned_lawyer_id);
-        console.log('[SheetsSync] ✅ Lawyer found via Case:', JSON.stringify(lawyer, null, 2));
-        
+        const lawyer = await base44.entities.User.get(caseData.assigned_lawyer_id);
         lawyerName = lawyer?.full_name || lawyer?.email || '';
-      } catch (e) {
-        console.error('[SheetsSync] Failed to get lawyer:', e.message);
-      }
+      } catch (e) {}
     }
     
-    // אם אין עו"ד מוקצה לתיק, נסה את המשתמש שיצר את ה-TimeEntry
     if (!lawyerName && timeEntry.user_email) {
       let userEmail = timeEntry.user_email;
       const emailMatch = userEmail.match(/<(.+?)>/);
-      if (emailMatch) {
-        userEmail = emailMatch[1];
-      }
+      if (emailMatch) userEmail = emailMatch[1];
       lawyerName = userEmail;
-      console.log('[SheetsSync] ⚠️ No assigned lawyer, using TimeEntry creator:', lawyerName);
     }
 
-    // מספר לקוח
     let clientDisplay = '';
     if (client) {
       const clientNumber = client.client_number || client.number || client.client_id || '';
       clientDisplay = clientNumber ? `${clientNumber} - ${client.name}` : client.name;
     }
-    
-    console.log('[SheetsSync] 📝 Final extracted data:', {
-      lawyerName,
-      clientDisplay,
-      caseNumber: caseData?.case_number
-    });
 
-    // בנה שורה
+    // ✅ FIX: Format date nicely for Sheets (Day.Month.Year Hour:Min)
+    let formattedDate = timeEntry.date_worked;
+    try {
+      if (timeEntry.date_worked) {
+        formattedDate = new Date(timeEntry.date_worked).toLocaleString('he-IL', {
+          timeZone: 'Asia/Tel_Aviv',
+          day: '2-digit', month: '2-digit', year: 'numeric',
+          hour: '2-digit', minute: '2-digit', hour12: false
+        }).replace(',', '');
+      }
+    } catch (e) {
+      console.warn('Date formatting failed, using raw:', e);
+    }
+
     const totalAmount = (timeEntry.hours || 0) * (timeEntry.rate || 0);
-    const currency = '₪ + מע"מ';
-    
     const row = [
       lawyerName,
       clientDisplay,
       caseData?.case_number || '',
-      timeEntry.date_worked || new Date().toISOString().split('T')[0],
+      formattedDate, // ✅ Using formatted date
       timeEntry.hours || 0,
       'שעות',
       timeEntry.description || '',
       totalAmount,
-      currency,
+      '₪ + מע"מ',
       timeEntry.invoice_id || '',
       ''
     ];
 
     console.log('[SheetsSync] Row data:', row);
 
-    // שלח לגוגל שיטס
+    // Send to Sheets
     const sheetsUrl = `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${SHEET_NAME}!A:K:append?valueInputOption=USER_ENTERED`;
     
-    console.log('[SheetsSync] Sending to Google Sheets...');
     const response = await fetch(sheetsUrl, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${accessToken}`,
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({
-        values: [row]
-      })
+      body: JSON.stringify({ values: [row] })
     });
 
-    const responseText = await response.text();
-    console.log('[SheetsSync] Google response status:', response.status);
-
     if (!response.ok) {
-      throw new Error(`Google Sheets API failed (${response.status}): ${responseText}`);
+      throw new Error(`Google Sheets API failed: ${await response.text()}`);
     }
 
-    const result = JSON.parse(responseText);
-
-    return new Response(JSON.stringify({
-      success: true,
-      timeEntryId: timeEntry.id,
-      sheetsResponse: result
-    }), {
+    return new Response(JSON.stringify({ success: true, timeEntryId: timeEntry.id }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' }
     });
 
   } catch (error) {
-    console.error('[SheetsSync] ❌ Error:', error.message);
-    console.error('[SheetsSync] Stack:', error.stack);
-    return new Response(JSON.stringify({
-      error: error.message,
-      stack: error.stack
-    }), {
+    console.error('[SheetsSync] Error:', error);
+    return new Response(JSON.stringify({ error: error.message }), {
       status: 500,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' }
     });
