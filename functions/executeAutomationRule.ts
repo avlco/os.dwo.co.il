@@ -598,7 +598,25 @@ const billingData = {
         results.push({ action: 'billing', status: 'pending_approval', approval_id: approvalActivity.id });
         console.log('[Action] ⏸️ Pending approval');
       } else {
-        const timeEntry = await base44.entities.TimeEntry.create(billingData);
+const timeEntry = await base44.entities.TimeEntry.create(billingData);
+
+// ⭐ סנכרן לגוגל שיטס (לא חוסם את הביצוע)
+try {
+  const sheetsResult = await base44.functions.invoke('syncBillingToSheets', {
+    timeEntryId: timeEntry.id
+  });
+  
+  if (sheetsResult.error) {
+    console.error('[Action] Google Sheets sync failed:', sheetsResult.error);
+  } else {
+    console.log('[Action] ✅ Synced to Google Sheets successfully');
+  }
+} catch (sheetsError) {
+  console.error('[Action] Google Sheets API error:', sheetsError.message);
+  // המשך ביצוע גם אם Sheets נכשל
+}
+
+rollbackManager.register({ type: 'billing', id: timeEntry.id });
         rollbackManager.register({ type: 'billing', id: timeEntry.id });
         results.push({ action: 'billing', status: 'success', id: timeEntry.id, hours: billingData.hours, amount: billingData.hours * rate });
         console.log(`[Action] ✅ Time entry created: ${timeEntry.id}`);
