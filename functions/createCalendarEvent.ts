@@ -62,7 +62,7 @@ Deno.serve(async (req) => {
       {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${gmailIntegration.access_token}`,
+          'Authorization': `Bearer ${calendarIntegration.access_token}`,
           'Content-Type': 'application/json'
         },
         body: JSON.stringify(event)
