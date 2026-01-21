@@ -4,9 +4,6 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.6';
 const SHEET_ID = '1jmCeZQgJHIiCPy9HZo0XGOEl_xQyb23DPmhNehdrV54';
 const SHEET_NAME = 'Financials';
 
-// ========================================
-// CRYPTO HELPERS (מועתק מ-sendEmail)
-// ========================================
 async function getCryptoKey() {
   const envKey = Deno.env.get("ENCRYPTION_KEY");
   if (!envKey) throw new Error("ENCRYPTION_KEY is missing");
@@ -53,6 +50,7 @@ Deno.serve(async (req) => {
       throw new Error('timeEntryId is required');
     }
 
+    // Google OAuth connection
     console.log('[SheetsSync] 🔍 Looking for Google OAuth connection...');
     const gmailConnections = await base44.entities.IntegrationConnection.filter({
       provider: 'google',
@@ -101,45 +99,40 @@ Deno.serve(async (req) => {
       }
     }
 
-    // חלץ email נקי
-    let userEmail = timeEntry.user_email || '';
-    const emailMatch = userEmail.match(/<(.+?)>/);
-    if (emailMatch) {
-      userEmail = emailMatch[1];
-    }
-
-    // שלוף User (עו"ד)
+    // ⭐ שלוף עו"ד מטפל מה-Case (לא מה-TimeEntry!)
     let lawyer = null;
-    if (userEmail) {
+    let lawyerName = '';
+    
+    if (caseData?.assigned_lawyer_id) {
       try {
-        const users = await base44.entities.User.filter({ email: userEmail });
-        lawyer = users?.[0] || null;
-        console.log('[SheetsSync] ✅ Lawyer found:', lawyer?.name);
+        lawyer = await base44.entities.User.get(caseData.assigned_lawyer_id);
+        console.log('[SheetsSync] ✅ Lawyer found via Case:', JSON.stringify(lawyer, null, 2));
+        
+        lawyerName = lawyer?.full_name || lawyer?.email || '';
       } catch (e) {
-        console.error('[SheetsSync] Failed to get user:', e.message);
+        console.error('[SheetsSync] Failed to get lawyer:', e.message);
       }
     }
-
-    // ⭐ תיקון #1: שם עו"ד מלא
-    let lawyerName = '';
-    if (lawyer) {
-      lawyerName = lawyer.name || 
-                   (lawyer.first_name && lawyer.last_name ? `${lawyer.first_name} ${lawyer.last_name}` : '') ||
-                   lawyer.first_name ||
-                   lawyer.full_name ||
-                   userEmail;
-    } else {
-      lawyerName = userEmail;
-    }
     
-    // ⭐ תיקון #2: מספר לקוח (6 ספרות) במקום ID
+    // אם אין עו"ד מוקצה לתיק, נסה את המשתמש שיצר את ה-TimeEntry
+    if (!lawyerName && timeEntry.user_email) {
+      let userEmail = timeEntry.user_email;
+      const emailMatch = userEmail.match(/<(.+?)>/);
+      if (emailMatch) {
+        userEmail = emailMatch[1];
+      }
+      lawyerName = userEmail;
+      console.log('[SheetsSync] ⚠️ No assigned lawyer, using TimeEntry creator:', lawyerName);
+    }
+
+    // מספר לקוח
     let clientDisplay = '';
     if (client) {
       const clientNumber = client.client_number || client.number || client.client_id || '';
       clientDisplay = clientNumber ? `${clientNumber} - ${client.name}` : client.name;
     }
     
-    console.log('[SheetsSync] 📝 Extracted data:', {
+    console.log('[SheetsSync] 📝 Final extracted data:', {
       lawyerName,
       clientDisplay,
       caseNumber: caseData?.case_number
@@ -182,7 +175,6 @@ Deno.serve(async (req) => {
 
     const responseText = await response.text();
     console.log('[SheetsSync] Google response status:', response.status);
-    console.log('[SheetsSync] Google response:', responseText);
 
     if (!response.ok) {
       throw new Error(`Google Sheets API failed (${response.status}): ${responseText}`);
