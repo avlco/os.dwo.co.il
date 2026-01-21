@@ -47,12 +47,16 @@ Deno.serve(async (req) => {
       duration_minutes = 60,
       case_id, 
       client_id,
-      reminder_minutes = 1440
+      reminder_minutes = 1440,
+      create_meet_link = false,
+      attendees = []
     } = body;
 
     console.log('[Calendar] Creating event:', title);
+    console.log('[Calendar] Attendees:', attendees);
+    console.log('[Calendar] Create Meet:', create_meet_link);
 
-    // Get Google OAuth connection (same as syncBillingToSheets)
+    // Get Google OAuth connection
     const gmailConnections = await base44.entities.IntegrationConnection.filter({
       provider: 'google',
       is_active: true
@@ -67,6 +71,38 @@ Deno.serve(async (req) => {
 
     if (!accessToken) {
       throw new Error('Failed to decrypt access token');
+    }
+
+    // Resolve attendee emails
+    const attendeeEmails = [];
+    for (const attendee of attendees) {
+      if (attendee === 'client' && client_id) {
+        try {
+          const client = await base44.entities.Client.get(client_id);
+          if (client?.email) {
+            attendeeEmails.push({ email: client.email });
+            console.log('[Calendar] Added client:', client.email);
+          }
+        } catch (e) {
+          console.error('[Calendar] Failed to get client:', e.message);
+        }
+      } else if (attendee === 'lawyer' && case_id) {
+        try {
+          const caseData = await base44.entities.Case.get(case_id);
+          if (caseData?.assigned_lawyer_id) {
+            const lawyer = await base44.entities.User.get(caseData.assigned_lawyer_id);
+            if (lawyer?.email) {
+              attendeeEmails.push({ email: lawyer.email });
+              console.log('[Calendar] Added lawyer:', lawyer.email);
+            }
+          }
+        } catch (e) {
+          console.error('[Calendar] Failed to get lawyer:', e.message);
+        }
+      } else if (attendee && attendee.includes('@')) {
+        attendeeEmails.push({ email: attendee });
+        console.log('[Calendar] Added direct email:', attendee);
+      }
     }
 
     // Calculate end_date
@@ -93,34 +129,57 @@ Deno.serve(async (req) => {
       }
     };
 
-    console.log('[Calendar] Sending to Google API...');
+    // Add attendees if any
+    if (attendeeEmails.length > 0) {
+      event.attendees = attendeeEmails;
+    }
+
+    // Add Google Meet if requested
+    if (create_meet_link) {
+      event.conferenceData = {
+        createRequest: {
+          requestId: `meet-${Date.now()}`,
+          conferenceSolutionKey: { type: 'hangoutsMeet' }
+        }
+      };
+    }
+
+    console.log('[Calendar] Event data:', JSON.stringify(event, null, 2));
+
+    // Build URL - add conferenceDataVersion if Meet requested
+    const calendarUrl = create_meet_link
+      ? 'https://www.googleapis.com/calendar/v3/calendars/primary/events?conferenceDataVersion=1'
+      : 'https://www.googleapis.com/calendar/v3/calendars/primary/events';
 
     // Send to Google Calendar API
-    const response = await fetch(
-      `https://www.googleapis.com/calendar/v3/calendars/primary/events`,
-      {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${accessToken}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(event)
-      }
-    );
+    const response = await fetch(calendarUrl, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${accessToken}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(event)
+    });
 
     if (!response.ok) {
       const errorData = await response.json();
+      console.error('[Calendar] Google API error:', errorData);
       throw new Error(`Google Calendar API failed: ${errorData.error?.message || response.statusText}`);
     }
 
     const calendarEvent = await response.json();
     console.log('[Calendar] ✅ Event created:', calendarEvent.id);
+    
+    if (calendarEvent.hangoutLink) {
+      console.log('[Calendar] ✅ Meet link:', calendarEvent.hangoutLink);
+    }
 
     return new Response(
       JSON.stringify({ 
         success: true, 
         google_event_id: calendarEvent.id,
-        htmlLink: calendarEvent.htmlLink 
+        htmlLink: calendarEvent.htmlLink,
+        meetLink: calendarEvent.hangoutLink || null
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
