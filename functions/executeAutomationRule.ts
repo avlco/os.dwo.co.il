@@ -673,14 +673,16 @@ Deno.serve(async (req) => {
       console.log('[Action] 📅 Processing calendar_event...');
       
       const eventData = {
-        title: await replaceTokens(actions.calendar_event.title_template || 'תזכורת אוטומטית', { mail, caseId, clientId }, base44),
-        description: await replaceTokens(actions.calendar_event.description_template || '', { mail, caseId, clientId }, base44),
-        start_date: calculateDueDate(actions.calendar_event.timing_offset || 7),
-        duration_minutes: actions.calendar_event.duration_minutes || 60,
-        case_id: caseId,
-        client_id: clientId,
-        reminder_minutes: actions.calendar_event.reminder_minutes || 1440
-      };
+  title: await replaceTokens(actions.calendar_event.title_template || 'תזכורת אוטומטית', { mail, caseId, clientId }, base44),
+  description: await replaceTokens(actions.calendar_event.description_template || '', { mail, caseId, clientId }, base44),
+  start_date: calculateDueDate(actions.calendar_event.timing_offset || 7),
+  duration_minutes: actions.calendar_event.duration_minutes || 60,
+  case_id: caseId,
+  client_id: clientId,
+  reminder_minutes: actions.calendar_event.reminder_minutes || 1440,
+  create_meet_link: actions.calendar_event.create_meet_link || false,
+  attendees: actions.calendar_event.attendees || []
+};
       
       console.log('[Action] Event data:', eventData);
       
