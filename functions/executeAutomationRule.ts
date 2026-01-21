@@ -73,6 +73,22 @@ class RollbackManager {
 // ========================================
 async function logAutomationExecution(base44, logData) {
   try {
+    // ✅ FIX: Convert action objects to strings for Base44 schema
+    const actionsSummaryStrings = (logData.actions_summary || []).map(action => {
+      if (typeof action === 'string') return action;
+      const status = action.status === 'success' ? '✅' :
+                     action.status === 'failed' ? '❌' :
+                     action.status === 'pending_approval' ? '⏸️' : '⏭️';
+      let detail = '';
+      if (action.sent_to) detail = ` (${action.sent_to.join(', ')})`;
+      if (action.id) detail = ` (ID: ${action.id})`;
+      if (action.amount) detail += ` ₪${action.amount}`;
+      if (action.hours) detail = ` ${action.hours}h${detail}`;
+      if (action.error) detail = `: ${action.error}`;
+      if (action.reason) detail = ` (${action.reason})`;
+      return `${action.action}: ${status}${detail}`;
+    });
+
     await base44.entities.Activity.create({
       activity_type: 'automation_log',
       type: 'automation_log',
@@ -88,8 +104,7 @@ async function logAutomationExecution(base44, logData) {
         mail_id: logData.mail_id,
         mail_subject: logData.mail_subject,
         execution_status: logData.execution_status,
-        // ✅ תיקון לוגים: החזרנו למערך רגיל (הסרנו את JSON.stringify)
-        actions_summary: logData.actions_summary || [],
+        actions_summary: actionsSummaryStrings,
         execution_time_ms: logData.execution_time_ms,
         error_message: logData.error_message,
         case_id_ref: logData.metadata?.case_id,
@@ -545,15 +560,13 @@ Deno.serve(async (req) => {
         ? await replaceTokens(actions.billing.description_template, { mail, caseId, clientId }, base44)
         : mail.subject;
 
-      // ✅ FIX 2: Save as ISO Date to DB to prevent Financials crash
-      // The formatting for Sheets will be done in syncBillingToSheets
       const billingData = {
         case_id: caseId,
         client_id: clientId,
         description: description,
         hours: actions.billing.hours,
         rate: rate,
-        date_worked: new Date().toISOString(), // Standard ISO for DB
+        date_worked: new Date().toISOString(),
         is_billable: true,
         billed: false,
         user_email: userEmail,
@@ -583,7 +596,6 @@ Deno.serve(async (req) => {
       } else {
         const timeEntry = await base44.entities.TimeEntry.create(billingData);
 
-        // Sync to Sheets
         try {
           const sheetsResult = await base44.functions.invoke('syncBillingToSheets', {
             timeEntryId: timeEntry.id
@@ -655,16 +667,15 @@ Deno.serve(async (req) => {
     }
 
     // ✅ Action 5: Calendar Event
-    // FIX 3: Added logging to debug skipping
-    console.log(`[Action] Checking Calendar... Enabled? ${actions.create_calendar_event?.enabled}`);
+    console.log(`[Action] Checking Calendar... Enabled? ${actions.calendar_event?.enabled}`);
 
-    if (actions.create_calendar_event?.enabled) {
-      console.log('[Action] 📅 Processing create_calendar_event...');
+    if (actions.calendar_event?.enabled) {
+      console.log('[Action] 📅 Processing calendar_event...');
       
       const eventData = {
-        title: await replaceTokens(actions.create_calendar_event.title_template || 'תזכורת אוטומטית', { mail, caseId, clientId }, base44),
-        description: await replaceTokens(actions.create_calendar_event.description_template || '', { mail, caseId, clientId }, base44),
-        start_date: calculateDueDate(actions.create_calendar_event.days_ahead || 30),
+        title: await replaceTokens(actions.calendar_event.title_template || 'תזכורת אוטומטית', { mail, caseId, clientId }, base44),
+        description: await replaceTokens(actions.calendar_event.description_template || '', { mail, caseId, clientId }, base44),
+        start_date: calculateDueDate(actions.calendar_event.timing_offset || 7),
         duration_minutes: actions.calendar_event.duration_minutes || 60,
         case_id: caseId,
         client_id: clientId,
@@ -674,7 +685,7 @@ Deno.serve(async (req) => {
       console.log('[Action] Event data:', eventData);
       
       if (testMode) {
-        results.push({ action: 'create_calendar_event', status: 'test_skipped', data: eventData });
+        results.push({ action: 'calendar_event', status: 'test_skipped', data: eventData });
         console.log('[Action] ⏭️ Skipped (test mode)');
       } else if (rule.require_approval) {
         const approvalActivity = await createApprovalActivity(base44, { 
@@ -682,14 +693,14 @@ Deno.serve(async (req) => {
           mail_id: mailId, 
           case_id: caseId, 
           client_id: clientId, 
-          action_type: 'create_calendar_event', 
+          action_type: 'calendar_event', 
           action_config: eventData, 
           approver_email: rule.approver_email, 
           mail_subject: mail.subject, 
           mail_from: mail.sender_email 
         });
         rollbackManager.register({ type: 'approval', id: approvalActivity.id });
-        results.push({ action: 'create_calendar_event', status: 'pending_approval', approval_id: approvalActivity.id });
+        results.push({ action: 'calendar_event', status: 'pending_approval', approval_id: approvalActivity.id });
         console.log('[Action] ⏸️ Pending approval');
       } else {
         try {
@@ -697,17 +708,17 @@ Deno.serve(async (req) => {
           
           if (calendarResult?.error) {
             console.error('[Action] Calendar failed:', calendarResult.error);
-            results.push({ action: 'create_calendar_event', status: 'failed', error: calendarResult.error });
+            results.push({ action: 'calendar_event', status: 'failed', error: calendarResult.error });
           } else {
             console.log('[Action] ✅ Calendar event created:', calendarResult?.google_event_id);
             results.push({ 
-              action: 'create_calendar_event', 
+              action: 'calendar_event', 
               status: 'success', 
               google_event_id: calendarResult?.google_event_id,
               link: calendarResult?.htmlLink 
             });
 
-             // Create Deadline in system
+            // Create Deadline in system
             if (caseId) {
               try {
                 const deadlineData = {
@@ -734,7 +745,7 @@ Deno.serve(async (req) => {
           }
         } catch (error) {
           console.error('[Action] Calendar error:', error);
-          results.push({ action: 'create_calendar_event', status: 'failed', error: error.message });
+          results.push({ action: 'calendar_event', status: 'failed', error: error.message });
         }
       }
     }
