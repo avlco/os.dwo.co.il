@@ -327,6 +327,7 @@ Deno.serve(async (req) => {
   let rollbackManager = null;
   let mailData = null;
   let ruleData = null;
+  let userEmail = null; // ⭐ הגדרה גלובלית של userEmail
   
   try {
     const base44 = createClientFromRequest(req);
@@ -361,6 +362,14 @@ Deno.serve(async (req) => {
     }
     mailData = mail;
     console.log(`[AutoRule] ✅ Mail found: "${mail.subject}"`);
+
+    // ⭐ חלץ userEmail מייד אחרי שליפת Mail
+    if (mail.sender_email) {
+      let rawEmail = mail.sender_email;
+      const emailMatch = rawEmail.match(/<(.+?)>/);
+      userEmail = emailMatch ? emailMatch[1] : rawEmail;
+      console.log(`[AutoRule] 👤 User email: ${userEmail}`);
+    }
 
     console.log('[AutoRule] 📋 Fetching rule...');
     const rule = await base44.entities.AutomationRule.get(ruleId);
@@ -544,13 +553,7 @@ Deno.serve(async (req) => {
         ? await replaceTokens(actions.billing.description_template, { mail, caseId, clientId }, base44)
         : mail.subject;
 
-      // חלץ email נקי
-      let userEmail = mail.sender_email || '';
-      const emailMatch = userEmail.match(/<(.+?)>/);
-      if (emailMatch) {
-        userEmail = emailMatch[1];
-      }
-
+      // ⭐ userEmail כבר מוגדר בהתחלה של הפונקציה
       const billingData = {
         case_id: caseId,
         client_id: clientId,
@@ -713,11 +716,8 @@ Deno.serve(async (req) => {
     console.error('\n[AutoRule] ❌ Error:', error);
     console.error('[AutoRule] Stack:', error.stack);
     
-    if (rollbackManager) {
-      const body = await req.clone().json().catch(() => ({}));
-      if (!body.testMode) {
-        await rollbackManager.rollbackAll();
-      }
+    if (rollbackManager && !testMode) {
+      await rollbackManager.rollbackAll();
     }
     
     try {
@@ -731,7 +731,8 @@ Deno.serve(async (req) => {
           execution_status: 'failed', 
           actions_summary: [], 
           execution_time_ms: Date.now() - startTime, 
-          error_message: error.message
+          error_message: error.message,
+          user_email: userEmail
         });
         
         await updateRuleStats(base44, ruleData.id, false);
