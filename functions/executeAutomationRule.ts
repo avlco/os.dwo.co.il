@@ -46,6 +46,10 @@ class RollbackManager {
             if (action.id) await this.base44.entities.Activity.delete(action.id);
             console.log(`[Rollback] ✅ Deleted approval ${action.id}`);
             break;
+          case 'calendar_event':
+             // Rollback logic for calendar events would go here (e.g. delete from Google)
+             console.log(`[Rollback] ⚠️ Calendar event rollback not implemented fully yet.`);
+             break;
         }
       } catch (error) {
         console.error(`[Rollback] ❌ Failed to rollback ${action.type}:`, error.message);
@@ -88,7 +92,8 @@ async function logAutomationExecution(base44, logData) {
         mail_id: logData.mail_id,
         mail_subject: logData.mail_subject,
         execution_status: logData.execution_status,
-         actions_summary: logData.actions_summary || [],
+        // ✅ תיקון לוגים: המרה ל-String למניעת שגיאות
+        actions_summary: JSON.stringify(logData.actions_summary || []),
         execution_time_ms: logData.execution_time_ms,
         error_message: logData.error_message,
         case_id_ref: logData.metadata?.case_id,
@@ -327,7 +332,7 @@ Deno.serve(async (req) => {
   let rollbackManager = null;
   let mailData = null;
   let ruleData = null;
-  let userEmail = null; // ⭐ הגדרה גלובלית של userEmail
+  let userEmail = null; 
   
   try {
     const base44 = createClientFromRequest(req);
@@ -560,7 +565,12 @@ Deno.serve(async (req) => {
         description: description,
         hours: actions.billing.hours,
         rate: rate,
-        date_worked: new Date().toISOString().split('T')[0],
+        // ✅ תיקון: תאריך ושעה לפי שעון ישראל
+        date_worked: new Date().toLocaleString('he-IL', { 
+          timeZone: 'Asia/Tel_Aviv',
+          year: 'numeric', month: '2-digit', day: '2-digit',
+          hour: '2-digit', minute: '2-digit', hour12: false 
+        }).replace(/\//g, '-').replace(',', ''),
         is_billable: true,
         billed: false,
         user_email: userEmail,
@@ -647,7 +657,21 @@ Deno.serve(async (req) => {
               destination_path: folderPath
             })
           });
-    // ✅ CALENDAR EVENT - הוסף את הבלוק הזה
+          
+          if (!downloadResponse.ok) {
+            throw new Error(`downloadGmailAttachment failed: ${await downloadResponse.text()}`);
+          }
+          
+          results.push({ action: 'save_file', status: 'success', uploaded: mail.attachments.length, path: folderPath });
+          console.log(`[Action] ✅ Files saved successfully`);
+        } catch (error) {
+          results.push({ action: 'save_file', status: 'failed', error: error.message });
+          console.error('[Action] ❌ Failed to save files:', error.message);
+        }
+      }
+    }
+
+    // ✅ Action 5: Calendar Event
     if (actions.create_calendar_event?.enabled) {
       console.log('[Action] 📅 Processing create_calendar_event...');
       
@@ -706,19 +730,6 @@ Deno.serve(async (req) => {
         } catch (error) {
           console.error('[Action] Calendar error:', error);
           results.push({ action: 'create_calendar_event', status: 'failed', error: error.message });
-        }
-      }
-    }
-          
-          if (!downloadResponse.ok) {
-            throw new Error(`downloadGmailAttachment failed: ${await downloadResponse.text()}`);
-          }
-          
-          results.push({ action: 'save_file', status: 'success', uploaded: mail.attachments.length, path: folderPath });
-          console.log(`[Action] ✅ Files saved successfully`);
-        } catch (error) {
-          results.push({ action: 'save_file', status: 'failed', error: error.message });
-          console.error('[Action] ❌ Failed to save files:', error.message);
         }
       }
     }
