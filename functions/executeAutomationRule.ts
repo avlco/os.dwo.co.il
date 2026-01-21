@@ -647,6 +647,68 @@ Deno.serve(async (req) => {
               destination_path: folderPath
             })
           });
+    // ✅ CALENDAR EVENT - הוסף את הבלוק הזה
+    if (actions.create_calendar_event?.enabled) {
+      console.log('[Action] 📅 Processing create_calendar_event...');
+      
+      const eventData = {
+        title: await replaceTokens(actions.create_calendar_event.title_template || 'תזכורת אוטומטית', { mail, caseId, clientId }, base44),
+        description: await replaceTokens(actions.create_calendar_event.description_template || '', { mail, caseId, clientId }, base44),
+        start_date: calculateDueDate(actions.create_calendar_event.days_ahead || 30),
+        duration_minutes: actions.create_calendar_event.duration_minutes || 60,
+        case_id: caseId,
+        client_id: clientId,
+        reminder_minutes: actions.create_calendar_event.reminder_minutes || 1440
+      };
+      
+      console.log('[Action] Event data:', eventData);
+      
+      if (testMode) {
+        results.push({ action: 'create_calendar_event', status: 'test_skipped', data: eventData });
+        console.log('[Action] ⏭️ Skipped (test mode)');
+      } else if (rule.require_approval) {
+        const approvalActivity = await createApprovalActivity(base44, { 
+          automation_rule_id: ruleId, 
+          mail_id: mailId, 
+          case_id: caseId, 
+          client_id: clientId, 
+          action_type: 'create_calendar_event', 
+          action_config: eventData, 
+          approver_email: rule.approver_email, 
+          mail_subject: mail.subject, 
+          mail_from: mail.sender_email 
+        });
+        rollbackManager.register({ type: 'approval', id: approvalActivity.id });
+        results.push({ action: 'create_calendar_event', status: 'pending_approval', approval_id: approvalActivity.id });
+        console.log('[Action] ⏸️ Pending approval');
+      } else {
+        try {
+          const calendarResult = await base44.functions.invoke('createCalendarEvent', eventData);
+          
+          if (calendarResult?.error) {
+            console.error('[Action] Calendar failed:', calendarResult.error);
+            results.push({ action: 'create_calendar_event', status: 'failed', error: calendarResult.error });
+          } else {
+            console.log('[Action] ✅ Calendar event created:', calendarResult?.google_event_id);
+            results.push({ 
+              action: 'create_calendar_event', 
+              status: 'success', 
+              google_event_id: calendarResult?.google_event_id,
+              link: calendarResult?.htmlLink 
+            });
+            // הוסף rollback support
+            rollbackManager.register({ 
+              type: 'calendar_event', 
+              id: calendarResult?.google_event_id,
+              metadata: calendarResult 
+            });
+          }
+        } catch (error) {
+          console.error('[Action] Calendar error:', error);
+          results.push({ action: 'create_calendar_event', status: 'failed', error: error.message });
+        }
+      }
+    }
           
           if (!downloadResponse.ok) {
             throw new Error(`downloadGmailAttachment failed: ${await downloadResponse.text()}`);
