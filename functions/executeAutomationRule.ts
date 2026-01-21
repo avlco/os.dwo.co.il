@@ -75,44 +75,26 @@ async function logAutomationExecution(base44, logData) {
   try {
     await base44.entities.Activity.create({
       activity_type: 'automation_log',
-      type: 'automation_log', // ⭐ הוסף type
+      type: 'automation_log',
       case_id: logData.metadata?.case_id || null,
       client_id: logData.metadata?.client_id || null,
       status: logData.execution_status === 'completed' ? 'completed' : 'failed',
       title: `${logData.rule_name} - ${logData.execution_status}`,
       description: `${logData.rule_name} → ${logData.mail_subject}`,
-      user_email: logData.user_email || null, // ⭐ הוסף user_email
+      user_email: logData.user_email || null,
       metadata: {
         rule_id: logData.rule_id,
         rule_name: logData.rule_name,
         mail_id: logData.mail_id,
         mail_subject: logData.mail_subject,
         execution_status: logData.execution_status,
-        actions_summary: logData.actions_summary,
+        actions_summary: JSON.stringify(logData.actions_summary || []),
         execution_time_ms: logData.execution_time_ms,
         error_message: logData.error_message,
         case_id_ref: logData.metadata?.case_id,
         client_id_ref: logData.metadata?.client_id,
         logged_at: new Date().toISOString()
       }
-    });
-    
-    // הוסף רק אם קיימים
-    if (logData.metadata?.case_id) {
-      metadata.case_id_ref = logData.metadata.case_id;
-    }
-    if (logData.metadata?.client_id) {
-      metadata.client_id_ref = logData.metadata.client_id;
-    }
-    
-    await base44.entities.Activity.create({
-      activity_type: 'automation_log',
-      title: `${logData.rule_name} - ${logData.execution_status}`,
-      status: logData.execution_status === 'completed' ? 'completed' : 'failed',
-      description: `${logData.rule_name} → ${logData.mail_subject}`,
-      case_id: logData.metadata?.case_id || null,
-      client_id: logData.metadata?.client_id || null,
-      metadata: metadata
     });
 
     console.log('[Logger] ✅ Execution logged successfully');
@@ -285,7 +267,6 @@ function calculateDueDate(offsetDays) {
   return date.toISOString().split('T')[0];
 }
 
-// 🔥 תיקון #2: Approval עם Base44 functions
 async function createApprovalActivity(base44, data) {
   const expiresAt = new Date();
   expiresAt.setDate(expiresAt.getDate() + 7);
@@ -311,7 +292,6 @@ async function createApprovalActivity(base44, data) {
 
   console.log(`[Approval] Created approval request: ${activity.id}`);
   
-  // 🔥 תיקון: שליחת מייל דרך Base44
   if (data.approver_email) {
     try {
       await base44.functions.invoke('sendEmail', {
@@ -559,24 +539,30 @@ Deno.serve(async (req) => {
         }
       }
       
-      // 🔥 בנה description מפורט
-let description = actions.billing.descriptiontemplate 
-  ? await replaceTokens(actions.billing.descriptiontemplate, { mail, caseId, clientId }, base44)
-  : mail.subject; // ברירת מחדל: נושא המייל
+      // בנה description מפורט
+      let description = actions.billing.description_template 
+        ? await replaceTokens(actions.billing.description_template, { mail, caseId, clientId }, base44)
+        : mail.subject;
 
-const billingData = {
-  case_id: caseId,
-  client_id: clientId,
-  description: description,
-  hours: actions.billing.hours,
-  rate: rate,
-  date_worked: new Date().toISOString().split('T')[0],
-  is_billable: true,
-  billed: false,
-  user_email: mail.sender_email?.match(/<(.+?)>/)?.[1] || mail.sender_email,
-  task_id: null // יתמלא ידנית אם צריך
-};
+      // חלץ email נקי
+      let userEmail = mail.sender_email || '';
+      const emailMatch = userEmail.match(/<(.+?)>/);
+      if (emailMatch) {
+        userEmail = emailMatch[1];
+      }
 
+      const billingData = {
+        case_id: caseId,
+        client_id: clientId,
+        description: description,
+        hours: actions.billing.hours,
+        rate: rate,
+        date_worked: new Date().toISOString().split('T')[0],
+        is_billable: true,
+        billed: false,
+        user_email: userEmail,
+        task_id: null
+      };
       
       console.log(`[Action] Billing data:`, billingData);
       
@@ -599,27 +585,31 @@ const billingData = {
         results.push({ action: 'billing', status: 'pending_approval', approval_id: approvalActivity.id });
         console.log('[Action] ⏸️ Pending approval');
       } else {
-const timeEntry = await base44.entities.TimeEntry.create(billingData);
+        const timeEntry = await base44.entities.TimeEntry.create(billingData);
 
-// ⭐ סנכרן לגוגל שיטס (לא חוסם את הביצוע)
-try {
-  const sheetsResult = await base44.functions.invoke('syncBillingToSheets', {
-    timeEntryId: timeEntry.id
-  });
-  
-  if (sheetsResult.error) {
-    console.error('[Action] Google Sheets sync failed:', sheetsResult.error);
-  } else {
-    console.log('[Action] ✅ Synced to Google Sheets successfully');
-  }
-} catch (sheetsError) {
-  console.error('[Action] Google Sheets API error:', sheetsError.message);
-  // המשך ביצוע גם אם Sheets נכשל
-}
+        // סנכרן לגוגל שיטס
+        try {
+          const sheetsResult = await base44.functions.invoke('syncBillingToSheets', {
+            timeEntryId: timeEntry.id
+          });
+          
+          if (sheetsResult.error) {
+            console.error('[Action] Google Sheets sync failed:', sheetsResult.error);
+          } else {
+            console.log('[Action] ✅ Synced to Google Sheets successfully');
+          }
+        } catch (sheetsError) {
+          console.error('[Action] Google Sheets API error:', sheetsError.message);
+        }
 
-rollbackManager.register({ type: 'billing', id: timeEntry.id });
         rollbackManager.register({ type: 'billing', id: timeEntry.id });
-        results.push({ action: 'billing', status: 'success', id: timeEntry.id, hours: billingData.hours, amount: billingData.hours * rate });
+        results.push({ 
+          action: 'billing', 
+          status: 'success', 
+          id: timeEntry.id, 
+          hours: billingData.hours, 
+          amount: billingData.hours * rate 
+        });
         console.log(`[Action] ✅ Time entry created: ${timeEntry.id}`);
       }
     }
@@ -680,20 +670,20 @@ rollbackManager.register({ type: 'billing', id: timeEntry.id });
 
     if (!testMode) {
       await logAutomationExecution(base44, {
-  rule_id: ruleId,
-  rule_name: rule.name,
-  mail_id: mailId,
-  mail_subject: mail.subject,
-  execution_status: 'completed',
-  actions_summary: results,
-  execution_time_ms: executionTime,
-  user_email: mail.sender_email, // ⭐ הוסף
-  metadata: {
-    case_id: caseId,
-    client_id: clientId,
-    extracted: extractedInfo
-  }
-});
+        rule_id: ruleId,
+        rule_name: rule.name,
+        mail_id: mailId,
+        mail_subject: mail.subject,
+        execution_status: 'completed',
+        actions_summary: results,
+        execution_time_ms: executionTime,
+        user_email: userEmail,
+        metadata: {
+          case_id: caseId,
+          client_id: clientId,
+          extracted: extractedInfo
+        }
+      });
       
       await updateRuleStats(base44, ruleId, true);
     }
