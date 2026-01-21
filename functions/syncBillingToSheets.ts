@@ -2,37 +2,32 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.6';
 
 const SHEET_ID = '1jmCeZQgJHIiCPy9HZo0XGOEl_xQyb23DPmhNehdrV54';
-const SHEET_NAME = 'Financials'; // ⭐ שם הגיליון
+const SHEET_NAME = 'Financials';
 
-// 🔐 פונקציות פענוח
+// ========================================
+// CRYPTO HELPERS (מועתק מ-sendEmail)
+// ========================================
 async function getCryptoKey() {
-  const envKey = Deno.env.get('ENCRYPTION_KEY');
-  if (!envKey) throw new Error('ENCRYPTION_KEY is missing');
-  
+  const envKey = Deno.env.get("ENCRYPTION_KEY");
+  if (!envKey) throw new Error("ENCRYPTION_KEY is missing");
   const encoder = new TextEncoder();
   const keyString = envKey.padEnd(32, '0').slice(0, 32);
   const keyBuffer = encoder.encode(keyString);
-  
-  return await crypto.subtle.importKey(
-    'raw',
-    keyBuffer,
-    { name: 'AES-GCM' },
-    false,
-    ['encrypt', 'decrypt']
-  );
+  return await crypto.subtle.importKey("raw", keyBuffer, { name: "AES-GCM" }, false, ["encrypt", "decrypt"]);
 }
 
 async function decrypt(text) {
   if (!text) return null;
   const parts = text.split(':');
   if (parts.length !== 2) return text;
-  
+
   const [ivHex, encryptedHex] = parts;
   const key = await getCryptoKey();
+
   const iv = new Uint8Array(ivHex.match(/.{1,2}/g).map(byte => parseInt(byte, 16)));
   const encrypted = new Uint8Array(encryptedHex.match(/.{1,2}/g).map(byte => parseInt(byte, 16)));
-  const decrypted = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, encrypted);
-  
+
+  const decrypted = await crypto.subtle.decrypt({ name: "AES-GCM", iv }, key, encrypted);
   return new TextDecoder().decode(decrypted);
 }
 
@@ -49,6 +44,7 @@ Deno.serve(async (req) => {
   try {
     console.log('[SheetsSync] 🚀 Starting...');
     
+    // ⭐ בדיוק כמו sendEmail!
     const base44 = createClientFromRequest(req);
     
     const { timeEntryId } = await req.json();
@@ -58,44 +54,21 @@ Deno.serve(async (req) => {
       throw new Error('timeEntryId is required');
     }
 
-    // 🔑 שלוף Google OAuth token
+    // ⭐ בדיוק כמו sendEmail - שורות 47-50!
     console.log('[SheetsSync] 🔍 Looking for Google OAuth connection...');
-    
-    // ⭐ נסה למצוא connection עם כל provider אפשרי
-    let gmailConnections = await base44.entities.IntegrationConnection.filter({
+    const gmailConnections = await base44.entities.IntegrationConnection.filter({
       provider: 'google',
-      isactive: true
+      is_active: true
     });
-    
-    // אם לא מצאנו, נסה Gmail
-    if (!gmailConnections || gmailConnections.length === 0) {
-      console.log('[SheetsSync] 🔍 Trying provider=gmail...');
-      gmailConnections = await base44.entities.IntegrationConnection.filter({
-        provider: 'gmail',
-        isactive: true
-      });
-    }
-    
-    // אם עדיין לא מצאנו, נסה בלי filter על provider
-    if (!gmailConnections || gmailConnections.length === 0) {
-      console.log('[SheetsSync] 🔍 Trying all active connections...');
-      const allConnections = await base44.entities.IntegrationConnection.filter({
-        isactive: true
-      });
-      console.log('[SheetsSync] 📋 Found connections:', allConnections?.map(c => ({ id: c.id, provider: c.provider })));
-      
-      // קח את הראשון שיש לו access_token_encrypted
-      gmailConnections = allConnections?.filter(c => c.access_token_encrypted) || [];
-    }
     
     if (!gmailConnections || gmailConnections.length === 0) {
       throw new Error('No active Google connection found. Please connect via Settings.');
     }
     
     const connection = gmailConnections[0];
-    console.log('[SheetsSync] ✅ Google connection found:', connection.provider);
+    console.log('[SheetsSync] ✅ Google connection found');
     
-    // פענח את ה-access token
+    // פענח את ה-access token (בדיוק כמו sendEmail)
     const accessToken = await decrypt(connection.access_token_encrypted);
     if (!accessToken) {
       throw new Error('Failed to decrypt Google access token');
@@ -150,30 +123,30 @@ Deno.serve(async (req) => {
       }
     }
 
-    // ⭐ בנה שורה לפי העמודות החדשות
+    // בנה שורה
     const totalAmount = (timeEntry.hours || 0) * (timeEntry.rate || 0);
-    const currency = '₪ + מע"מ'; // אפשר להחליף ל-'USD (incl. VAT)' לפי צורך
+    const currency = '₪ + מע"מ';
     
     const row = [
-      lawyer?.name || userEmail || '',                           // שם - עו"ד מטפל
-      client ? `${client.id} - ${client.name}` : '',             // לקוח - מס' הלקוח + שם הלקוח
-      caseData?.case_number || '',                               // תיק - מס' תיק
-      timeEntry.date_worked || new Date().toISOString().split('T')[0], // תאריך - תאריך החיוב
-      timeEntry.hours || 0,                                      // סה"כ - כמות השעות
-      'שעות',                                                    // שעות - 'שעות' או 'Hours'
-      timeEntry.description || '',                               // פירוט - נושא המייל
-      totalAmount,                                               // סה"כ לחיוב - כמות השעות כפול עלות לשעה
-      currency,                                                  // מטבע ומע"מ
-      timeEntry.invoice_id || '',                                // חשבון עסקה - מס' חשבון עסקה
-      ''                                                         // הערות - שדה פתוח
+      lawyer?.name || userEmail || '',
+      client ? `${client.id} - ${client.name}` : '',
+      caseData?.case_number || '',
+      timeEntry.date_worked || new Date().toISOString().split('T')[0],
+      timeEntry.hours || 0,
+      'שעות',
+      timeEntry.description || '',
+      totalAmount,
+      currency,
+      timeEntry.invoice_id || '',
+      ''
     ];
 
     console.log('[SheetsSync] Row data:', row);
 
-    // 🎯 שלח לגוגל שיטס
+    // שלח לגוגל שיטס
     const sheetsUrl = `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${SHEET_NAME}!A:K:append?valueInputOption=USER_ENTERED`;
     
-    console.log('[SheetsSync] Sending to Google Sheets with OAuth...');
+    console.log('[SheetsSync] Sending to Google Sheets...');
     const response = await fetch(sheetsUrl, {
       method: 'POST',
       headers: {
