@@ -46,10 +46,6 @@ class RollbackManager {
             if (action.id) await this.base44.entities.Activity.delete(action.id);
             console.log(`[Rollback] ✅ Deleted approval ${action.id}`);
             break;
-          case 'calendar_event':
-             // Rollback logic for calendar events would go here (e.g. delete from Google)
-             console.log(`[Rollback] ⚠️ Calendar event rollback not implemented fully yet.`);
-             break;
         }
       } catch (error) {
         console.error(`[Rollback] ❌ Failed to rollback ${action.type}:`, error.message);
@@ -92,8 +88,8 @@ async function logAutomationExecution(base44, logData) {
         mail_id: logData.mail_id,
         mail_subject: logData.mail_subject,
         execution_status: logData.execution_status,
-        // ✅ תיקון לוגים: המרה ל-String למניעת שגיאות
-        actions_summary: JSON.stringify(logData.actions_summary || []),
+        // ✅ תיקון לוגים: החזרנו למערך רגיל (הסרנו את JSON.stringify)
+        actions_summary: logData.actions_summary || [],
         execution_time_ms: logData.execution_time_ms,
         error_message: logData.error_message,
         case_id_ref: logData.metadata?.case_id,
@@ -193,7 +189,6 @@ function extractFromMail(mail, config) {
   
   if (!text) return null;
   
-  // Regex extraction
   if (config.regex) {
     try {
       const regex = new RegExp(config.regex, 'i');
@@ -209,7 +204,6 @@ function extractFromMail(mail, config) {
     }
   }
   
-  // Anchor text extraction
   if (config.anchor_text) {
     const index = text.indexOf(config.anchor_text);
     if (index === -1) return null;
@@ -229,12 +223,10 @@ async function replaceTokens(template, context, base44) {
   if (!template) return '';
   let result = template;
   
-  // Mail tokens
   result = result.replace(/{Mail_Subject}/g, context.mail?.subject || '');
   result = result.replace(/{Mail_From}/g, context.mail?.sender_email || '');
   result = result.replace(/{Mail_Body}/g, context.mail?.body_plain || '');
   
-  // Case tokens
   if (context.caseId) {
     try {
       const caseData = await base44.entities.Case.get(context.caseId);
@@ -248,7 +240,6 @@ async function replaceTokens(template, context, base44) {
     }
   }
   
-  // Client tokens
   if (context.clientId) {
     try {
       const client = await base44.entities.Client.get(context.clientId);
@@ -260,7 +251,6 @@ async function replaceTokens(template, context, base44) {
     }
   }
   
-  // Remove unresolved tokens
   result = result.replace(/{[^}]+}/g, '');
   
   return result;
@@ -332,7 +322,7 @@ Deno.serve(async (req) => {
   let rollbackManager = null;
   let mailData = null;
   let ruleData = null;
-  let userEmail = null; 
+  let userEmail = null;
   
   try {
     const base44 = createClientFromRequest(req);
@@ -360,7 +350,6 @@ Deno.serve(async (req) => {
     console.log(`[AutoRule] Rule ID: ${ruleId}`);
     console.log(`[AutoRule] Test Mode: ${testMode}`);
 
-    console.log('[AutoRule] 📧 Fetching mail...');
     const mail = await base44.entities.Mail.get(mailId);
     if (!mail) {
       throw new Error(`Mail not found: ${mailId}`);
@@ -368,7 +357,6 @@ Deno.serve(async (req) => {
     mailData = mail;
     console.log(`[AutoRule] ✅ Mail found: "${mail.subject}"`);
 
-    // ⭐ חלץ userEmail מייד אחרי שליפת Mail
     if (mail.sender_email) {
       let rawEmail = mail.sender_email;
       const emailMatch = rawEmail.match(/<(.+?)>/);
@@ -553,24 +541,19 @@ Deno.serve(async (req) => {
         }
       }
       
-      // בנה description מפורט
       let description = actions.billing.description_template 
         ? await replaceTokens(actions.billing.description_template, { mail, caseId, clientId }, base44)
         : mail.subject;
 
-      // ⭐ userEmail כבר מוגדר בהתחלה של הפונקציה
+      // ✅ FIX 2: Save as ISO Date to DB to prevent Financials crash
+      // The formatting for Sheets will be done in syncBillingToSheets
       const billingData = {
         case_id: caseId,
         client_id: clientId,
         description: description,
         hours: actions.billing.hours,
         rate: rate,
-        // ✅ תיקון: תאריך ושעה לפי שעון ישראל
-        date_worked: new Date().toLocaleString('he-IL', { 
-          timeZone: 'Asia/Tel_Aviv',
-          year: 'numeric', month: '2-digit', day: '2-digit',
-          hour: '2-digit', minute: '2-digit', hour12: false 
-        }).replace(/\//g, '-').replace(',', ''),
+        date_worked: new Date().toISOString(), // Standard ISO for DB
         is_billable: true,
         billed: false,
         user_email: userEmail,
@@ -600,7 +583,7 @@ Deno.serve(async (req) => {
       } else {
         const timeEntry = await base44.entities.TimeEntry.create(billingData);
 
-        // סנכרן לגוגל שיטס
+        // Sync to Sheets
         try {
           const sheetsResult = await base44.functions.invoke('syncBillingToSheets', {
             timeEntryId: timeEntry.id
@@ -672,6 +655,9 @@ Deno.serve(async (req) => {
     }
 
     // ✅ Action 5: Calendar Event
+    // FIX 3: Added logging to debug skipping
+    console.log(`[Action] Checking Calendar... Enabled? ${actions.create_calendar_event?.enabled}`);
+
     if (actions.create_calendar_event?.enabled) {
       console.log('[Action] 📅 Processing create_calendar_event...');
       
@@ -720,7 +706,7 @@ Deno.serve(async (req) => {
               google_event_id: calendarResult?.google_event_id,
               link: calendarResult?.htmlLink 
             });
-            // הוסף rollback support
+            
             rollbackManager.register({ 
               type: 'calendar_event', 
               id: calendarResult?.google_event_id,
