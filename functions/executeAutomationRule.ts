@@ -88,7 +88,7 @@ async function logAutomationExecution(base44, logData) {
         mail_id: logData.mail_id,
         mail_subject: logData.mail_subject,
         execution_status: logData.execution_status,
-        actions_summary: JSON.stringify(logData.actions_summary || []),
+         actions_summary: logData.actions_summary || [],
         execution_time_ms: logData.execution_time_ms,
         error_message: logData.error_message,
         case_id_ref: logData.metadata?.case_id,
