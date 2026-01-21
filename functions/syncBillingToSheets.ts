@@ -1,7 +1,8 @@
 // @ts-nocheck
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.6';
 
-const SHEET_ID = '1jmCeZQgJHIiCPy9HZo0XGOEl_xQyb23DPmhNehdrV54'; // ⭐ ה-ID שלך!
+const SHEET_ID = '1jmCeZQgJHIiCPy9HZo0XGOEl_xQyb23DPmhNehdrV54';
+const SHEET_NAME = 'Financials'; // ⭐ שם הגיליון
 
 // 🔐 פונקציות פענוח
 async function getCryptoKey() {
@@ -50,7 +51,6 @@ Deno.serve(async (req) => {
     
     const base44 = createClientFromRequest(req);
     
-    // קבל TimeEntry ID
     const { timeEntryId } = await req.json();
     console.log('[SheetsSync] TimeEntry ID:', timeEntryId);
     
@@ -58,19 +58,42 @@ Deno.serve(async (req) => {
       throw new Error('timeEntryId is required');
     }
 
-    // 🔑 שלוף Google OAuth token (במקום API Key!)
+    // 🔑 שלוף Google OAuth token
     console.log('[SheetsSync] 🔍 Looking for Google OAuth connection...');
-    const gmailConnections = await base44.entities.IntegrationConnection.filter({
+    
+    // ⭐ נסה למצוא connection עם כל provider אפשרי
+    let gmailConnections = await base44.entities.IntegrationConnection.filter({
       provider: 'google',
       isactive: true
     });
+    
+    // אם לא מצאנו, נסה Gmail
+    if (!gmailConnections || gmailConnections.length === 0) {
+      console.log('[SheetsSync] 🔍 Trying provider=gmail...');
+      gmailConnections = await base44.entities.IntegrationConnection.filter({
+        provider: 'gmail',
+        isactive: true
+      });
+    }
+    
+    // אם עדיין לא מצאנו, נסה בלי filter על provider
+    if (!gmailConnections || gmailConnections.length === 0) {
+      console.log('[SheetsSync] 🔍 Trying all active connections...');
+      const allConnections = await base44.entities.IntegrationConnection.filter({
+        isactive: true
+      });
+      console.log('[SheetsSync] 📋 Found connections:', allConnections?.map(c => ({ id: c.id, provider: c.provider })));
+      
+      // קח את הראשון שיש לו access_token_encrypted
+      gmailConnections = allConnections?.filter(c => c.access_token_encrypted) || [];
+    }
     
     if (!gmailConnections || gmailConnections.length === 0) {
       throw new Error('No active Google connection found. Please connect via Settings.');
     }
     
     const connection = gmailConnections[0];
-    console.log('[SheetsSync] ✅ Google connection found');
+    console.log('[SheetsSync] ✅ Google connection found:', connection.provider);
     
     // פענח את ה-access token
     const accessToken = await decrypt(connection.access_token_encrypted);
@@ -127,31 +150,34 @@ Deno.serve(async (req) => {
       }
     }
 
-    // 🔥 בנה שורה
+    // ⭐ בנה שורה לפי העמודות החדשות
+    const totalAmount = (timeEntry.hours || 0) * (timeEntry.rate || 0);
+    const currency = '₪ + מע"מ'; // אפשר להחליף ל-'USD (incl. VAT)' לפי צורך
+    
     const row = [
-      lawyer?.name || userEmail || '',
-      client ? `${client.id} - ${client.name}` : '',
-      caseData?.case_number || '',
-      timeEntry.date_worked || new Date().toISOString().split('T')[0],
-      timeEntry.hours || 0,
-      'שעות',
-      timeEntry.description || '',
-      (timeEntry.hours || 0) * (timeEntry.rate || 0),
-      '₪ + מע"מ',
-      timeEntry.invoice_id || '',
-      ''
+      lawyer?.name || userEmail || '',                           // שם - עו"ד מטפל
+      client ? `${client.id} - ${client.name}` : '',             // לקוח - מס' הלקוח + שם הלקוח
+      caseData?.case_number || '',                               // תיק - מס' תיק
+      timeEntry.date_worked || new Date().toISOString().split('T')[0], // תאריך - תאריך החיוב
+      timeEntry.hours || 0,                                      // סה"כ - כמות השעות
+      'שעות',                                                    // שעות - 'שעות' או 'Hours'
+      timeEntry.description || '',                               // פירוט - נושא המייל
+      totalAmount,                                               // סה"כ לחיוב - כמות השעות כפול עלות לשעה
+      currency,                                                  // מטבע ומע"מ
+      timeEntry.invoice_id || '',                                // חשבון עסקה - מס' חשבון עסקה
+      ''                                                         // הערות - שדה פתוח
     ];
 
     console.log('[SheetsSync] Row data:', row);
 
-    // 🎯 שלח לגוגל עם OAuth token (לא API Key!)
-    const sheetsUrl = `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/A:K:append?valueInputOption=USER_ENTERED`;
+    // 🎯 שלח לגוגל שיטס
+    const sheetsUrl = `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${SHEET_NAME}!A:K:append?valueInputOption=USER_ENTERED`;
     
     console.log('[SheetsSync] Sending to Google Sheets with OAuth...');
     const response = await fetch(sheetsUrl, {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${accessToken}`, // ⭐ זה ההבדל!
+        'Authorization': `Bearer ${accessToken}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
