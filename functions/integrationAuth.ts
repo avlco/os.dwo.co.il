@@ -104,10 +104,11 @@ async function handleRequest(req) {
                 response_type: 'code',
                 // ✅ UPDATED: Minimal scopes (readonly + send + labels)
                 scope: 'https://www.googleapis.com/auth/gmail.readonly ' +
-                       'https://www.googleapis.com/auth/gmail.send ' +
-                       'https://www.googleapis.com/auth/gmail.labels ' +
-                       'https://www.googleapis.com/auth/calendar ' +
-                       'https://www.googleapis.com/auth/drive.file',
+                      'https://www.googleapis.com/auth/gmail.send ' +
+                      'https://www.googleapis.com/auth/gmail.labels ' +
+                      'https://www.googleapis.com/auth/calendar ' +
+                      'https://www.googleapis.com/auth/spreadsheets ' +  // ⭐ Google Sheets
+                      'https://www.googleapis.com/auth/drive.file',
                 access_type: 'offline',
                 prompt: 'consent',
                 state: state,
