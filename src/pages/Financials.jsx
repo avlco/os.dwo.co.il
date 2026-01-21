@@ -69,7 +69,7 @@ export default function Financials() {
     description: '',
     hours: '',
     rate: 500,
-    date_worked: format(today, 'yyyy-MM-dd'),
+    date_worked: format(today, "yyyy-MM-dd'T'HH:mm"),
     is_billable: true,
   });
 
@@ -129,7 +129,7 @@ export default function Financials() {
         description: '',
         hours: '',
         rate: 500,
-        date_worked: format(today, 'yyyy-MM-dd'),
+        date_worked: format(today, "yyyy-MM-dd'T'HH:mm"),
         is_billable: true,
       });
     },
@@ -377,8 +377,8 @@ export default function Financials() {
                             <span>{getCaseNumber(entry.case_id)}</span>
                             <span>•</span>
                             <span>
-                              {entry.date_worked 
-                                ? format(new Date(entry.date_worked), 'dd/MM/yyyy') 
+                              {entry.date_worked
+                                ? format(new Date(entry.date_worked), 'dd/MM/yyyy HH:mm')
                                 : '-'}
                             </span>
                           </div>
@@ -591,7 +591,7 @@ export default function Financials() {
               <div className="space-y-2">
                 <Label className="dark:text-slate-300">{t('financials.date_field')}</Label>
                 <Input
-                  type="date"
+                  type="datetime-local"
                   value={timeEntryForm.date_worked}
                   onChange={(e) => setTimeEntryForm({ ...timeEntryForm, date_worked: e.target.value })}
                   className="dark:bg-slate-900 dark:border-slate-600"
