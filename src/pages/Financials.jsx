@@ -353,33 +353,62 @@ export default function Financials() {
             <Card className="dark:bg-slate-800 dark:border-slate-700">
               <CardContent className="p-0">
                 <div className="divide-y divide-slate-100 dark:divide-slate-700">
-                  {timeEntries.map(entry => (
-                    <div key={entry.id} className="flex items-center gap-4 p-4">
-                      <div className="flex-1 min-w-0">
-                        <p className="font-medium text-slate-800 dark:text-slate-200">{entry.description}</p>
-                        <div className="flex gap-3 text-sm text-slate-500 dark:text-slate-400 mt-1">
-                          <span>{getCaseNumber(entry.case_id)}</span>
-                          <span>•</span>
-                          <span>{format(new Date(entry.date_worked), 'dd/MM/yyyy')}</span>
-                        </div>
-                      </div>
-                      <div className="text-left">
-                        <p className="font-semibold dark:text-slate-200">{entry.hours} {t('financials.hours_label')}</p>
-                        {entry.is_billable && (
-                          <p className="text-sm text-emerald-600 dark:text-emerald-400">
-                            ₪{((entry.hours || 0) * (entry.rate || 0)).toLocaleString()}
+                  {timeEntries.map(entry => {
+                    // ⭐ שלוף את המידע על Case ו-Client
+                    const caseItem = cases.find(c => c.id === entry.case_id);
+                    const client = clients.find(c => c.id === (entry.client_id || caseItem?.client_id));
+                    
+                    return (
+                      <div key={entry.id} className="flex items-center gap-4 p-4">
+                        <div className="flex-1 min-w-0">
+                          <p className="font-medium text-slate-800 dark:text-slate-200">
+                            {entry.description || 'ללא תיאור'}
                           </p>
+                          <div className="flex gap-3 text-sm text-slate-500 dark:text-slate-400 mt-1">
+                            {/* ⭐ הצג שם לקוח */}
+                            {client && (
+                              <>
+                                <span className="font-medium text-slate-700 dark:text-slate-300">
+                                  {client.name}
+                                </span>
+                                <span>•</span>
+                              </>
+                            )}
+                            <span>{getCaseNumber(entry.case_id)}</span>
+                            <span>•</span>
+                            <span>
+                              {entry.date_worked 
+                                ? format(new Date(entry.date_worked), 'dd/MM/yyyy') 
+                                : '-'}
+                            </span>
+                          </div>
+                        </div>
+                        <div className="text-left">
+                          <p className="font-semibold dark:text-slate-200">
+                            {entry.hours} {t('financials.hours_label')}
+                          </p>
+                          {entry.is_billable && (
+                            <p className="text-sm text-emerald-600 dark:text-emerald-400">
+                              ₪{((entry.hours || 0) * (entry.rate || 0)).toLocaleString()}
+                            </p>
+                          )}
+                        </div>
+                        {entry.billed ? (
+                          <span className="text-xs bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 px-2 py-1 rounded">
+                            {t('financials.billed')}
+                          </span>
+                        ) : entry.is_billable ? (
+                          <span className="text-xs bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 px-2 py-1 rounded">
+                            {t('financials.to_be_billed')}
+                          </span>
+                        ) : (
+                          <span className="text-xs bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-400 px-2 py-1 rounded">
+                            {t('financials.not_billable')}
+                          </span>
                         )}
                       </div>
-                      {entry.billed ? (
-                        <span className="text-xs bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 px-2 py-1 rounded">{t('financials.billed')}</span>
-                      ) : entry.is_billable ? (
-                        <span className="text-xs bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 px-2 py-1 rounded">{t('financials.to_be_billed')}</span>
-                      ) : (
-                        <span className="text-xs bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-400 px-2 py-1 rounded">{t('financials.not_billable')}</span>
-                      )}
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </CardContent>
             </Card>
