@@ -6,6 +6,28 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+// פונקציות הצפנה
+async function getCryptoKey() {
+  const envKey = Deno.env.get("ENCRYPTION_KEY");
+  if (!envKey) throw new Error("ENCRYPTION_KEY is missing");
+  const encoder = new TextEncoder();
+  const keyString = envKey.padEnd(32, '0').slice(0, 32);
+  const keyBuffer = encoder.encode(keyString);
+  return await crypto.subtle.importKey("raw", keyBuffer, { name: "AES-GCM" }, false, ["decrypt"]);
+}
+
+async function decrypt(text) {
+  if (!text) return null;
+  const parts = text.split(':');
+  if (parts.length !== 2) return text;
+  const [ivHex, encryptedHex] = parts;
+  const key = await getCryptoKey();
+  const iv = new Uint8Array(ivHex.match(/.{1,2}/g).map(byte => parseInt(byte, 16)));
+  const encrypted = new Uint8Array(encryptedHex.match(/.{1,2}/g).map(byte => parseInt(byte, 16)));
+  const decrypted = await crypto.subtle.decrypt({ name: "AES-GCM", iv }, key, encrypted);
+  return new TextDecoder().decode(decrypted);
+}
+
 // מנקה תווים לא חוקיים משם התיקייה
 function sanitizeFolderName(name) {
   if (!name) return '';
@@ -30,11 +52,21 @@ Deno.serve(async (req) => {
 
     console.log('[CreateClientFolder] Starting for:', client_name);
 
-    // שליפת חיבור Dropbox מה-SDK
-    const dropboxIntegration = await base44.integrations.Dropbox.get();
-    
-    if (!dropboxIntegration?.access_token) {
-      throw new Error('No Dropbox integration found');
+    // שליפת חיבור Dropbox
+    const connections = await base44.entities.IntegrationConnection.filter({
+      provider: 'dropbox',
+      is_active: true
+    });
+
+    if (!connections || connections.length === 0) {
+      throw new Error('No active Dropbox connection found');
+    }
+
+    const connection = connections[0];
+    const accessToken = await decrypt(connection.access_token_encrypted);
+
+    if (!accessToken) {
+      throw new Error('Failed to decrypt Dropbox access token');
     }
 
     // ניקוי שמות
@@ -50,7 +82,7 @@ Deno.serve(async (req) => {
     const response = await fetch('https://api.dropboxapi.com/2/files/create_folder_v2', {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${dropboxIntegration.access_token}`,
+        'Authorization': `Bearer ${accessToken}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
