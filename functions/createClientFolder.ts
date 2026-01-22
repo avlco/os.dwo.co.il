@@ -13,7 +13,7 @@ async function getCryptoKey() {
   const encoder = new TextEncoder();
   const keyString = envKey.padEnd(32, '0').slice(0, 32);
   const keyBuffer = encoder.encode(keyString);
-  return await crypto.subtle.importKey("raw", keyBuffer, { name: "AES-GCM" }, false, ["decrypt"]);
+  return await crypto.subtle.importKey("raw", keyBuffer, { name: "AES-GCM" }, false, ["encrypt", "decrypt"]);
 }
 
 async function decrypt(text) {
@@ -28,13 +28,42 @@ async function decrypt(text) {
   return new TextDecoder().decode(decrypted);
 }
 
-// מנקה תווים לא חוקיים משם התיקייה
+async function encrypt(text) {
+  const key = await getCryptoKey();
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const encoded = new TextEncoder().encode(text);
+  const encrypted = await crypto.subtle.encrypt({ name: "AES-GCM", iv }, key, encoded);
+  const ivHex = Array.from(iv).map(b => b.toString(16).padStart(2, '0')).join('');
+  const encryptedHex = Array.from(new Uint8Array(encrypted)).map(b => b.toString(16).padStart(2, '0')).join('');
+  return `${ivHex}:${encryptedHex}`;
+}
+
+async function refreshDropboxToken(refreshToken) {
+  const appKey = Deno.env.get("DROPBOX_APP_KEY");
+  const appSecret = Deno.env.get("DROPBOX_APP_SECRET");
+  if (!appKey || !appSecret) throw new Error('DROPBOX credentials not configured');
+
+  const creds = btoa(`${appKey}:${appSecret}`);
+  const response = await fetch('https://api.dropboxapi.com/oauth2/token', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/x-www-form-urlencoded',
+      'Authorization': `Basic ${creds}`
+    },
+    body: new URLSearchParams({
+      grant_type: 'refresh_token',
+      refresh_token: refreshToken
+    }).toString()
+  });
+
+  const result = await response.json();
+  if (result.error) throw new Error(`Token refresh failed: ${result.error}`);
+  return result.access_token;
+}
+
 function sanitizeFolderName(name) {
   if (!name) return '';
-  return name
-    .replace(/[\\/:*?"<>|]/g, '')
-    .replace(/\s+/g, ' ')
-    .trim();
+  return name.replace(/[\\/:*?"<>|]/g, '').replace(/\s+/g, ' ').trim();
 }
 
 Deno.serve(async (req) => {
@@ -52,7 +81,6 @@ Deno.serve(async (req) => {
 
     console.log('[CreateClientFolder] Starting for:', client_name);
 
-    // שליפת חיבור Dropbox
     const connections = await base44.entities.IntegrationConnection.filter({
       provider: 'dropbox',
       is_active: true
@@ -63,46 +91,42 @@ Deno.serve(async (req) => {
     }
 
     const connection = connections[0];
-    const accessToken = await decrypt(connection.access_token_encrypted);
+    
+    // רענון הטוקן
+    console.log('[CreateClientFolder] Refreshing token...');
+    const refreshToken = await decrypt(connection.refresh_token_encrypted);
+    if (!refreshToken) throw new Error('No refresh token - reconnect Dropbox');
+    
+    const accessToken = await refreshDropboxToken(refreshToken);
+    console.log('[CreateClientFolder] Token refreshed successfully');
 
-    if (!accessToken) {
-      throw new Error('Failed to decrypt Dropbox access token');
-    }
+    // שמירת הטוקן החדש
+    const encryptedToken = await encrypt(accessToken);
+    await base44.entities.IntegrationConnection.update(connection.id, {
+      access_token_encrypted: encryptedToken
+    });
 
-    // ניקוי שמות
     const safeNumber = sanitizeFolderName(client_number);
     const safeName = sanitizeFolderName(client_name);
-
-    // בניית נתיב התיקייה
     const folderPath = `/DWO/לקוחות - משרד/${safeNumber} - ${safeName}`;
 
     console.log('[CreateClientFolder] Creating folder:', folderPath);
 
-    // יצירת התיקייה ב-Dropbox
     const response = await fetch('https://api.dropboxapi.com/2/files/create_folder_v2', {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${accessToken}`,
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({
-        path: folderPath,
-        autorename: false
-      })
+      body: JSON.stringify({ path: folderPath, autorename: false })
     });
 
     const result = await response.json();
 
     if (!response.ok) {
-      // אם התיקייה כבר קיימת - זה בסדר
-      if (result.error?.['.tag'] === 'path' && 
-          result.error?.path?.['.tag'] === 'conflict') {
+      if (result.error?.['.tag'] === 'path' && result.error?.path?.['.tag'] === 'conflict') {
         console.log('[CreateClientFolder] Folder already exists');
-        return new Response(JSON.stringify({
-          success: true,
-          message: 'Folder already exists',
-          path: folderPath
-        }), {
+        return new Response(JSON.stringify({ success: true, message: 'Folder already exists', path: folderPath }), {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' }
         });
       }
@@ -110,20 +134,13 @@ Deno.serve(async (req) => {
     }
 
     console.log('[CreateClientFolder] Success!');
-
-    return new Response(JSON.stringify({
-      success: true,
-      path: result.metadata?.path_display || folderPath
-    }), {
+    return new Response(JSON.stringify({ success: true, path: result.metadata?.path_display || folderPath }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' }
     });
 
   } catch (error) {
     console.error('[CreateClientFolder] Error:', error);
-    return new Response(JSON.stringify({
-      success: false,
-      error: error.message
-    }), {
+    return new Response(JSON.stringify({ success: false, error: error.message }), {
       status: 500,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' }
     });
