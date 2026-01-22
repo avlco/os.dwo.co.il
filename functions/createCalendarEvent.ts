@@ -1,3 +1,4 @@
+// functions/createCalendarEvent.ts
 // @ts-nocheck
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.6';
 
@@ -6,13 +7,28 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-// Sanitize folder name - remove characters not allowed in Dropbox paths
-function sanitizeFolderName(name) {
-  if (!name) return '';
-  return name
-    .replace(/[\\/:*?"<>|]/g, '')
-    .replace(/\s+/g, ' ')
-    .trim();
+async function getCryptoKey() {
+  const envKey = Deno.env.get("ENCRYPTION_KEY");
+  if (!envKey) throw new Error("ENCRYPTION_KEY is missing");
+  const encoder = new TextEncoder();
+  const keyString = envKey.padEnd(32, '0').slice(0, 32);
+  const keyBuffer = encoder.encode(keyString);
+  return await crypto.subtle.importKey("raw", keyBuffer, { name: "AES-GCM" }, false, ["encrypt", "decrypt"]);
+}
+
+async function decrypt(text) {
+  if (!text) return null;
+  const parts = text.split(':');
+  if (parts.length !== 2) return text;
+
+  const [ivHex, encryptedHex] = parts;
+  const key = await getCryptoKey();
+
+  const iv = new Uint8Array(ivHex.match(/.{1,2}/g).map(byte => parseInt(byte, 16)));
+  const encrypted = new Uint8Array(encryptedHex.match(/.{1,2}/g).map(byte => parseInt(byte, 16)));
+
+  const decrypted = await crypto.subtle.decrypt({ name: "AES-GCM", iv }, key, encrypted);
+  return new TextDecoder().decode(decrypted);
 }
 
 Deno.serve(async (req) => {
@@ -22,80 +38,157 @@ Deno.serve(async (req) => {
 
   try {
     const base44 = createClientFromRequest(req);
-    const { client_name, client_number } = await req.json();
-
-    if (!client_name || !client_number) {
-      throw new Error('client_name and client_number are required');
-    }
-
-    console.log('[CreateClientFolder] Starting for:', client_name);
-
-    // Get Dropbox integration using Base44 SDK (same pattern as Gmail)
-    const dropboxIntegration = await base44.integrations.Dropbox.get();
+    const body = await req.json();
     
-    if (!dropboxIntegration?.access_token) {
-      throw new Error('No Dropbox integration found or missing access token');
+    const { 
+      title, 
+      description, 
+      start_date, 
+      duration_minutes = 60,
+      case_id, 
+      client_id,
+      reminder_minutes = 1440,
+      create_meet_link = false,
+      attendees = []
+    } = body;
+
+    console.log('[Calendar] Creating event:', title);
+    console.log('[Calendar] Attendees:', attendees);
+    console.log('[Calendar] Create Meet:', create_meet_link);
+
+    // Get Google OAuth connection
+    const gmailConnections = await base44.entities.IntegrationConnection.filter({
+      provider: 'google',
+      is_active: true
+    });
+    
+    if (!gmailConnections || gmailConnections.length === 0) {
+      throw new Error('No active Google connection found.');
+    }
+    
+    const connection = gmailConnections[0];
+    const accessToken = await decrypt(connection.access_token_encrypted);
+
+    if (!accessToken) {
+      throw new Error('Failed to decrypt access token');
     }
 
-    const accessToken = dropboxIntegration.access_token;
+    // Resolve attendee emails
+    const attendeeEmails = [];
+    for (const attendee of attendees) {
+      if (attendee === 'client' && client_id) {
+        try {
+          const client = await base44.entities.Client.get(client_id);
+          if (client?.email) {
+            attendeeEmails.push({ email: client.email });
+            console.log('[Calendar] Added client:', client.email);
+          }
+        } catch (e) {
+          console.error('[Calendar] Failed to get client:', e.message);
+        }
+      } else if (attendee === 'lawyer' && case_id) {
+        try {
+          const caseData = await base44.entities.Case.get(case_id);
+          if (caseData?.assigned_lawyer_id) {
+            const lawyer = await base44.entities.User.get(caseData.assigned_lawyer_id);
+            if (lawyer?.email) {
+              attendeeEmails.push({ email: lawyer.email });
+              console.log('[Calendar] Added lawyer:', lawyer.email);
+            }
+          }
+        } catch (e) {
+          console.error('[Calendar] Failed to get lawyer:', e.message);
+        }
+      } else if (attendee && attendee.includes('@')) {
+        attendeeEmails.push({ email: attendee });
+        console.log('[Calendar] Added direct email:', attendee);
+      }
+    }
 
-    // Sanitize names for folder path
-    const safeNumber = sanitizeFolderName(client_number);
-    const safeName = sanitizeFolderName(client_name);
+    // Calculate end_date
+    const start = new Date(start_date);
+    const end = new Date(start.getTime() + duration_minutes * 60 * 1000);
 
-    // Build folder path
-    const folderPath = `/DWO/לקוחות - משרד/${safeNumber} - ${safeName}`;
+    // Build event
+    const event = {
+      summary: title,
+      description: description || '',
+      start: {
+        dateTime: start.toISOString(),
+        timeZone: 'Asia/Tel_Aviv'
+      },
+      end: {
+        dateTime: end.toISOString(),
+        timeZone: 'Asia/Tel_Aviv'
+      },
+      reminders: {
+        useDefault: false,
+        overrides: [
+          { method: 'email', minutes: reminder_minutes }
+        ]
+      }
+    };
 
-    console.log('[CreateClientFolder] Creating folder:', folderPath);
+    // Add attendees if any
+    if (attendeeEmails.length > 0) {
+      event.attendees = attendeeEmails;
+    }
 
-    // Create folder in Dropbox
-    const response = await fetch('https://api.dropboxapi.com/2/files/create_folder_v2', {
+    // Add Google Meet if requested
+    if (create_meet_link) {
+      event.conferenceData = {
+        createRequest: {
+          requestId: `meet-${Date.now()}`,
+          conferenceSolutionKey: { type: 'hangoutsMeet' }
+        }
+      };
+    }
+
+    console.log('[Calendar] Event data:', JSON.stringify(event, null, 2));
+
+    // Build URL - add conferenceDataVersion if Meet requested
+    const calendarUrl = create_meet_link
+      ? 'https://www.googleapis.com/calendar/v3/calendars/primary/events?conferenceDataVersion=1'
+      : 'https://www.googleapis.com/calendar/v3/calendars/primary/events';
+
+    // Send to Google Calendar API
+    const response = await fetch(calendarUrl, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${accessToken}`,
-        'Content-Type': 'application/json',
+        'Content-Type': 'application/json'
       },
-      body: JSON.stringify({
-        path: folderPath,
-        autorename: false
-      })
+      body: JSON.stringify(event)
     });
-
-    const result = await response.json();
 
     if (!response.ok) {
-      // Folder already exists - that's OK
-      if (result.error?.['.tag'] === 'path' && 
-          result.error?.path?.['.tag'] === 'conflict') {
-        console.log('[CreateClientFolder] Folder already exists');
-        return new Response(JSON.stringify({
-          success: true,
-          message: 'Folder already exists',
-          path: folderPath
-        }), {
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-        });
-      }
-      throw new Error(`Dropbox API error: ${JSON.stringify(result.error)}`);
+      const errorData = await response.json();
+      console.error('[Calendar] Google API error:', errorData);
+      throw new Error(`Google Calendar API failed: ${errorData.error?.message || response.statusText}`);
     }
 
-    console.log('[CreateClientFolder] Success:', result.metadata?.path_display);
+    const calendarEvent = await response.json();
+    console.log('[Calendar] ✅ Event created:', calendarEvent.id);
+    
+    if (calendarEvent.hangoutLink) {
+      console.log('[Calendar] ✅ Meet link:', calendarEvent.hangoutLink);
+    }
 
-    return new Response(JSON.stringify({
-      success: true,
-      path: result.metadata?.path_display || folderPath
-    }), {
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-    });
+    return new Response(
+      JSON.stringify({ 
+        success: true, 
+        google_event_id: calendarEvent.id,
+        htmlLink: calendarEvent.htmlLink,
+        meetLink: calendarEvent.hangoutLink || null
+      }),
+      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    );
 
   } catch (error) {
-    console.error('[CreateClientFolder] Error:', error);
-    return new Response(JSON.stringify({
-      success: false,
-      error: error.message
-    }), {
-      status: 500,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-    });
+    console.error('[Calendar] Error:', error);
+    return new Response(
+      JSON.stringify({ error: error.message }),
+      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    );
   }
 });

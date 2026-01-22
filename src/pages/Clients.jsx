@@ -67,7 +67,6 @@ export default function Clients() {
     assigned_lawyer_id: '',
     hourly_rate: 800,
     billing_currency: 'ILS',
-    contact_person_name: '',
   });
 
   const clientTypes = [
@@ -110,37 +109,25 @@ export default function Clients() {
   });
 
   const createMutation = useMutation({
-  mutationFn: (data) => base44.entities.Client.create(data),
-  onSuccess: async () => {
-    queryClient.invalidateQueries(['clients']);
-    setIsDialogOpen(false);
-    
-    // Create Dropbox folder for new client
-    try {
-      await base44.functions.invoke('createClientFolder', {
-        client_name: formData.name,
-        client_number: formData.client_number
+    mutationFn: (data) => base44.entities.Client.create(data),
+    onSuccess: () => {
+      queryClient.invalidateQueries(['clients']);
+      setIsDialogOpen(false);
+      resetForm();
+      toast({
+        title: "הלקוח נוסף בהצלחה",
+        description: `הלקוח "${formData.name}" נוצר במערכת`,
       });
-      console.log('[Clients] Dropbox folder created');
-    } catch (folderError) {
-      console.error('[Clients] Failed to create Dropbox folder:', folderError);
-    }
-    
-    resetForm();
-    toast({
-      title: "הלקוח נוסף בהצלחה",
-      description: `הלקוח "${formData.name}" נוצר במערכת`,
-    });
-  },
-  onError: (error) => {
-    console.error('Failed to create client:', error);
-    toast({
-      variant: "destructive",
-      title: "שגיאה ביצירת לקוח",
-      description: error.message || "אנא נסה שנית או פנה לתמיכה",
-    });
-  },
-});
+    },
+    onError: (error) => {
+      console.error('Failed to create client:', error);
+      toast({
+        variant: "destructive",
+        title: "שגיאה ביצירת לקוח",
+        description: error.message || "אנא נסה שנית או פנה לתמיכה",
+      });
+    },
+  });
 
   const updateMutation = useMutation({
     mutationFn: ({ id, data }) => base44.entities.Client.update(id, data),
@@ -221,7 +208,6 @@ export default function Clients() {
       assigned_lawyer_id: '',
       hourly_rate: 800,
       billing_currency: 'ILS',
-      contact_person_name: '',
     });
     setEditingClient(null);
   };
@@ -294,7 +280,6 @@ export default function Clients() {
       assigned_lawyer_id: client.assigned_lawyer_id || '',
       hourly_rate: client.hourly_rate || 800,
       billing_currency: client.billing_currency || 'ILS',
-      contact_person_name: client.contact_person_name || '',
     });
     setIsDialogOpen(true);
   };
@@ -631,18 +616,7 @@ export default function Clients() {
                 </Select>
               </div>
             </div>
-            {/* Contact person - only for companies */}
-{formData.type === 'company' && (
-  <div className="space-y-2">
-    <Label className="dark:text-slate-300">שם איש קשר בחברה</Label>
-    <Input
-      value={formData.contact_person_name}
-      onChange={(e) => setFormData({ ...formData, contact_person_name: e.target.value })}
-      placeholder="שם איש הקשר הראשי"
-      className="dark:bg-slate-900 dark:border-slate-600"
-    />
-  </div>
-)}
+
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label className="dark:text-slate-300">אימייל (לפחות אמצעי תקשורת אחד חובה)</Label>
