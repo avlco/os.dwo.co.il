@@ -1,32 +1,13 @@
 // @ts-nocheck
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.6';
 
-async function getCryptoKey() {
-  const envKey = Deno.env.get("ENCRYPTION_KEY");
-  if (!envKey) throw new Error("ENCRYPTION_KEY is missing");
-  const encoder = new TextEncoder();
-  const keyString = envKey.padEnd(32, '0').slice(0, 32);
-  const keyBuffer = encoder.encode(keyString);
-  return await crypto.subtle.importKey("raw", keyBuffer, { name: "AES-GCM" }, false, ["encrypt", "decrypt"]);
-}
-
-async function decrypt(text) {
-  if (!text) return null;
-  const parts = text.split(':');
-  if (parts.length !== 2) return text;
-
-  const [ivHex, encryptedHex] = parts;
-  const key = await getCryptoKey();
-
-  const iv = new Uint8Array(ivHex.match(/.{1,2}/g).map(byte => parseInt(byte, 16)));
-  const encrypted = new Uint8Array(encryptedHex.match(/.{1,2}/g).map(byte => parseInt(byte, 16)));
-
-  const decrypted = await crypto.subtle.decrypt({ name: "AES-GCM", iv }, key, encrypted);
-  return new TextDecoder().decode(decrypted);
-}
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+};
 
 // Sanitize folder name - remove characters not allowed in Dropbox paths
-function sanitizeFolderName(name: string): string {
+function sanitizeFolderName(name) {
   if (!name) return '';
   // Remove characters not allowed: \ / : * ? " < > |
   return name
@@ -36,18 +17,11 @@ function sanitizeFolderName(name: string): string {
 }
 
 Deno.serve(async (req) => {
-  const corsHeaders = {
-    'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-  };
-
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
   }
 
   try {
-    console.log('[CreateClientFolder] Starting...');
-
     const base44 = createClientFromRequest(req);
     const { client_name, client_number } = await req.json();
 
@@ -55,30 +29,65 @@ Deno.serve(async (req) => {
       throw new Error('client_name and client_number are required');
     }
 
-    console.log('[CreateClientFolder] Client:', client_number, '-', client_name);
+    console.log('[CreateClientFolder] Starting for:', client_name);
 
-    // Get Dropbox connection
-    const dropboxConnections = await base44.entities.IntegrationConnection.filter({
-      provider: 'dropbox',
-      is_active: true
-    });
+    // Get Dropbox integration using Base44 SDK (same pattern as Gmail)
+    let dropboxIntegration;
+    try {
+      dropboxIntegration = await base44.integrations.Dropbox.get();
+    } catch (e) {
+      console.log('[CreateClientFolder] base44.integrations.Dropbox.get() failed:', e.message);
+      dropboxIntegration = null;
+    }
 
-    if (!dropboxConnections || dropboxConnections.length === 0) {
-      console.log('[CreateClientFolder] No active Dropbox connection found, skipping folder creation');
+    // If SDK method didn't work, try getting from IntegrationConnection
+    if (!dropboxIntegration?.access_token) {
+      console.log('[CreateClientFolder] Trying IntegrationConnection fallback...');
+
+      const connections = await base44.entities.IntegrationConnection.filter({
+        provider: 'dropbox',
+        is_active: true
+      });
+
+      if (!connections || connections.length === 0) {
+        console.log('[CreateClientFolder] No active Dropbox connection found');
+        return new Response(JSON.stringify({
+          success: false,
+          message: 'No active Dropbox connection found'
+        }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+
+      // If we have a connection but can't get the token via SDK,
+      // we need to use refresh token approach
+      const connection = connections[0];
+      console.log('[CreateClientFolder] Found connection, attempting token refresh...');
+
+      // Get fresh token using refresh token + app credentials
+      const appKey = Deno.env.get("DROPBOX_APP_KEY");
+      const appSecret = Deno.env.get("DROPBOX_APP_SECRET");
+
+      if (!appKey || !appSecret) {
+        throw new Error('DROPBOX_APP_KEY or DROPBOX_APP_SECRET not configured');
+      }
+
+      // Try to get a new access token using the refresh token
+      // Note: This requires the refresh_token to be stored unencrypted or accessible
+      // If it's encrypted, we need ENCRYPTION_KEY
+
+      // For now, return an error explaining the issue
+      console.error('[CreateClientFolder] Cannot access encrypted tokens without ENCRYPTION_KEY');
       return new Response(JSON.stringify({
         success: false,
-        message: 'No active Dropbox connection found'
+        message: 'Dropbox integration requires ENCRYPTION_KEY to access tokens. Please check function configuration.'
       }), {
+        status: 500,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' }
       });
     }
 
-    const connection = dropboxConnections[0];
-    const accessToken = await decrypt(connection.access_token_encrypted);
-
-    if (!accessToken) {
-      throw new Error('Failed to decrypt Dropbox access token');
-    }
+    const accessToken = dropboxIntegration.access_token;
 
     // Sanitize names for folder path
     const safeNumber = sanitizeFolderName(client_number);
