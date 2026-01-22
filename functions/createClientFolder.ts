@@ -1,4 +1,3 @@
-// functions/createClientFolder.ts
 // @ts-nocheck
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.6';
 
@@ -7,33 +6,13 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-async function getCryptoKey() {
-  const envKey = Deno.env.get("ENCRYPTION_KEY");
-  if (!envKey) throw new Error("ENCRYPTION_KEY is missing");
-  const encoder = new TextEncoder();
-  const keyString = envKey.padEnd(32, '0').slice(0, 32);
-  const keyBuffer = encoder.encode(keyString);
-  return await crypto.subtle.importKey("raw", keyBuffer, { name: "AES-GCM" }, false, ["encrypt", "decrypt"]);
-}
-
-async function decrypt(text) {
-  if (!text) return null;
-  const parts = text.split(':');
-  if (parts.length !== 2) return text;
-
-  const [ivHex, encryptedHex] = parts;
-  const key = await getCryptoKey();
-
-  const iv = new Uint8Array(ivHex.match(/.{1,2}/g).map(byte => parseInt(byte, 16)));
-  const encrypted = new Uint8Array(encryptedHex.match(/.{1,2}/g).map(byte => parseInt(byte, 16)));
-
-  const decrypted = await crypto.subtle.decrypt({ name: "AES-GCM", iv }, key, encrypted);
-  return new TextDecoder().decode(decrypted);
-}
-
+// Sanitize folder name - remove characters not allowed in Dropbox paths
 function sanitizeFolderName(name) {
-  if (!name) return 'Unknown';
-  return name.replace(/[\\/:*?"<>|]/g, '_').trim() || 'Unknown';
+  if (!name) return '';
+  return name
+    .replace(/[\\/:*?"<>|]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
 }
 
 Deno.serve(async (req) => {
@@ -43,9 +22,7 @@ Deno.serve(async (req) => {
 
   try {
     const base44 = createClientFromRequest(req);
-    const body = await req.json();
-    
-    const { client_name, client_number } = body;
+    const { client_name, client_number } = await req.json();
 
     if (!client_name || !client_number) {
       throw new Error('client_name and client_number are required');
@@ -53,30 +30,20 @@ Deno.serve(async (req) => {
 
     console.log('[CreateClientFolder] Starting for:', client_name);
 
-    // Get Dropbox connection
-    const dropboxConnections = await base44.entities.IntegrationConnection.filter({
-      provider: 'dropbox',
-      is_active: true
-    });
+    // Get Dropbox integration using Base44 SDK (same pattern as Gmail)
+    const dropboxIntegration = await base44.integrations.Dropbox.get();
     
-    if (!dropboxConnections || dropboxConnections.length === 0) {
-      console.log('[CreateClientFolder] No Dropbox connection - skipping folder creation');
-      return new Response(
-        JSON.stringify({ success: false, reason: 'no_dropbox_connection' }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
-    
-    const connection = dropboxConnections[0];
-    const accessToken = await decrypt(connection.access_token_encrypted);
-
-    if (!accessToken) {
-      throw new Error('Failed to decrypt Dropbox access token');
+    if (!dropboxIntegration?.access_token) {
+      throw new Error('No Dropbox integration found or missing access token');
     }
 
-    // Build folder path: /DWO/לקוחות - משרד/{client_number} - {client_name}
-    const safeName = sanitizeFolderName(client_name);
+    const accessToken = dropboxIntegration.access_token;
+
+    // Sanitize names for folder path
     const safeNumber = sanitizeFolderName(client_number);
+    const safeName = sanitizeFolderName(client_name);
+
+    // Build folder path
     const folderPath = `/DWO/לקוחות - משרד/${safeNumber} - ${safeName}`;
 
     console.log('[CreateClientFolder] Creating folder:', folderPath);
@@ -90,41 +57,45 @@ Deno.serve(async (req) => {
       },
       body: JSON.stringify({
         path: folderPath,
-        autorename: false,
-      }),
+        autorename: false
+      })
     });
-    
-    const data = await response.json();
-    
-    // If folder already exists, that's OK
-    if (data.error?.path?.['.tag'] === 'conflict') {
-      console.log('[CreateClientFolder] Folder already exists:', folderPath);
-      return new Response(
-        JSON.stringify({ success: true, exists: true, path: folderPath }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
-    
-    if (data.error) {
-      throw new Error(data.error_summary || 'Failed to create folder');
-    }
-    
-    console.log('[CreateClientFolder] ✅ Folder created:', folderPath);
 
-    return new Response(
-      JSON.stringify({ 
-        success: true, 
-        created: true,
-        path: data.metadata?.path_display || folderPath 
-      }),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    );
+    const result = await response.json();
+
+    if (!response.ok) {
+      // Folder already exists - that's OK
+      if (result.error?.['.tag'] === 'path' && 
+          result.error?.path?.['.tag'] === 'conflict') {
+        console.log('[CreateClientFolder] Folder already exists');
+        return new Response(JSON.stringify({
+          success: true,
+          message: 'Folder already exists',
+          path: folderPath
+        }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+      throw new Error(`Dropbox API error: ${JSON.stringify(result.error)}`);
+    }
+
+    console.log('[CreateClientFolder] Success:', result.metadata?.path_display);
+
+    return new Response(JSON.stringify({
+      success: true,
+      path: result.metadata?.path_display || folderPath
+    }), {
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+    });
 
   } catch (error) {
     console.error('[CreateClientFolder] Error:', error);
-    return new Response(
-      JSON.stringify({ error: error.message }),
-      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    );
+    return new Response(JSON.stringify({
+      success: false,
+      error: error.message
+    }), {
+      status: 500,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+    });
   }
 });
