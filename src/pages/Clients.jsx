@@ -49,6 +49,7 @@ export default function Clients() {
   const { toast } = useToast();
   const [searchTerm, setSearchTerm] = useState('');
   const [filterType, setFilterType] = useState('all');
+  const [showArchived, setShowArchived] = useState(false);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingClient, setEditingClient] = useState(null);
   const [formData, setFormData] = useState({
@@ -204,23 +205,23 @@ export default function Clients() {
 
   const resetForm = () => {
     setFormData({
-      name: '',
-      type: 'company',
-      email: '',
-      phone: '',
-      address: '',
-      country: 'IL',
-      registration_number: '',
-      tax_id: '',
-      payment_terms: 'net_30',
-      is_active: true,
-      notes: '',
-      client_number: '',
-      assigned_lawyer_id: '',
-      hourly_rate: 800,
-      billing_currency: 'ILS',
-      contact_person_name: '',
-    });
+  name: '',
+  type: 'company',
+  email: '',
+  phone: '',
+  address: '',
+  country: 'IL',
+  registration_number: '',
+  tax_id: '',
+  payment_terms: 'net_30',
+  is_active: true,
+  notes: '',
+  client_number: '0001',  // ← זה החלק החדש
+  assigned_lawyer_id: '',
+  hourly_rate: 800,
+  billing_currency: 'ILS',
+  contact_person_name: '',
+});
     setEditingClient(null);
   };
 
@@ -320,14 +321,15 @@ export default function Clients() {
       );
 
       if (isDuplicate) {
-        const duplicate = clients.find(c => c.client_number === formData.client_number);
-        toast({
-          variant: "destructive",
-          title: "מספר לקוח כבר קיים",
-          description: `הלקוח "${duplicate.name}" כבר משתמש במספר זה`,
-        });
-        return;
-      }
+  const duplicate = clients.find(c => c.client_number === formData.client_number);
+  const nextNumber = (parseInt(formData.client_number) + 1).toString().padStart(4, '0');
+  toast({
+    variant: "destructive",
+    title: `מספר ${formData.client_number} תפוס`,
+    description: `"${duplicate.name}" משתמש בו. נסה ${nextNumber}`,
+  });
+  return;
+}
     }
 
     if (editingClient) {
@@ -351,7 +353,7 @@ export default function Clients() {
       c.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       c.client_number?.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesType = filterType === 'all' || c.type === filterType;
-    const isActive = c.is_active !== false; // Filter out inactive clients
+    const isActive = showArchived || c.is_active !== false;
     return matchesSearch && matchesType && isActive;
   });
 
@@ -542,6 +544,14 @@ export default function Clients() {
             ))}
           </SelectContent>
         </Select>
+        <Button 
+    variant="outline" 
+    size="sm" 
+    onClick={() => setShowArchived(!showArchived)}
+    className="ml-2"
+  >
+    {showArchived ? 'הסתר' : 'הצג'} ארכיון
+  </Button>
       </div>
 
       {clients.length === 0 && !isLoading ? (
