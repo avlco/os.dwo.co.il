@@ -67,6 +67,7 @@ export default function Clients() {
     assigned_lawyer_id: '',
     hourly_rate: 800,
     billing_currency: 'ILS',
+    contact_person_name: '',
   });
 
   const clientTypes = [
@@ -218,6 +219,7 @@ export default function Clients() {
       assigned_lawyer_id: '',
       hourly_rate: 800,
       billing_currency: 'ILS',
+      contact_person_name: '',
     });
     setEditingClient(null);
   };
@@ -290,6 +292,7 @@ export default function Clients() {
       assigned_lawyer_id: client.assigned_lawyer_id || '',
       hourly_rate: client.hourly_rate || 800,
       billing_currency: client.billing_currency || 'ILS',
+      contact_person_name: client.contact_person_name || '',
     });
     setIsDialogOpen(true);
   };
@@ -568,7 +571,7 @@ export default function Clients() {
           <form onSubmit={handleSubmit} className="space-y-6 mt-4">
             <div className="grid grid-cols-3 gap-4">
               <div className="col-span-2 space-y-2">
-                <Label className="dark:text-slate-300">שם הלקוח *</Label>
+                <Label className="dark:text-slate-300">{formData.type === 'company' ? 'שם החברה *' : 'שם הלקוח *'}</Label>
                 <Input
                   value={formData.name}
                   onChange={(e) => setFormData({ ...formData, name: e.target.value })}
@@ -626,6 +629,18 @@ export default function Clients() {
                 </Select>
               </div>
             </div>
+
+{formData.type === 'company' && (
+              <div className="space-y-2">
+                <Label className="dark:text-slate-300">שם איש קשר בחברה</Label>
+                <Input
+                  value={formData.contact_person_name}
+                  onChange={(e) => setFormData({ ...formData, contact_person_name: e.target.value })}
+                  placeholder="שם איש הקשר הראשי"
+                  className="dark:bg-slate-900 dark:border-slate-600"
+                />
+              </div>
+            )}
 
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
