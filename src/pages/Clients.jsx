@@ -67,6 +67,7 @@ export default function Clients() {
     assigned_lawyer_id: '',
     hourly_rate: 800,
     billing_currency: 'ILS',
+    contact_person_name: '',
   });
 
   const clientTypes = [
@@ -220,6 +221,7 @@ export default function Clients() {
       assigned_lawyer_id: '',
       hourly_rate: 800,
       billing_currency: 'ILS',
+      contact_person_name: '',
     });
     setEditingClient(null);
   };
@@ -292,6 +294,7 @@ export default function Clients() {
       assigned_lawyer_id: client.assigned_lawyer_id || '',
       hourly_rate: client.hourly_rate || 800,
       billing_currency: client.billing_currency || 'ILS',
+      contact_person_name: client.contact_person_name || '',
     });
     setIsDialogOpen(true);
   };
@@ -628,7 +631,18 @@ export default function Clients() {
                 </Select>
               </div>
             </div>
-
+            {/* Contact person - only for companies */}
+{formData.type === 'company' && (
+  <div className="space-y-2">
+    <Label className="dark:text-slate-300">שם איש קשר בחברה</Label>
+    <Input
+      value={formData.contact_person_name}
+      onChange={(e) => setFormData({ ...formData, contact_person_name: e.target.value })}
+      placeholder="שם איש הקשר הראשי"
+      className="dark:bg-slate-900 dark:border-slate-600"
+    />
+  </div>
+)}
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label className="dark:text-slate-300">אימייל (לפחות אמצעי תקשורת אחד חובה)</Label>
