@@ -109,25 +109,37 @@ export default function Clients() {
   });
 
   const createMutation = useMutation({
-    mutationFn: (data) => base44.entities.Client.create(data),
-    onSuccess: () => {
-      queryClient.invalidateQueries(['clients']);
-      setIsDialogOpen(false);
-      resetForm();
-      toast({
-        title: "הלקוח נוסף בהצלחה",
-        description: `הלקוח "${formData.name}" נוצר במערכת`,
+  mutationFn: (data) => base44.entities.Client.create(data),
+  onSuccess: async () => {
+    queryClient.invalidateQueries(['clients']);
+    setIsDialogOpen(false);
+    
+    // Create Dropbox folder for new client
+    try {
+      await base44.functions.invoke('createClientFolder', {
+        client_name: formData.name,
+        client_number: formData.client_number
       });
-    },
-    onError: (error) => {
-      console.error('Failed to create client:', error);
-      toast({
-        variant: "destructive",
-        title: "שגיאה ביצירת לקוח",
-        description: error.message || "אנא נסה שנית או פנה לתמיכה",
-      });
-    },
-  });
+      console.log('[Clients] Dropbox folder created');
+    } catch (folderError) {
+      console.error('[Clients] Failed to create Dropbox folder:', folderError);
+    }
+    
+    resetForm();
+    toast({
+      title: "הלקוח נוסף בהצלחה",
+      description: `הלקוח "${formData.name}" נוצר במערכת`,
+    });
+  },
+  onError: (error) => {
+    console.error('Failed to create client:', error);
+    toast({
+      variant: "destructive",
+      title: "שגיאה ביצירת לקוח",
+      description: error.message || "אנא נסה שנית או פנה לתמיכה",
+    });
+  },
+});
 
   const updateMutation = useMutation({
     mutationFn: ({ id, data }) => base44.entities.Client.update(id, data),
