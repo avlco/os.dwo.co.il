@@ -110,9 +110,19 @@ export default function Clients() {
 
   const createMutation = useMutation({
     mutationFn: (data) => base44.entities.Client.create(data),
-    onSuccess: () => {
+    onSuccess: async () => {
       queryClient.invalidateQueries(['clients']);
       setIsDialogOpen(false);
+          // יצירת תיקייה ב-Dropbox
+    try {
+      await base44.functions.invoke('createClientFolder', {
+        client_name: formData.name,
+        client_number: formData.client_number
+      });
+      console.log('[Clients] Dropbox folder created');
+    } catch (folderError) {
+      console.error('[Clients] Failed to create Dropbox folder:', folderError);
+    }
       resetForm();
       toast({
         title: "הלקוח נוסף בהצלחה",
