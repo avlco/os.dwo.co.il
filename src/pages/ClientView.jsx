@@ -20,8 +20,11 @@ import {
   Cloud,
   ExternalLink,
   Edit,
+  Trash2,
+  Plus,
+  Loader2,
   FileText,
-  Loader2
+  Globe
 } from 'lucide-react';
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -113,10 +116,48 @@ export default function ClientView() {
   const urlParams = new URLSearchParams(window.location.search);
   const clientId = urlParams.get('id');
 
-  // State לעריכה
+  // --- States ---
   const [isEditOpen, setIsEditOpen] = useState(false);
-  const [formData, setFormData] = useState({});
+  
+  // הגדרת כל השדות כמו ב-Clients.jsx
+  const [formData, setFormData] = useState({
+    name: '',
+    type: 'company',
+    communication_language: 'he',
+    email: '',
+    phone: '',
+    address: '',
+    country: 'IL',
+    registration_number: '',
+    tax_id: '',
+    payment_terms: 'net_30',
+    is_active: true,
+    notes: '',
+    client_number: '',
+    assigned_lawyer_id: '',
+    hourly_rate: 800,
+    billing_currency: 'ILS',
+    contact_person_name: '',
+  });
 
+  const clientTypes = [
+    { value: 'individual', label: t('clients.type_individual') },
+    { value: 'company', label: t('clients.type_company') },
+  ];
+
+  const paymentTerms = [
+    { value: 'immediate', label: t('clients.terms_immediate') },
+    { value: 'net_30', label: t('clients.terms_net_30') },
+    { value: 'net_60', label: t('clients.terms_net_60') },
+  ];
+
+  const currencies = [
+    { value: 'ILS', label: '₪ ILS' },
+    { value: 'USD', label: '$ USD' },
+    { value: 'EUR', label: '€ EUR' },
+  ];
+
+  // --- Queries ---
   const { data: clientData, isLoading: clientLoading } = useQuery({
     queryKey: ['client', clientId],
     queryFn: () => base44.entities.Client.filter({ id: clientId }),
@@ -135,10 +176,16 @@ export default function ClientView() {
     enabled: !!clientId,
   });
 
+  // הוספתי את שאילתת המשתמשים כדי שנוכל לבחור עו"ד בטופס
+  const { data: users = [] } = useQuery({
+    queryKey: ['users'],
+    queryFn: async () => base44.entities.User.list(),
+  });
+
   const client = clientData?.[0];
   const BackIcon = isRTL ? ArrowRight : ArrowLeft;
 
-  // טעינת נתונים לטופס כשפותחים עריכה
+  // טעינת נתונים לעריכה - העתק מלא של הלוגיקה מ-Clients.jsx
   useEffect(() => {
     if (client) {
       setFormData({
@@ -163,23 +210,24 @@ export default function ClientView() {
     }
   }, [client]);
 
+  // Mutation לעדכון הלקוח
   const updateMutation = useMutation({
     mutationFn: (data) => base44.entities.Client.update(clientId, data),
     onSuccess: () => {
-      // עדכון קריטי: רענון הלקוח הספציפי וגם הרשימה הכללית
+      // רענון הלקוח הספציפי והרשימה הכללית
       queryClient.invalidateQueries(['client', clientId]);
       queryClient.invalidateQueries(['clients']);
       
       setIsEditOpen(false);
       toast({
         title: "הלקוח עודכן בהצלחה",
-        description: "השינויים נשמרו והתצוגה עודכנה",
+        description: "השינויים נשמרו במערכת",
       });
     },
     onError: (error) => {
       toast({
         variant: "destructive",
-        title: "שגיאה בעדכון",
+        title: "שגיאה",
         description: error.message,
       });
     }
@@ -187,6 +235,9 @@ export default function ClientView() {
 
   const handleSave = (e) => {
     e.preventDefault();
+    // ולידציה בסיסית
+    if (!formData.name?.trim()) return toast({ variant: "destructive", title: "שם הוא שדה חובה" });
+    
     updateMutation.mutate(formData);
   };
 
@@ -257,6 +308,8 @@ export default function ClientView() {
             )}
           </div>
         </div>
+        
+        {/* כפתור עריכה מתוקן */}
         <Button variant="outline" onClick={() => setIsEditOpen(true)}>
           <Edit className="w-4 h-4 mr-2" />
           עריכה
@@ -361,7 +414,7 @@ export default function ClientView() {
                     onRowClick={(row) => navigate(createPageUrl('CaseView', { id: row.id }))}
                   />
                 ) : (
-                  <div className="text-center py-12 border-2 border-dashed border-slate-300 dark:border-slate-700 rounded-xl">
+                  <div className="text-center py-12 border-2 border-dashed rounded-xl">
                     <p className="text-slate-500">אין תיקים ללקוח זה</p>
                     <Button variant="link" onClick={() => navigate(createPageUrl('Cases'))}>צור תיק חדש</Button>
                   </div>
@@ -402,7 +455,7 @@ export default function ClientView() {
         </div>
       </div>
 
-      {/* Edit Dialog - Internal */}
+      {/* --- דיאלוג עריכה (העתק מלא מ-Clients.jsx) --- */}
       <Dialog open={isEditOpen} onOpenChange={setIsEditOpen}>
         <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto dark:bg-slate-800 dark:border-slate-700">
           <DialogHeader>
@@ -411,18 +464,20 @@ export default function ClientView() {
           <form onSubmit={handleSave} className="space-y-6 mt-4">
             <div className="grid grid-cols-3 gap-4">
               <div className="col-span-2 space-y-2">
-                <Label className="dark:text-slate-300">שם הלקוח / חברה *</Label>
+                <Label className="dark:text-slate-300">{formData.type === 'company' ? 'שם החברה *' : 'שם הלקוח *'}</Label>
                 <Input
                   value={formData.name || ''}
                   onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                  required
                   className="dark:bg-slate-900 dark:border-slate-600"
                 />
               </div>
               <div className="space-y-2">
-                <Label className="dark:text-slate-300">מספר לקוח</Label>
+                <Label className="dark:text-slate-300">מספר לקוח *</Label>
                 <Input
                   value={formData.client_number || ''}
                   onChange={(e) => setFormData({ ...formData, client_number: e.target.value })}
+                  required
                   className="dark:bg-slate-900 dark:border-slate-600"
                 />
               </div>
@@ -430,8 +485,60 @@ export default function ClientView() {
 
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
+                <Label className="dark:text-slate-300">סוג לקוח *</Label>
+                <Select
+                  value={formData.type}
+                  onValueChange={(v) => setFormData({ ...formData, type: v })}
+                >
+                  <SelectTrigger className="dark:bg-slate-900 dark:border-slate-600">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent className="dark:bg-slate-800 dark:border-slate-700">
+                    {clientTypes.map(type => (
+                      <SelectItem key={type.value} value={type.value} className="dark:text-slate-200">
+                        {type.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label className="dark:text-slate-300">עו"ד מטפל</Label>
+                <Select
+                  value={formData.assigned_lawyer_id || undefined}
+                  onValueChange={(v) => setFormData({ ...formData, assigned_lawyer_id: v })}
+                >
+                  <SelectTrigger className="dark:bg-slate-900 dark:border-slate-600">
+                    <SelectValue placeholder="בחר עו״ד" />
+                  </SelectTrigger>
+                  <SelectContent className="dark:bg-slate-800 dark:border-slate-700">
+                    {users.map(user => (
+                      <SelectItem key={user.id} value={user.id} className="dark:text-slate-200">
+                        {user.full_name || user.email}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            {formData.type === 'company' && (
+              <div className="space-y-2">
+                <Label className="dark:text-slate-300">שם איש קשר בחברה</Label>
+                <Input
+                  value={formData.contact_person_name || ''}
+                  onChange={(e) => setFormData({ ...formData, contact_person_name: e.target.value })}
+                  placeholder="שם איש הקשר הראשי"
+                  className="dark:bg-slate-900 dark:border-slate-600"
+                />
+              </div>
+            )}
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
                 <Label className="dark:text-slate-300">אימייל</Label>
                 <Input
+                  type="email"
                   value={formData.email || ''}
                   onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                   className="dark:bg-slate-900 dark:border-slate-600"
@@ -472,6 +579,74 @@ export default function ClientView() {
                 </Select>
               </div>
               <div className="space-y-2">
+                <Label className="dark:text-slate-300">מספר תאגיד</Label>
+                <Input
+                  value={formData.registration_number || ''}
+                  onChange={(e) => setFormData({ ...formData, registration_number: e.target.value })}
+                  className="dark:bg-slate-900 dark:border-slate-600"
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-3 gap-4">
+              <div className="space-y-2">
+                <Label className="dark:text-slate-300">מספר עוסק</Label>
+                <Input
+                  value={formData.tax_id || ''}
+                  onChange={(e) => setFormData({ ...formData, tax_id: e.target.value })}
+                  className="dark:bg-slate-900 dark:border-slate-600"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label className="dark:text-slate-300">תעריף שעתי</Label>
+                <Input
+                  type="number"
+                  step="0.01"
+                  value={formData.hourly_rate}
+                  onChange={(e) => setFormData({ ...formData, hourly_rate: parseFloat(e.target.value) || 0 })}
+                  className="dark:bg-slate-900 dark:border-slate-600"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label className="dark:text-slate-300">מטבע</Label>
+                <Select
+                  value={formData.billing_currency}
+                  onValueChange={(v) => setFormData({ ...formData, billing_currency: v })}
+                >
+                  <SelectTrigger className="dark:bg-slate-900 dark:border-slate-600">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent className="dark:bg-slate-800 dark:border-slate-700">
+                    {currencies.map(curr => (
+                      <SelectItem key={curr.value} value={curr.value} className="dark:text-slate-200">
+                        {curr.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label className="dark:text-slate-300">תנאי תשלום</Label>
+                <Select
+                  value={formData.payment_terms}
+                  onValueChange={(v) => setFormData({ ...formData, payment_terms: v })}
+                >
+                  <SelectTrigger className="dark:bg-slate-900 dark:border-slate-600">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent className="dark:bg-slate-800 dark:border-slate-700">
+                    {paymentTerms.map(term => (
+                      <SelectItem key={term.value} value={term.value} className="dark:text-slate-200">
+                        {term.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
                 <Label className="dark:text-slate-300">כתובת</Label>
                 <Input
                   value={formData.address || ''}
@@ -486,13 +661,25 @@ export default function ClientView() {
               <Textarea
                 value={formData.notes || ''}
                 onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+                rows={3}
                 className="dark:bg-slate-900 dark:border-slate-600"
               />
             </div>
 
             <div className="flex justify-end gap-3 pt-4">
-              <Button type="button" variant="outline" onClick={() => setIsEditOpen(false)} className="dark:border-slate-600">ביטול</Button>
-              <Button type="submit" className="bg-slate-800 hover:bg-slate-700 dark:bg-slate-700" disabled={updateMutation.isPending}>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setIsEditOpen(false)}
+                className="dark:border-slate-600"
+              >
+                {t('common.cancel')}
+              </Button>
+              <Button
+                type="submit"
+                className="bg-slate-800 hover:bg-slate-700 dark:bg-slate-700"
+                disabled={updateMutation.isPending}
+              >
                 {updateMutation.isPending ? 'שומר...' : 'שמור שינויים'}
               </Button>
             </div>
