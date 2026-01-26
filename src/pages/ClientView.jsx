@@ -178,10 +178,10 @@ export default function ClientView() {
   // --- Update Mutation ---
   const updateMutation = useMutation({
     mutationFn: async (data) => {
-      // 1. עדכון הלקוח במסד הנתונים
+      // 1. שמירה בדאטה-בייס
       const response = await base44.entities.Client.update(clientId, data);
       
-      // 2. לוגיקת שינוי שם תיקייה בדרופבוקס (אם השם השתנה)
+      // 2. לוגיקה לשינוי שם תיקייה בדרופבוקס (אם השם השתנה)
       if (client.name && data.name && client.name !== data.name) {
         try {
           console.log(`[ClientView] Detected name change. Updating Dropbox folder...`);
@@ -210,7 +210,7 @@ export default function ClientView() {
     onError: (error) => {
       toast({
         variant: "destructive",
-        title: "שגיאה",
+        title: "שגיאה בשמירה",
         description: error.message,
       });
     }
@@ -225,7 +225,7 @@ export default function ClientView() {
   if (clientLoading) return <div className="space-y-6"><Skeleton className="h-12 w-1/3" /><Skeleton className="h-64 w-full" /></div>;
   if (!client) return <div className="text-center py-20">לקוח לא נמצא</div>;
 
-  // הגדרות לטפסים (הועתק מ-Clients.jsx)
+  // הגדרות אפשרויות לטפסים (תואם ל-Clients.jsx)
   const clientTypes = [{ value: 'individual', label: 'פרטי' }, { value: 'company', label: 'חברה' }];
   const paymentTerms = [{ value: 'immediate', label: 'מיידי' }, { value: 'net_30', label: 'שוטף + 30' }, { value: 'net_60', label: 'שוטף + 60' }];
   const currencies = [{ value: 'ILS', label: '₪ ILS' }, { value: 'USD', label: '$ USD' }, { value: 'EUR', label: '€ EUR' }];
@@ -302,7 +302,7 @@ export default function ClientView() {
                 </div>
               )}
               {/* Language Display */}
-              <div className="flex items-center gap-3 pt-2 border-t dark:border-slate-700">
+              <div className="flex items-center gap-3 pt-2 border-t dark:border-slate-700 mt-2">
                 <div className="w-8 h-8 rounded-lg bg-slate-100 dark:bg-slate-700 flex items-center justify-center"><Globe className="w-4 h-4 text-slate-500" /></div>
                 <div className="flex-1 min-w-0">
                   <p className="text-xs text-slate-400">שפת תקשורת</p>
@@ -347,61 +347,131 @@ export default function ClientView() {
             </Card>
           )}
         </div>
-
-        {/* Right Column: Tabs */}
+        {/* Right Column: Tabs Content */}
         <div className="lg:col-span-2">
           <Tabs defaultValue="cases" className="w-full">
             <TabsList className="w-full justify-start border-b rounded-none h-auto p-0 bg-transparent gap-6">
-              <TabsTrigger value="cases" className="rounded-none border-b-2 border-transparent data-[state=active]:border-blue-600 data-[state=active]:bg-transparent px-2 py-3 dark:data-[state=active]:text-slate-200"><Briefcase className="w-4 h-4 mr-2" /> תיקים ({cases.length})</TabsTrigger>
-              <TabsTrigger value="financials" className="rounded-none border-b-2 border-transparent data-[state=active]:border-blue-600 data-[state=active]:bg-transparent px-2 py-3 dark:data-[state=active]:text-slate-200"><Receipt className="w-4 h-4 mr-2" /> כספים</TabsTrigger>
-              <TabsTrigger value="docs" className="rounded-none border-b-2 border-transparent data-[state=active]:border-blue-600 data-[state=active]:bg-transparent px-2 py-3 dark:data-[state=active]:text-slate-200"><Cloud className="w-4 h-4 mr-2" /> מסמכים</TabsTrigger>
+              <TabsTrigger 
+                value="cases" 
+                className="rounded-none border-b-2 border-transparent data-[state=active]:border-blue-600 data-[state=active]:bg-transparent px-2 py-3 dark:data-[state=active]:text-slate-200"
+              >
+                <Briefcase className="w-4 h-4 mr-2" /> תיקים ({cases.length})
+              </TabsTrigger>
+              <TabsTrigger 
+                value="financials" 
+                className="rounded-none border-b-2 border-transparent data-[state=active]:border-blue-600 data-[state=active]:bg-transparent px-2 py-3 dark:data-[state=active]:text-slate-200"
+              >
+                <Receipt className="w-4 h-4 mr-2" /> כספים
+              </TabsTrigger>
+              <TabsTrigger 
+                value="docs" 
+                className="rounded-none border-b-2 border-transparent data-[state=active]:border-blue-600 data-[state=active]:bg-transparent px-2 py-3 dark:data-[state=active]:text-slate-200"
+              >
+                <Cloud className="w-4 h-4 mr-2" /> מסמכים
+              </TabsTrigger>
             </TabsList>
 
             <div className="pt-6">
+              {/* Tab: Cases */}
               <TabsContent value="cases">
                 {cases.length > 0 ? (
-                  <DataTable columns={caseColumns} data={cases} isLoading={casesLoading} onRowClick={(row) => navigate(createPageUrl('CaseView', { id: row.id }))} />
+                  <DataTable 
+                    columns={caseColumns} 
+                    data={cases} 
+                    isLoading={casesLoading}
+                    onRowClick={(row) => navigate(createPageUrl('CaseView', { id: row.id }))}
+                  />
                 ) : (
-                  <div className="text-center py-12 border-2 border-dashed rounded-xl"><p className="text-slate-500">אין תיקים ללקוח זה</p><Button variant="link" onClick={() => navigate(createPageUrl('Cases'))}>צור תיק חדש</Button></div>
+                  <div className="text-center py-12 border-2 border-dashed border-slate-300 dark:border-slate-700 rounded-xl">
+                    <p className="text-slate-500">אין תיקים ללקוח זה</p>
+                    <Button variant="link" onClick={() => navigate(createPageUrl('Cases'))}>צור תיק חדש</Button>
+                  </div>
                 )}
               </TabsContent>
 
+              {/* Tab: Financials */}
               <TabsContent value="financials">
                 <Card className="dark:bg-slate-800 dark:border-slate-700">
                   <CardHeader><CardTitle className="dark:text-slate-200">חשבוניות אחרונות</CardTitle></CardHeader>
                   <CardContent>
                     {financials.length > 0 ? (
-                      <div className="space-y-2">{financials.map(inv => (<div key={inv.id} className="flex justify-between items-center p-3 border rounded-lg hover:bg-slate-50"><p className="font-bold text-sm dark:text-slate-200">{inv.invoice_number}</p><div className="text-left"><p className="font-bold dark:text-slate-200">₪{inv.total?.toLocaleString()}</p><StatusBadge status={inv.status} /></div></div>))}</div>
-                    ) : <p className="text-slate-500 text-center py-4">אין פעילות כספית</p>}
+                      <div className="space-y-2">
+                        {financials.map(inv => (
+                          <div key={inv.id} className="flex justify-between items-center p-3 border border-slate-200 dark:border-slate-700 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-700/50">
+                            <div>
+                              <p className="font-bold text-sm dark:text-slate-200">{inv.invoice_number}</p>
+                              <p className="text-xs text-slate-500">{format(new Date(inv.issued_date), 'dd/MM/yyyy')}</p>
+                            </div>
+                            <div className="text-left">
+                              <p className="font-bold dark:text-slate-200">₪{inv.total?.toLocaleString()}</p>
+                              <StatusBadge status={inv.status} />
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-slate-500 text-center py-4">אין פעילות כספית</p>
+                    )}
                   </CardContent>
                 </Card>
               </TabsContent>
 
-              <TabsContent value="docs"><ClientDocuments clientId={clientId} /></TabsContent>
+              {/* Tab: Documents */}
+              <TabsContent value="docs">
+                <ClientDocuments clientId={clientId} />
+              </TabsContent>
             </div>
           </Tabs>
         </div>
       </div>
 
-      {/* --- Full Edit Dialog (מועתק מ-Clients.jsx) --- */}
+      {/* --- Full Edit Dialog (זהה לחלוטין לטופס ב-Clients.jsx) --- */}
       <Dialog open={isEditOpen} onOpenChange={setIsEditOpen}>
         <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto dark:bg-slate-800 dark:border-slate-700">
-          <DialogHeader><DialogTitle className="dark:text-slate-200">עריכת לקוח</DialogTitle></DialogHeader>
+          <DialogHeader>
+            <DialogTitle className="dark:text-slate-200">עריכת לקוח</DialogTitle>
+          </DialogHeader>
           <form onSubmit={handleSave} className="space-y-6 mt-4">
             <div className="grid grid-cols-3 gap-4">
-              <div className="col-span-2 space-y-2"><Label className="dark:text-slate-300">שם הלקוח / חברה *</Label><Input value={formData.name} onChange={(e) => setFormData({...formData, name: e.target.value})} required className="dark:bg-slate-900 dark:border-slate-600" /></div>
-              <div className="space-y-2"><Label className="dark:text-slate-300">מספר לקוח</Label><Input value={formData.client_number} onChange={(e) => setFormData({...formData, client_number: e.target.value})} required className="dark:bg-slate-900 dark:border-slate-600" /></div>
+              <div className="col-span-2 space-y-2">
+                <Label className="dark:text-slate-300">שם הלקוח / חברה *</Label>
+                <Input 
+                  value={formData.name || ''} 
+                  onChange={(e) => setFormData({...formData, name: e.target.value})} 
+                  required 
+                  className="dark:bg-slate-900 dark:border-slate-600" 
+                />
+              </div>
+              <div className="space-y-2">
+                <Label className="dark:text-slate-300">מספר לקוח</Label>
+                <Input 
+                  value={formData.client_number || ''} 
+                  onChange={(e) => setFormData({...formData, client_number: e.target.value})} 
+                  required 
+                  className="dark:bg-slate-900 dark:border-slate-600" 
+                />
+              </div>
             </div>
             
             <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2"><Label className="dark:text-slate-300">סוג לקוח</Label>
-                <Select value={formData.type} onValueChange={(v) => setFormData({...formData, type: v})}>
+              <div className="space-y-2">
+                <Label className="dark:text-slate-300">סוג לקוח</Label>
+                <Select 
+                  value={formData.type} 
+                  onValueChange={(v) => setFormData({...formData, type: v})}
+                >
                   <SelectTrigger className="dark:bg-slate-900 dark:border-slate-600"><SelectValue /></SelectTrigger>
-                  <SelectContent className="dark:bg-slate-800 dark:border-slate-700">{clientTypes.map(t => <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>)}</SelectContent>
+                  <SelectContent className="dark:bg-slate-800 dark:border-slate-700">
+                    {clientTypes.map(t => <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>)}
+                  </SelectContent>
                 </Select>
               </div>
-              <div className="space-y-2"><Label className="dark:text-slate-300">עו"ד מטפל</Label>
-                <Select value={formData.assigned_lawyer_id} onValueChange={(v) => setFormData({...formData, assigned_lawyer_id: v})}>
+              <div className="space-y-2">
+                <Label className="dark:text-slate-300">עו"ד מטפל</Label>
+                <Select 
+                  value={formData.assigned_lawyer_id} 
+                  onValueChange={(v) => setFormData({...formData, assigned_lawyer_id: v})}
+                >
                   <SelectTrigger className="dark:bg-slate-900 dark:border-slate-600"><SelectValue placeholder="בחר עו״ד" /></SelectTrigger>
                   <SelectContent className="dark:bg-slate-800 dark:border-slate-700">
                     {users.map(u => <SelectItem key={u.id} value={u.id}>{u.full_name || u.email}</SelectItem>)}
@@ -411,60 +481,149 @@ export default function ClientView() {
             </div>
 
             {formData.type === 'company' && (
-              <div className="space-y-2"><Label className="dark:text-slate-300">שם איש קשר</Label><Input value={formData.contact_person_name} onChange={(e) => setFormData({...formData, contact_person_name: e.target.value})} className="dark:bg-slate-900 dark:border-slate-600" /></div>
+              <div className="space-y-2">
+                <Label className="dark:text-slate-300">שם איש קשר</Label>
+                <Input 
+                  value={formData.contact_person_name || ''} 
+                  onChange={(e) => setFormData({...formData, contact_person_name: e.target.value})} 
+                  className="dark:bg-slate-900 dark:border-slate-600" 
+                />
+              </div>
             )}
 
             <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2"><Label className="dark:text-slate-300">אימייל</Label><Input value={formData.email} onChange={(e) => setFormData({...formData, email: e.target.value})} className="dark:bg-slate-900 dark:border-slate-600" /></div>
-              <div className="space-y-2"><Label className="dark:text-slate-300">טלפון</Label><Input value={formData.phone} onChange={(e) => setFormData({...formData, phone: e.target.value})} className="dark:bg-slate-900 dark:border-slate-600" /></div>
+              <div className="space-y-2">
+                <Label className="dark:text-slate-300">אימייל</Label>
+                <Input 
+                  value={formData.email || ''} 
+                  onChange={(e) => setFormData({...formData, email: e.target.value})} 
+                  className="dark:bg-slate-900 dark:border-slate-600" 
+                />
+              </div>
+              <div className="space-y-2">
+                <Label className="dark:text-slate-300">טלפון</Label>
+                <Input 
+                  value={formData.phone || ''} 
+                  onChange={(e) => setFormData({...formData, phone: e.target.value})} 
+                  className="dark:bg-slate-900 dark:border-slate-600" 
+                />
+              </div>
             </div>
 
             <div className="grid grid-cols-3 gap-4">
-              <div className="space-y-2"><Label className="dark:text-slate-300">מדינה</Label><Input value={formData.country} onChange={(e) => setFormData({...formData, country: e.target.value})} className="dark:bg-slate-900 dark:border-slate-600" /></div>
-              <div className="space-y-2"><Label className="dark:text-slate-300">שפת תקשורת</Label>
-                <Select value={formData.communication_language} onValueChange={(v) => setFormData({...formData, communication_language: v})}>
+              <div className="space-y-2">
+                <Label className="dark:text-slate-300">מדינה</Label>
+                <Input 
+                  value={formData.country || ''} 
+                  onChange={(e) => setFormData({...formData, country: e.target.value})} 
+                  className="dark:bg-slate-900 dark:border-slate-600" 
+                />
+              </div>
+              <div className="space-y-2">
+                <Label className="dark:text-slate-300">שפת תקשורת</Label>
+                <Select 
+                  value={formData.communication_language} 
+                  onValueChange={(v) => setFormData({...formData, communication_language: v})}
+                >
                   <SelectTrigger className="dark:bg-slate-900 dark:border-slate-600"><SelectValue /></SelectTrigger>
-                  <SelectContent className="dark:bg-slate-800 dark:border-slate-700"><SelectItem value="he">עברית</SelectItem><SelectItem value="en">אנגלית</SelectItem></SelectContent>
+                  <SelectContent className="dark:bg-slate-800 dark:border-slate-700">
+                    <SelectItem value="he">עברית</SelectItem>
+                    <SelectItem value="en">אנגלית</SelectItem>
+                  </SelectContent>
                 </Select>
               </div>
-              <div className="space-y-2"><Label className="dark:text-slate-300">ח.פ / תאגיד</Label><Input value={formData.registration_number} onChange={(e) => setFormData({...formData, registration_number: e.target.value})} className="dark:bg-slate-900 dark:border-slate-600" /></div>
+              <div className="space-y-2">
+                <Label className="dark:text-slate-300">ח.פ / תאגיד</Label>
+                <Input 
+                  value={formData.registration_number || ''} 
+                  onChange={(e) => setFormData({...formData, registration_number: e.target.value})} 
+                  className="dark:bg-slate-900 dark:border-slate-600" 
+                />
+              </div>
             </div>
 
             <div className="grid grid-cols-3 gap-4">
-              <div className="space-y-2"><Label className="dark:text-slate-300">מספר עוסק</Label><Input value={formData.tax_id} onChange={(e) => setFormData({...formData, tax_id: e.target.value})} className="dark:bg-slate-900 dark:border-slate-600" /></div>
-              <div className="space-y-2"><Label className="dark:text-slate-300">תעריף שעתי</Label><Input type="number" step="0.01" value={formData.hourly_rate} onChange={(e) => setFormData({...formData, hourly_rate: parseFloat(e.target.value) || 0})} className="dark:bg-slate-900 dark:border-slate-600" /></div>
-              <div className="space-y-2"><Label className="dark:text-slate-300">מטבע</Label>
-                <Select value={formData.billing_currency} onValueChange={(v) => setFormData({...formData, billing_currency: v})}>
+              <div className="space-y-2">
+                <Label className="dark:text-slate-300">מספר עוסק</Label>
+                <Input 
+                  value={formData.tax_id || ''} 
+                  onChange={(e) => setFormData({...formData, tax_id: e.target.value})} 
+                  className="dark:bg-slate-900 dark:border-slate-600" 
+                />
+              </div>
+              <div className="space-y-2">
+                <Label className="dark:text-slate-300">תעריף שעתי</Label>
+                <Input 
+                  type="number" 
+                  step="0.01" 
+                  value={formData.hourly_rate} 
+                  onChange={(e) => setFormData({...formData, hourly_rate: parseFloat(e.target.value) || 0})} 
+                  className="dark:bg-slate-900 dark:border-slate-600" 
+                />
+              </div>
+              <div className="space-y-2">
+                <Label className="dark:text-slate-300">מטבע</Label>
+                <Select 
+                  value={formData.billing_currency} 
+                  onValueChange={(v) => setFormData({...formData, billing_currency: v})}
+                >
                   <SelectTrigger className="dark:bg-slate-900 dark:border-slate-600"><SelectValue /></SelectTrigger>
-                  <SelectContent className="dark:bg-slate-800 dark:border-slate-700">{currencies.map(curr => <SelectItem key={curr.value} value={curr.value}>{curr.label}</SelectItem>)}</SelectContent>
+                  <SelectContent className="dark:bg-slate-800 dark:border-slate-700">
+                    {currencies.map(curr => (
+                      <SelectItem key={curr.value} value={curr.value}>{curr.label}</SelectItem>
+                    ))}
+                  </SelectContent>
                 </Select>
               </div>
             </div>
 
             <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2"><Label className="dark:text-slate-300">תנאי תשלום</Label>
-                <Select value={formData.payment_terms} onValueChange={(v) => setFormData({...formData, payment_terms: v})}>
+              <div className="space-y-2">
+                <Label className="dark:text-slate-300">תנאי תשלום</Label>
+                <Select 
+                  value={formData.payment_terms} 
+                  onValueChange={(v) => setFormData({...formData, payment_terms: v})}
+                >
                   <SelectTrigger className="dark:bg-slate-900 dark:border-slate-600"><SelectValue /></SelectTrigger>
-                  <SelectContent className="dark:bg-slate-800 dark:border-slate-700">{paymentTerms.map(t => <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>)}</SelectContent>
+                  <SelectContent className="dark:bg-slate-800 dark:border-slate-700">
+                    {paymentTerms.map(t => (
+                      <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
+                    ))}
+                  </SelectContent>
                 </Select>
               </div>
-              <div className="space-y-2"><Label className="dark:text-slate-300">כתובת</Label><Input value={formData.address} onChange={(e) => setFormData({...formData, address: e.target.value})} className="dark:bg-slate-900 dark:border-slate-600" /></div>
+              <div className="space-y-2">
+                <Label className="dark:text-slate-300">כתובת</Label>
+                <Input 
+                  value={formData.address || ''} 
+                  onChange={(e) => setFormData({...formData, address: e.target.value})} 
+                  className="dark:bg-slate-900 dark:border-slate-600" 
+                />
+              </div>
             </div>
 
-            <div className="space-y-2"><Label className="dark:text-slate-300">הערות</Label><Textarea value={formData.notes} onChange={(e) => setFormData({...formData, notes: e.target.value})} rows={3} className="dark:bg-slate-900 dark:border-slate-600" /></div>
+            <div className="space-y-2">
+              <Label className="dark:text-slate-300">הערות</Label>
+              <Textarea 
+                value={formData.notes || ''} 
+                onChange={(e) => setFormData({...formData, notes: e.target.value})} 
+                rows={3} 
+                className="dark:bg-slate-900 dark:border-slate-600" 
+              />
+            </div>
 
             <div className="flex justify-end gap-3 pt-4">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => setIsEditOpen(false)}
+              <Button 
+                type="button" 
+                variant="outline" 
+                onClick={() => setIsEditOpen(false)} 
                 className="dark:border-slate-600"
               >
                 {t('common.cancel')}
               </Button>
-              <Button
-                type="submit"
-                className="bg-slate-800 hover:bg-slate-700 dark:bg-slate-700"
+              <Button 
+                type="submit" 
+                className="bg-slate-800 hover:bg-slate-700 dark:bg-slate-700" 
                 disabled={updateMutation.isPending}
               >
                 {updateMutation.isPending ? 'שומר...' : 'שמור שינויים'}
