@@ -2,6 +2,8 @@ import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { base44 } from '@/api/base44Client';
 import { useTranslation } from 'react-i18next';
+import { useLocation } from 'react-router-dom';
+import { createPageUrl } from '../utils';
 import { useNavigate } from 'react-router-dom';
 import { createPageUrl } from '../utils';
 import PageHeader from '../components/ui/PageHeader';
@@ -495,7 +497,10 @@ export default function Clients() {
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="dark:bg-slate-800 dark:border-slate-700">
             <DropdownMenuItem
-                onClick={() => navigate(createPageUrl('ClientView', { id: r.id }))}
+                onClick={(e) => {
+                  e.stopPropagation(); // עוצר את הלחיצה מלהגיע לשורה
+                  openEditDialog(r);
+                }}
                 className="flex items-center gap-2 dark:text-slate-200 dark:hover:bg-slate-700"
               >
                 <Eye className="w-4 h-4" />
@@ -509,7 +514,10 @@ export default function Clients() {
                 {t('clients.edit')}
               </DropdownMenuItem>
               <DropdownMenuItem
-                onClick={() => deleteMutation.mutate(r.id)}
+                onClick={(e) => {
+                  e.stopPropagation(); // <--- הוספה
+                  deleteMutation.mutate(r.id);
+                }}
                 className="flex items-center gap-2 text-rose-600 dark:text-rose-400 dark:hover:bg-slate-700"
               >
                 <Trash2 className="w-4 h-4" />
