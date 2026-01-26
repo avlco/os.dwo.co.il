@@ -14,7 +14,8 @@ import {
   Plus,
   Edit,
   Trash2,
-  Cloud
+  Cloud,
+  AlertTriangle // הוספתי אייקון חסר לדחיפות
 } from 'lucide-react';
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -38,9 +39,10 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import CaseDocuments from '../components/case/CaseDocuments';
 import { useToast } from "@/components/ui/use-toast";
-import { useTranslation } from 'react-i18next';
+import { useTranslation } from 'react-i18next'; // הוספת תרגום
+import { Badge } from "@/components/ui/badge"; // הוספת Badge
 
-// --- הגדרות כמו ב-Cases.jsx ---
+// --- הגדרות זהות לקובץ Cases.jsx ---
 const caseTypes = [
   { value: 'patent', label: 'פטנט' },
   { value: 'trademark', label: 'סימן מסחר' },
@@ -88,10 +90,12 @@ export default function CaseView() {
   // --- States ---
   const [isDeadlineDialogOpen, setIsDeadlineDialogOpen] = useState(false);
   const [isTimeEntryDialogOpen, setIsTimeEntryDialogOpen] = useState(false);
+  
+  // State חדש: דיאלוג עריכת תיק
   const [isEditCaseDialogOpen, setIsEditCaseDialogOpen] = useState(false);
 
-  // --- Forms States ---
-  const [editCaseForm, setEditCaseForm] = useState({}); // טופס עריכת תיק
+  // --- Forms ---
+  const [editCaseForm, setEditCaseForm] = useState({}); // טופס עריכה לתיק
   const [deadlineForm, setDeadlineForm] = useState({
     deadline_type: 'custom',
     description: '',
@@ -120,7 +124,7 @@ export default function CaseView() {
     enabled: !!caseData?.[0]?.client_id,
   });
 
-  // נתונים לטופס העריכה (Clients + Users)
+  // נתונים נוספים לטופס העריכה (רשימת לקוחות ועורכי דין)
   const { data: allClients = [] } = useQuery({
     queryKey: ['clients'],
     queryFn: () => base44.entities.Client.list(),
@@ -152,7 +156,7 @@ export default function CaseView() {
   const currentCase = caseData?.[0];
   const currentClient = client?.[0];
 
-  // טעינת הנתונים לטופס העריכה - העתק מ-Cases.jsx
+  // --- useEffect: טעינת הנתונים לטופס העריכה ---
   useEffect(() => {
     if (currentCase) {
       setEditCaseForm({
@@ -177,12 +181,14 @@ export default function CaseView() {
 
   // --- Mutations ---
 
-  // 1. עדכון תיק
+  // 1. עדכון תיק (החלק החשוב)
   const updateCaseMutation = useMutation({
     mutationFn: (data) => base44.entities.Case.update(caseId, data),
     onSuccess: () => {
+      // רענון כפול: גם התיק הספציפי וגם הרשימה
       queryClient.invalidateQueries(['case', caseId]);
       queryClient.invalidateQueries(['cases']);
+      
       setIsEditCaseDialogOpen(false);
       toast({
         title: "התיק עודכן בהצלחה",
@@ -231,16 +237,18 @@ export default function CaseView() {
     },
   });
 
+  // פונקציית השמירה לטופס העריכה
   const handleEditSubmit = (e) => {
     e.preventDefault();
     const submitData = { ...editCaseForm };
     
-    // ניקוי שדות
+    // ניקוי שדות ריקים
     if (!submitData.hourly_rate) submitData.hourly_rate = null;
     if (!submitData.assigned_lawyer_id) submitData.assigned_lawyer_id = null;
     if (!submitData.filing_date) submitData.filing_date = null;
     if (!submitData.expiry_date) submitData.expiry_date = null;
     if (!submitData.renewal_date) submitData.renewal_date = null;
+    if (!submitData.official_status_date) submitData.official_status_date = null;
 
     updateCaseMutation.mutate(submitData);
   };
@@ -270,8 +278,11 @@ export default function CaseView() {
     .filter(t => t.is_billable)
     .reduce((sum, t) => sum + ((t.hours || 0) * (t.rate || 0)), 0);
 
+  // תווית דחיפות
+  const priorityInfo = priorityLevels.find(p => p.value === currentCase.priority_level);
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 pb-10">
       {/* Header */}
       <div className="flex items-center gap-4">
         <Link to={createPageUrl('Cases')}>
@@ -283,11 +294,16 @@ export default function CaseView() {
           <div className="flex items-center gap-3">
             <h1 className="text-2xl font-bold text-slate-800">{currentCase.case_number}</h1>
             <StatusBadge status={currentCase.status} />
+            {priorityInfo && (
+              <Badge variant="outline" className={`${priorityInfo.color} border-current ml-2`}>
+                {priorityInfo.label}
+              </Badge>
+            )}
           </div>
           <p className="text-slate-500 mt-1">{currentCase.title}</p>
         </div>
         
-        {/* כפתור עריכה מתוקן */}
+        {/* כפתור העריכה שונה: פותח דיאלוג במקום לעבור עמוד */}
         <Button variant="outline" className="gap-2" onClick={() => setIsEditCaseDialogOpen(true)}>
           <Edit className="w-4 h-4" />
           עריכה
@@ -358,6 +374,13 @@ export default function CaseView() {
                   <p className="text-sm text-slate-500">תאריך רישום</p>
                   <p className="font-medium">
                     {currentCase.grant_date ? format(new Date(currentCase.grant_date), 'dd/MM/yyyy') : '-'}
+                  </p>
+                </div>
+                {/* שדה חדש שהוספנו */}
+                <div>
+                  <p className="text-sm text-slate-500">תאריך סטטוס רשמי</p>
+                  <p className="font-medium">
+                    {currentCase.official_status_date ? format(new Date(currentCase.official_status_date), 'dd/MM/yyyy') : '-'}
                   </p>
                 </div>
                 <div className="md:col-span-2">
@@ -511,122 +534,110 @@ export default function CaseView() {
         </TabsContent>
       </Tabs>
 
-      {/* --- דיאלוג עריכה מלא (העתק מ-Cases.jsx) --- */}
+      {/* --- דיאלוג עריכה חדש (העתק מדויק מ-Cases.jsx) --- */}
       <Dialog open={isEditCaseDialogOpen} onOpenChange={setIsEditCaseDialogOpen}>
-        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto dark:bg-slate-800 dark:border-slate-700">
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle className="dark:text-slate-200">עריכת תיק {editCaseForm.case_number}</DialogTitle>
+            <DialogTitle>עריכת תיק {editCaseForm.case_number}</DialogTitle>
           </DialogHeader>
           <form onSubmit={handleEditSubmit} className="space-y-6 mt-4">
             <div className="grid grid-cols-3 gap-4">
               <div className="space-y-2">
-                <Label className="dark:text-slate-300">מספר תיק *</Label>
+                <Label>מספר תיק *</Label>
                 <Input
                   value={editCaseForm.case_number}
                   onChange={(e) => setEditCaseForm({ ...editCaseForm, case_number: e.target.value })}
                   required
-                  className="dark:bg-slate-900 dark:border-slate-600"
                 />
               </div>
               <div className="space-y-2">
-                <Label className="dark:text-slate-300">סוג תיק *</Label>
+                <Label>סוג תיק *</Label>
                 <Select
                   value={editCaseForm.case_type}
                   onValueChange={(v) => setEditCaseForm({ ...editCaseForm, case_type: v })}
                 >
-                  <SelectTrigger className="dark:bg-slate-900 dark:border-slate-600">
+                  <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>
-                  <SelectContent className="dark:bg-slate-800 dark:border-slate-700">
+                  <SelectContent>
                     {caseTypes.map(type => (
-                      <SelectItem key={type.value} value={type.value} className="dark:text-slate-200">
-                        {type.label}
-                      </SelectItem>
+                      <SelectItem key={type.value} value={type.value}>{type.label}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
               </div>
               <div className="space-y-2">
-                <Label className="dark:text-slate-300">דחיפות</Label>
+                <Label>דחיפות</Label>
                 <Select
                   value={editCaseForm.priority_level}
                   onValueChange={(v) => setEditCaseForm({ ...editCaseForm, priority_level: v })}
                 >
-                  <SelectTrigger className="dark:bg-slate-900 dark:border-slate-600">
+                  <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>
-                  <SelectContent className="dark:bg-slate-800 dark:border-slate-700">
+                  <SelectContent>
                     {priorityLevels.map(priority => (
-                      <SelectItem key={priority.value} value={priority.value} className="dark:text-slate-200">
-                        {priority.label}
-                      </SelectItem>
+                      <SelectItem key={priority.value} value={priority.value}>{priority.label}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
               </div>
             </div>
-
+            
             <div className="space-y-2">
-              <Label className="dark:text-slate-300">נושא התיק / תיאור המצאה *</Label>
+              <Label>נושא התיק / תיאור</Label>
               <Input
                 value={editCaseForm.title}
                 onChange={(e) => setEditCaseForm({ ...editCaseForm, title: e.target.value })}
                 required
-                className="dark:bg-slate-900 dark:border-slate-600"
               />
             </div>
 
             <div className="grid grid-cols-3 gap-4">
               <div className="space-y-2">
-                <Label className="dark:text-slate-300">לקוח</Label>
+                <Label>לקוח</Label>
                 <Select
                   value={editCaseForm.client_id || undefined}
                   onValueChange={(v) => setEditCaseForm({ ...editCaseForm, client_id: v })}
                 >
-                  <SelectTrigger className="dark:bg-slate-900 dark:border-slate-600">
+                  <SelectTrigger>
                     <SelectValue placeholder="בחר לקוח" />
                   </SelectTrigger>
-                  <SelectContent className="dark:bg-slate-800 dark:border-slate-700">
+                  <SelectContent>
                     {allClients.map(client => (
-                      <SelectItem key={client.id} value={client.id} className="dark:text-slate-200">
-                        {client.name}
-                      </SelectItem>
+                      <SelectItem key={client.id} value={client.id}>{client.name}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
               </div>
               <div className="space-y-2">
-                <Label className="dark:text-slate-300">עו"ד מטפל</Label>
+                <Label>עו"ד מטפל</Label>
                 <Select
                   value={editCaseForm.assigned_lawyer_id || undefined}
                   onValueChange={(v) => setEditCaseForm({ ...editCaseForm, assigned_lawyer_id: v })}
                 >
-                  <SelectTrigger className="dark:bg-slate-900 dark:border-slate-600">
+                  <SelectTrigger>
                     <SelectValue placeholder="בחר עו״ד" />
                   </SelectTrigger>
-                  <SelectContent className="dark:bg-slate-800 dark:border-slate-700">
+                  <SelectContent>
                     {users.map(user => (
-                      <SelectItem key={user.id} value={user.id} className="dark:text-slate-200">
-                        {user.full_name || user.email}
-                      </SelectItem>
+                      <SelectItem key={user.id} value={user.id}>{user.full_name || user.email}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
               </div>
               <div className="space-y-2">
-                <Label className="dark:text-slate-300">סטטוס *</Label>
+                <Label>סטטוס *</Label>
                 <Select
                   value={editCaseForm.status}
                   onValueChange={(v) => setEditCaseForm({ ...editCaseForm, status: v })}
                 >
-                  <SelectTrigger className="dark:bg-slate-900 dark:border-slate-600">
+                  <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>
-                  <SelectContent className="dark:bg-slate-800 dark:border-slate-700">
+                  <SelectContent>
                     {caseStatuses.map(status => (
-                      <SelectItem key={status.value} value={status.value} className="dark:text-slate-200">
-                        {status.label}
-                      </SelectItem>
+                      <SelectItem key={status.value} value={status.value}>{status.label}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
@@ -635,77 +646,91 @@ export default function CaseView() {
 
             <div className="grid grid-cols-3 gap-4">
               <div className="space-y-2">
-                <Label className="dark:text-slate-300">מספר בקשה רשמי</Label>
+                <Label>מספר בקשה רשמי</Label>
                 <Input
                   value={editCaseForm.application_number}
                   onChange={(e) => setEditCaseForm({ ...editCaseForm, application_number: e.target.value })}
-                  className="dark:bg-slate-900 dark:border-slate-600"
                 />
               </div>
               <div className="space-y-2">
-                <Label className="dark:text-slate-300">תאריך הגשה</Label>
+                <Label>תאריך הגשה</Label>
                 <Input
                   type="date"
                   value={editCaseForm.filing_date || ''}
                   onChange={(e) => setEditCaseForm({ ...editCaseForm, filing_date: e.target.value })}
-                  className="dark:bg-slate-900 dark:border-slate-600"
                 />
               </div>
               <div className="space-y-2">
-                <Label className="dark:text-slate-300">מדינה</Label>
+                <Label>מדינה</Label>
                 <Input
                   value={editCaseForm.territory}
                   onChange={(e) => setEditCaseForm({ ...editCaseForm, territory: e.target.value })}
-                  className="dark:bg-slate-900 dark:border-slate-600"
                 />
               </div>
             </div>
 
             <div className="grid grid-cols-3 gap-4">
               <div className="space-y-2">
-                <Label className="dark:text-slate-300">מועד פקיעה</Label>
+                <Label>מועד פקיעה</Label>
                 <Input
                   type="date"
                   value={editCaseForm.expiry_date || ''}
                   onChange={(e) => setEditCaseForm({ ...editCaseForm, expiry_date: e.target.value })}
-                  className="dark:bg-slate-900 dark:border-slate-600"
                 />
               </div>
               <div className="space-y-2">
-                <Label className="dark:text-slate-300">מועד חידוש</Label>
+                <Label>מועד חידוש</Label>
                 <Input
                   type="date"
                   value={editCaseForm.renewal_date || ''}
                   onChange={(e) => setEditCaseForm({ ...editCaseForm, renewal_date: e.target.value })}
-                  className="dark:bg-slate-900 dark:border-slate-600"
                 />
               </div>
               <div className="space-y-2">
-                <Label className="dark:text-slate-300">תעריף שעתי (אופציונלי)</Label>
+                <Label>תאריך סטטוס רשמי</Label>
+                <Input
+                  type="date"
+                  value={editCaseForm.official_status_date || ''}
+                  onChange={(e) => setEditCaseForm({ ...editCaseForm, official_status_date: e.target.value })}
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>תעריף שעתי (אופציונלי)</Label>
                 <Input
                   type="number"
                   step="0.01"
                   value={editCaseForm.hourly_rate}
                   onChange={(e) => setEditCaseForm({ ...editCaseForm, hourly_rate: e.target.value })}
-                  className="dark:bg-slate-900 dark:border-slate-600"
                 />
               </div>
             </div>
 
             <div className="space-y-2">
-              <Label className="dark:text-slate-300">הערות</Label>
+              <Label>הערות</Label>
               <Textarea
                 value={editCaseForm.notes}
                 onChange={(e) => setEditCaseForm({ ...editCaseForm, notes: e.target.value })}
                 rows={3}
-                className="dark:bg-slate-900 dark:border-slate-600"
               />
             </div>
 
             <div className="flex justify-end gap-3 pt-4">
-              <Button type="button" variant="outline" onClick={() => setIsEditCaseDialogOpen(false)} className="dark:border-slate-600">ביטול</Button>
-              <Button type="submit" className="bg-slate-800 hover:bg-slate-700 dark:bg-slate-700" disabled={updateCaseMutation.isPending}>
-                {updateCaseMutation.isPending ? 'שומר...' : 'עדכן תיק'}
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setIsEditCaseDialogOpen(false)}
+              >
+                ביטול
+              </Button>
+              <Button
+                type="submit"
+                className="bg-slate-800"
+                disabled={updateCaseMutation.isPending}
+              >
+                שמור שינויים
               </Button>
             </div>
           </form>
