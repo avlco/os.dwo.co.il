@@ -23,7 +23,8 @@ import {
   Trash2,
   Plus,
   Loader2,
-  FileText
+  FileText,
+  Globe
 } from 'lucide-react';
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -207,53 +208,70 @@ export default function ClientView() {
         
         {/* Sidebar Info */}
         <div className="space-y-6">
-          <Card>
-            <CardHeader><CardTitle className="text-base">פרטי קשר</CardTitle></CardHeader>
+          <Card className="dark:bg-slate-800 dark:border-slate-700">
+            <CardHeader><CardTitle className="text-base dark:text-slate-200">פרטי קשר</CardTitle></CardHeader>
             <CardContent className="space-y-4">
               {client.email && (
                 <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 rounded-lg bg-slate-100 flex items-center justify-center"><Mail className="w-4 h-4 text-slate-500" /></div>
+                  <div className="w-8 h-8 rounded-lg bg-slate-100 dark:bg-slate-700 flex items-center justify-center"><Mail className="w-4 h-4 text-slate-500 dark:text-slate-400" /></div>
                   <div className="flex-1 min-w-0">
                     <p className="text-xs text-slate-400">אימייל</p>
-                    <p className="text-sm font-medium truncate" title={client.email}>{client.email}</p>
+                    <p className="text-sm font-medium truncate dark:text-slate-200" title={client.email}>{client.email}</p>
                   </div>
                 </div>
               )}
               {client.phone && (
                 <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 rounded-lg bg-slate-100 flex items-center justify-center"><Phone className="w-4 h-4 text-slate-500" /></div>
+                  <div className="w-8 h-8 rounded-lg bg-slate-100 dark:bg-slate-700 flex items-center justify-center"><Phone className="w-4 h-4 text-slate-500 dark:text-slate-400" /></div>
                   <div className="flex-1 min-w-0">
                     <p className="text-xs text-slate-400">טלפון</p>
-                    <p className="text-sm font-medium dir-ltr text-right">{client.phone}</p>
+                    <p className="text-sm font-medium dir-ltr text-right dark:text-slate-200">{client.phone}</p>
                   </div>
                 </div>
               )}
               {client.address && (
                 <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 rounded-lg bg-slate-100 flex items-center justify-center"><MapPin className="w-4 h-4 text-slate-500" /></div>
+                  <div className="w-8 h-8 rounded-lg bg-slate-100 dark:bg-slate-700 flex items-center justify-center"><MapPin className="w-4 h-4 text-slate-500 dark:text-slate-400" /></div>
                   <div className="flex-1 min-w-0">
                     <p className="text-xs text-slate-400">כתובת</p>
-                    <p className="text-sm font-medium">{client.address}, {client.country}</p>
+                    <p className="text-sm font-medium dark:text-slate-200">{client.address}, {client.country}</p>
                   </div>
                 </div>
               )}
+
+              {/* --- תצוגת שפה --- */}
+              <div className="flex items-center gap-3 pt-2 border-t border-slate-100 dark:border-slate-700 mt-2">
+                <div className="w-8 h-8 rounded-lg bg-slate-100 dark:bg-slate-700 flex items-center justify-center">
+                   <span className="text-xs font-bold text-slate-500 dark:text-slate-400">
+                    {client.communication_language === 'en' ? 'EN' : 'HE'}
+                   </span>
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs text-slate-400">שפת תקשורת</p>
+                  <p className="text-sm font-medium text-slate-800 dark:text-slate-200">
+                    {client.communication_language === 'en' ? 'אנגלית (English)' : 'עברית'}
+                  </p>
+                </div>
+              </div>
+              {/* ---------------- */}
+
             </CardContent>
           </Card>
 
-          <Card>
-            <CardHeader><CardTitle className="text-base">הגדרות חיוב</CardTitle></CardHeader>
+          <Card className="dark:bg-slate-800 dark:border-slate-700">
+            <CardHeader><CardTitle className="text-base dark:text-slate-200">הגדרות חיוב</CardTitle></CardHeader>
             <CardContent className="space-y-4">
-              <div className="flex justify-between items-center border-b pb-2">
-                <span className="text-sm text-slate-500">תעריף שעתי</span>
-                <span className="font-bold">{client.hourly_rate ? `₪${client.hourly_rate}` : '-'}</span>
+              <div className="flex justify-between items-center border-b border-slate-100 dark:border-slate-700 pb-2">
+                <span className="text-sm text-slate-500 dark:text-slate-400">תעריף שעתי</span>
+                <span className="font-bold dark:text-slate-200">{client.hourly_rate ? `₪${client.hourly_rate}` : '-'}</span>
               </div>
-              <div className="flex justify-between items-center border-b pb-2">
-                <span className="text-sm text-slate-500">תנאי תשלום</span>
-                <span className="font-medium">{client.payment_terms || 'מיידי'}</span>
+              <div className="flex justify-between items-center border-b border-slate-100 dark:border-slate-700 pb-2">
+                <span className="text-sm text-slate-500 dark:text-slate-400">תנאי תשלום</span>
+                <span className="font-medium dark:text-slate-200">{client.payment_terms || 'מיידי'}</span>
               </div>
               <div className="flex justify-between items-center">
-                <span className="text-sm text-slate-500">מטבע</span>
-                <span className="font-medium">{client.billing_currency || 'ILS'}</span>
+                <span className="text-sm text-slate-500 dark:text-slate-400">מטבע</span>
+                <span className="font-medium dark:text-slate-200">{client.billing_currency || 'ILS'}</span>
               </div>
             </CardContent>
           </Card>
@@ -263,13 +281,13 @@ export default function ClientView() {
         <div className="lg:col-span-2">
           <Tabs defaultValue="cases" className="w-full">
             <TabsList className="w-full justify-start border-b rounded-none h-auto p-0 bg-transparent gap-6">
-              <TabsTrigger value="cases" className="rounded-none border-b-2 border-transparent data-[state=active]:border-blue-600 data-[state=active]:bg-transparent px-2 py-3">
+              <TabsTrigger value="cases" className="rounded-none border-b-2 border-transparent data-[state=active]:border-blue-600 data-[state=active]:bg-transparent px-2 py-3 dark:data-[state=active]:text-slate-200">
                 <Briefcase className="w-4 h-4 mr-2" /> תיקים ({cases.length})
               </TabsTrigger>
-              <TabsTrigger value="financials" className="rounded-none border-b-2 border-transparent data-[state=active]:border-blue-600 data-[state=active]:bg-transparent px-2 py-3">
+              <TabsTrigger value="financials" className="rounded-none border-b-2 border-transparent data-[state=active]:border-blue-600 data-[state=active]:bg-transparent px-2 py-3 dark:data-[state=active]:text-slate-200">
                 <Receipt className="w-4 h-4 mr-2" /> כספים
               </TabsTrigger>
-              <TabsTrigger value="docs" className="rounded-none border-b-2 border-transparent data-[state=active]:border-blue-600 data-[state=active]:bg-transparent px-2 py-3">
+              <TabsTrigger value="docs" className="rounded-none border-b-2 border-transparent data-[state=active]:border-blue-600 data-[state=active]:bg-transparent px-2 py-3 dark:data-[state=active]:text-slate-200">
                 <Cloud className="w-4 h-4 mr-2" /> מסמכים
               </TabsTrigger>
             </TabsList>
@@ -284,7 +302,7 @@ export default function ClientView() {
                     onRowClick={(row) => navigate(createPageUrl('CaseView', { id: row.id }))}
                   />
                 ) : (
-                  <div className="text-center py-12 border-2 border-dashed rounded-xl">
+                  <div className="text-center py-12 border-2 border-dashed border-slate-300 dark:border-slate-700 rounded-xl">
                     <p className="text-slate-500">אין תיקים ללקוח זה</p>
                     <Button variant="link" onClick={() => navigate(createPageUrl('Cases'))}>צור תיק חדש</Button>
                   </div>
@@ -292,19 +310,19 @@ export default function ClientView() {
               </TabsContent>
 
               <TabsContent value="financials">
-                <Card>
-                  <CardHeader><CardTitle>חשבוניות אחרונות</CardTitle></CardHeader>
+                <Card className="dark:bg-slate-800 dark:border-slate-700">
+                  <CardHeader><CardTitle className="dark:text-slate-200">חשבוניות אחרונות</CardTitle></CardHeader>
                   <CardContent>
                     {financials.length > 0 ? (
                       <div className="space-y-2">
                         {financials.map(inv => (
-                          <div key={inv.id} className="flex justify-between items-center p-3 border rounded-lg hover:bg-slate-50">
+                          <div key={inv.id} className="flex justify-between items-center p-3 border border-slate-200 dark:border-slate-700 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-700/50">
                             <div>
-                              <p className="font-bold text-sm">{inv.invoice_number}</p>
+                              <p className="font-bold text-sm dark:text-slate-200">{inv.invoice_number}</p>
                               <p className="text-xs text-slate-500">{format(new Date(inv.issued_date), 'dd/MM/yyyy')}</p>
                             </div>
                             <div className="text-left">
-                              <p className="font-bold">₪{inv.total?.toLocaleString()}</p>
+                              <p className="font-bold dark:text-slate-200">₪{inv.total?.toLocaleString()}</p>
                               <StatusBadge status={inv.status} />
                             </div>
                           </div>
