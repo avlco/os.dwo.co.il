@@ -2,6 +2,8 @@ import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { base44 } from '@/api/base44Client';
 import { useTranslation } from 'react-i18next';
+import { useNavigate } from 'react-router-dom';
+import { createPageUrl } from '../utils';
 import PageHeader from '../components/ui/PageHeader';
 import DataTable from '../components/ui/DataTable';
 import EmptyState from '../components/ui/EmptyState';
@@ -47,6 +49,7 @@ export default function Clients() {
   const isRTL = i18n.language === 'he';
   const queryClient = useQueryClient();
   const { toast } = useToast();
+  const navigate = useNavigate();
   const [searchTerm, setSearchTerm] = useState('');
   const [filterType, setFilterType] = useState('all');
   const [showArchived, setShowArchived] = useState(false);
@@ -490,6 +493,13 @@ export default function Clients() {
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="dark:bg-slate-800 dark:border-slate-700">
+            <DropdownMenuItem
+                onClick={() => navigate(createPageUrl('ClientView', { id: r.id }))}
+                className="flex items-center gap-2 dark:text-slate-200 dark:hover:bg-slate-700"
+              >
+                <Eye className="w-4 h-4" />
+                צפייה
+              </DropdownMenuItem>
               <DropdownMenuItem
                 onClick={() => openEditDialog(r)}
                 className="flex items-center gap-2 dark:text-slate-200 dark:hover:bg-slate-700"
@@ -571,6 +581,7 @@ export default function Clients() {
           data={filteredClients}
           isLoading={isLoading}
           emptyMessage={t('clients.no_results')}
+          onRowClick={(row) => navigate(createPageUrl('ClientView', { id: row.id }))}
         />
       )}
 
