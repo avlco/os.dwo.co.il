@@ -449,10 +449,36 @@ Deno.serve(async (req) => {
       );
       
       if (to.length > 0) {
+        // --- לוגיקת בחירת שפה ---
+        let subjectTemplate = actions.send_email.subject_template;
+        let bodyTemplate = actions.send_email.body_template;
+
+        // אם מוגדרת גרסה אנגלית, נבדוק את הלקוח
+        if (clientId && actions.send_email.enable_english) {
+          try {
+            const client = await base44.entities.Client.get(clientId);
+            // אם שפת הלקוח היא אנגלית ('en')
+            if (client && client.communication_language === 'en') {
+               console.log('[Action] 🇺🇸 English client detected. Switching templates.');
+               
+               // השתמש באנגלית אם השדות לא ריקים
+               if (actions.send_email.subject_template_en) {
+                 subjectTemplate = actions.send_email.subject_template_en;
+               }
+               if (actions.send_email.body_template_en) {
+                 bodyTemplate = actions.send_email.body_template_en;
+               }
+            }
+          } catch (err) {
+            console.error('[Action] Error checking client language:', err);
+          }
+        }
+        // -------------------------
+
         const emailConfig = {
           to: to.join(','),
-          subject: await replaceTokens(actions.send_email.subject_template, { mail, caseId, clientId }, base44),
-          body: await replaceTokens(actions.send_email.body_template, { mail, caseId, clientId }, base44)
+          subject: await replaceTokens(subjectTemplate, { mail, caseId, clientId }, base44),
+          body: await replaceTokens(bodyTemplate, { mail, caseId, clientId }, base44)
         };
         
         console.log(`[Action] Email config:`, emailConfig);
