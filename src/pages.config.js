@@ -1,5 +1,6 @@
 import Dashboard from './pages/Dashboard';
 import Clients from './pages/Clients';
+import ClientView from './pages/ClientView';
 import Cases from './pages/Cases';
 import CaseView from './pages/CaseView';
 import Tasks from './pages/Tasks';
@@ -19,6 +20,7 @@ export const pagesConfig = {
   Pages: {
     Dashboard,
     Clients,
+    ClientView,
     Cases,
     CaseView,
     Tasks,
