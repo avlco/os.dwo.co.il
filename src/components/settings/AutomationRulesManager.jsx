@@ -67,8 +67,31 @@ const defaultRule = {
       body_template_en: ''        // <--- חדש
     },
     save_file: { enabled: false, path_template: '' },
-    calendar_event: { enabled: false, title_template: '', timing_direction: 'after', timing_offset: 7, timing_unit: 'days', attendees: [], create_meet_link: false },
-    create_alert: { enabled: false, alert_type: 'reminder', message_template: '', timing_direction: 'after', timing_offset: 7, timing_unit: 'days', recipients: [] },
+    calendar_event: { 
+        enabled: false, 
+        title_template: '', 
+        timing_direction: 'after', 
+        timing_offset: 7, 
+        timing_unit: 'days', 
+        attendees: [], 
+        create_meet_link: false,
+        // --- חדש ---
+        enable_english: false,
+        title_template_en: '',
+        description_template_en: ''
+    },
+    create_alert: { 
+        enabled: false, 
+        alert_type: 'reminder', 
+        message_template: '', 
+        timing_direction: 'after', 
+        timing_offset: 7, 
+        timing_unit: 'days', 
+        recipients: [],
+        // --- חדש ---
+        enable_english: false,
+        message_template_en: ''
+    },
     billing: { enabled: false, hours: 0.25, hourly_rate: 0, description_template: '' }
   }
 };
@@ -534,6 +557,28 @@ export default function AutomationRulesManager() {
                       <Label className="text-sm">נמענים</Label>
                       <RecipientsSelect value={currentRule.action_bundle.create_alert.recipients} onChange={v => updateAction('create_alert', 'recipients', v)} />
                     </div>
+                    <div className="mt-4 pt-4 border-t border-slate-200 dark:border-slate-700">
+                        <div className="flex items-center gap-2 mb-3">
+                            <Switch 
+                            checked={currentRule.action_bundle.create_alert.enable_english || false} 
+                            onCheckedChange={c => updateAction('create_alert', 'enable_english', c)} 
+                            />
+                            <Label className="text-sm text-blue-600 dark:text-blue-400 font-medium">הוסף גרסה באנגלית</Label>
+                        </div>
+                        
+                        {currentRule.action_bundle.create_alert.enable_english && (
+                            <div className="space-y-3 p-3 bg-slate-50 dark:bg-slate-900 rounded border">
+                            <div>
+                                <Label className="text-sm">English Message</Label>
+                                <TokenInput 
+                                value={currentRule.action_bundle.create_alert.message_template_en || ''} 
+                                onChange={v => updateAction('create_alert', 'message_template_en', v)} 
+                                placeholder="Alert for case {Case_No}" 
+                                />
+                            </div>
+                            </div>
+                        )}
+                    </div>
                   </div>
                 )}
               </div>
@@ -569,6 +614,36 @@ export default function AutomationRulesManager() {
                       <Checkbox checked={currentRule.action_bundle.calendar_event.create_meet_link} onCheckedChange={c => updateAction('calendar_event', 'create_meet_link', c)} />
                       <Label className="text-sm">צור קישור וידאו</Label>
                     </div>
+                    <div className="mt-4 pt-4 border-t border-slate-200 dark:border-slate-700">
+                        <div className="flex items-center gap-2 mb-3">
+                            <Switch 
+                            checked={currentRule.action_bundle.calendar_event.enable_english || false} 
+                            onCheckedChange={c => updateAction('calendar_event', 'enable_english', c)} 
+                            />
+                            <Label className="text-sm text-blue-600 dark:text-blue-400 font-medium">הוסף גרסה באנגלית</Label>
+                        </div>
+                        
+                        {currentRule.action_bundle.calendar_event.enable_english && (
+                            <div className="space-y-3 p-3 bg-slate-50 dark:bg-slate-900 rounded border">
+                            <div>
+                                <Label className="text-sm">English Event Title</Label>
+                                <TokenInput 
+                                value={currentRule.action_bundle.calendar_event.title_template_en || ''} 
+                                onChange={v => updateAction('calendar_event', 'title_template_en', v)} 
+                                placeholder="Meeting: {Case_No}" 
+                                />
+                            </div>
+                            <div>
+                                <Label className="text-sm">English Description</Label>
+                                <TokenTextarea 
+                                value={currentRule.action_bundle.calendar_event.description_template_en || ''} 
+                                onChange={v => updateAction('calendar_event', 'description_template_en', v)} 
+                                placeholder="Meeting details..." 
+                                />
+                            </div>
+                            </div>
+                        )}
+                    </div>
                   </div>
                 )}
               </div>
@@ -597,7 +672,17 @@ export default function AutomationRulesManager() {
                       <div className="flex items-center gap-2 mb-3">
                         <Switch 
                           checked={currentRule.action_bundle.send_email.enable_english || false} 
-                          onCheckedChange={c => updateAction('send_email', 'enable_english', c)} 
+                          onCheckedChange={c => {
+    // עדכון המתג
+    updateAction('send_email', 'enable_english', c);
+    // אם מדליקים והשדה האנגלי ריק - נעתיק את העברית
+    if (c && !currentRule.action_bundle.send_email.subject_template_en) {
+        updateAction('send_email', 'subject_template_en', currentRule.action_bundle.send_email.subject_template);
+    }
+    if (c && !currentRule.action_bundle.send_email.body_template_en) {
+        updateAction('send_email', 'body_template_en', currentRule.action_bundle.send_email.body_template);
+    }
+}} 
                         />
                         <Label className="text-sm text-blue-600 dark:text-blue-400 font-medium">
                           הוסף גרסה באנגלית (English Version)
