@@ -1,40 +1,45 @@
-import Dashboard from './pages/Dashboard';
-import Clients from './pages/Clients';
-import ClientView from './pages/ClientView';
-import Cases from './pages/Cases';
+import ApprovalQueue from './pages/ApprovalQueue';
+import AutomationDebugger from './pages/AutomationDebugger';
+import AutomationMetrics from './pages/AutomationMetrics';
+import AutomationRules from './pages/AutomationRules';
 import CaseView from './pages/CaseView';
-import Tasks from './pages/Tasks';
+import Cases from './pages/Cases';
+import Clients from './pages/Clients';
+import Dashboard from './pages/Dashboard';
 import Docketing from './pages/Docketing';
 import Financials from './pages/Financials';
+import MailAnalytics from './pages/MailAnalytics';
 import MailRoom from './pages/MailRoom';
 import MailView from './pages/MailView';
-import MailAnalytics from './pages/MailAnalytics';
-import Workbench from './pages/Workbench';
-import ApprovalQueue from './pages/ApprovalQueue';
-import AutomationRules from './pages/AutomationRules';
-import AutomationDebugger from './pages/AutomationDebugger';
 import Settings from './pages/Settings';
-import Layout from './Layout';
+import Tasks from './pages/Tasks';
+import Workbench from './pages/Workbench';
+import ClientView from './pages/ClientView';
+import __Layout from './Layout.jsx';
+
+
+export const PAGES = {
+    "ApprovalQueue": ApprovalQueue,
+    "AutomationDebugger": AutomationDebugger,
+    "AutomationMetrics": AutomationMetrics,
+    "AutomationRules": AutomationRules,
+    "CaseView": CaseView,
+    "Cases": Cases,
+    "Clients": Clients,
+    "Dashboard": Dashboard,
+    "Docketing": Docketing,
+    "Financials": Financials,
+    "MailAnalytics": MailAnalytics,
+    "MailRoom": MailRoom,
+    "MailView": MailView,
+    "Settings": Settings,
+    "Tasks": Tasks,
+    "Workbench": Workbench,
+    "ClientView": ClientView,
+}
 
 export const pagesConfig = {
-  Pages: {
-    Dashboard,
-    Clients,
-    ClientView,
-    Cases,
-    CaseView,
-    Tasks,
-    Docketing,
-    Financials,
-    MailRoom,
-    MailView,
-    MailAnalytics,
-    Workbench,
-    ApprovalQueue,
-    AutomationRules,
-    AutomationDebugger,
-    Settings,
-  },
-  Layout,
-  mainPage: 'Dashboard',
+    mainPage: "Dashboard",
+    Pages: PAGES,
+    Layout: __Layout,
 };

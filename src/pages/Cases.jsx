@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { base44 } from '@/api/base44Client';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { createPageUrl } from '../utils';
 import { useTranslation } from 'react-i18next';
 import { format } from 'date-fns';
@@ -49,6 +49,7 @@ import { useToast } from "@/components/ui/use-toast";
 export default function Cases() {
   const { t, i18n } = useTranslation();
   const isRTL = i18n.language === 'he';
+  const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const [searchTerm, setSearchTerm] = useState('');
