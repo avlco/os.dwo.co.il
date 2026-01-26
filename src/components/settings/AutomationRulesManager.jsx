@@ -310,13 +310,13 @@ export default function AutomationRulesManager() {
 
   // Action bundle handlers
   const updateAction = (actionKey, field, value) => {
-    setCurrentRule({
-      ...currentRule,
+    setCurrentRule(prev => ({
+      ...prev,
       action_bundle: {
-        ...currentRule.action_bundle,
-        [actionKey]: { ...currentRule.action_bundle[actionKey], [field]: value }
+        ...prev.action_bundle,
+        [actionKey]: { ...prev.action_bundle[actionKey], [field]: value }
       }
-    });
+    }));
   };
 
   if (isLoading) return <Card className="p-6 text-center dark:bg-slate-800">{t('common.loading')}</Card>;
@@ -559,17 +559,9 @@ export default function AutomationRulesManager() {
                     </div>
                     <div className="mt-4 pt-4 border-t border-slate-200 dark:border-slate-700">
                         <div className="flex items-center gap-2 mb-3">
-                            <Switch 
+                           <Switch 
       checked={currentRule.action_bundle.create_alert.enable_english || false} 
-      onCheckedChange={c => {
-          // 1. עדכון המצב
-          updateAction('create_alert', 'enable_english', c);
-          
-          // 2. העתקת תוכן אוטומטית
-          if (c && !currentRule.action_bundle.create_alert.message_template_en) {
-              updateAction('create_alert', 'message_template_en', currentRule.action_bundle.create_alert.message_template);
-          }
-      }} 
+      onCheckedChange={c => updateAction('create_alert', 'enable_english', c)} 
     />
                             <Label className="text-sm text-blue-600 dark:text-blue-400 font-medium">הוסף גרסה באנגלית</Label>
                         </div>
@@ -604,6 +596,14 @@ export default function AutomationRulesManager() {
                       <TokenInput value={currentRule.action_bundle.calendar_event.title_template} onChange={v => updateAction('calendar_event', 'title_template', v)} placeholder="מועד אחרון - {Case_No}" />
                     </div>
                     <div>
+                      <Label className="text-sm">תיאור (בעברית)</Label>
+                      <TokenTextarea 
+                        value={currentRule.action_bundle.calendar_event.description_template} 
+                        onChange={v => updateAction('calendar_event', 'description_template', v)} 
+                        placeholder="פרטים נוספים..." 
+                      />
+                    </div>
+                    <div>
                       <Label className="text-sm">תזמון</Label>
                       <TimingSelector
                         direction={currentRule.action_bundle.calendar_event.timing_direction}
@@ -626,19 +626,7 @@ export default function AutomationRulesManager() {
                         <div className="flex items-center gap-2 mb-3">
                             <Switch 
       checked={currentRule.action_bundle.calendar_event.enable_english || false} 
-      onCheckedChange={c => {
-          // 1. עדכון המצב (דלוק/כבוי)
-          updateAction('calendar_event', 'enable_english', c);
-          
-          // 2. העתקת תוכן אוטומטית אם השדות ריקים
-          if (c && !currentRule.action_bundle.calendar_event.title_template_en) {
-              updateAction('calendar_event', 'title_template_en', currentRule.action_bundle.calendar_event.title_template);
-          }
-          if (c && !currentRule.action_bundle.calendar_event.description_template_en) {
-              // הוספנו קידומת קטנה כדי להבדיל, אפשר למחוק אם לא רוצים
-              updateAction('calendar_event', 'description_template_en', 'English description: ' + (currentRule.action_bundle.calendar_event.description_template || ''));
-          }
-      }} 
+      onCheckedChange={c => updateAction('calendar_event', 'enable_english', c)} 
     />
                             <Label className="text-sm text-blue-600 dark:text-blue-400 font-medium">הוסף גרסה באנגלית</Label>
                         </div>
@@ -692,17 +680,7 @@ export default function AutomationRulesManager() {
                       <div className="flex items-center gap-2 mb-3">
                         <Switch 
                           checked={currentRule.action_bundle.send_email.enable_english || false} 
-                          onCheckedChange={c => {
-    // עדכון המתג
-    updateAction('send_email', 'enable_english', c);
-    // אם מדליקים והשדה האנגלי ריק - נעתיק את העברית
-    if (c && !currentRule.action_bundle.send_email.subject_template_en) {
-        updateAction('send_email', 'subject_template_en', currentRule.action_bundle.send_email.subject_template);
-    }
-    if (c && !currentRule.action_bundle.send_email.body_template_en) {
-        updateAction('send_email', 'body_template_en', currentRule.action_bundle.send_email.body_template);
-    }
-}} 
+                          onCheckedChange={c => updateAction('send_email', 'enable_english', c)} 
                         />
                         <Label className="text-sm text-blue-600 dark:text-blue-400 font-medium">
                           הוסף גרסה באנגלית (English Version)
