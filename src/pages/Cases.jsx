@@ -539,11 +539,12 @@ export default function Cases() {
         />
       ) : (
         <DataTable
-          columns={columns}
-          data={filteredCases}
-          isLoading={isLoading}
-          emptyMessage={t('cases.no_results')}
-        />
+  columns={columns}
+  data={filteredCases}
+  isLoading={isLoading}
+  emptyMessage={t('cases.no_results')}
+  onRowClick={(row) => navigate(createPageUrl('CaseView', { id: row.id }))} // <--- הוספה
+/>
       )}
 
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
