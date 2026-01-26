@@ -1,7 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { base44 } from '@/api/base44Client';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { createPageUrl } from '../utils';
 import { format } from 'date-fns';
 import StatusBadge from '../components/ui/StatusBadge';
@@ -37,6 +37,7 @@ import {
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import CaseDocuments from '../components/case/CaseDocuments';
+import { useToast } from "@/components/ui/use-toast"; // הוספת ייבוא Toast
 
 const caseTypes = {
   patent: 'פטנט',
@@ -46,6 +47,17 @@ const caseTypes = {
   litigation: 'ליטיגציה',
   opposition: 'התנגדות',
 };
+
+const caseStatuses = [
+  { value: 'draft', label: 'טיוטה' },
+  { value: 'filed', label: 'הוגש' },
+  { value: 'pending', label: 'ממתין' },
+  { value: 'under_examination', label: 'בבחינה' },
+  { value: 'allowed', label: 'קיבול' },
+  { value: 'registered', label: 'רשום' },
+  { value: 'abandoned', label: 'זנוח' },
+  { value: 'expired', label: 'פג תוקף' },
+];
 
 const deadlineTypes = [
   { value: 'office_action_response', label: 'תגובה לדו״ח בחינה' },
@@ -59,11 +71,18 @@ const deadlineTypes = [
 
 export default function CaseView() {
   const queryClient = useQueryClient();
+  const { toast } = useToast(); // שימוש ב-Toast
   const urlParams = new URLSearchParams(window.location.search);
   const caseId = urlParams.get('id');
 
+  // --- States ---
   const [isDeadlineDialogOpen, setIsDeadlineDialogOpen] = useState(false);
   const [isTimeEntryDialogOpen, setIsTimeEntryDialogOpen] = useState(false);
+  
+  // --- State חדש לעריכת התיק ---
+  const [isEditCaseDialogOpen, setIsEditCaseDialogOpen] = useState(false);
+  const [editCaseForm, setEditCaseForm] = useState({});
+
   const [deadlineForm, setDeadlineForm] = useState({
     deadline_type: 'custom',
     description: '',
@@ -79,6 +98,7 @@ export default function CaseView() {
     rate: 500,
   });
 
+  // --- Queries ---
   const { data: caseData, isLoading } = useQuery({
     queryKey: ['case', caseId],
     queryFn: () => base44.entities.Case.filter({ id: caseId }),
@@ -107,6 +127,52 @@ export default function CaseView() {
     queryKey: ['tasks', caseId],
     queryFn: () => base44.entities.Task.filter({ case_id: caseId }, '-created_date'),
     enabled: !!caseId,
+  });
+
+  // טעינת הנתונים לטופס העריכה כשהתיק נטען
+  const currentCase = caseData?.[0];
+  const currentClient = client?.[0];
+
+  useEffect(() => {
+    if (currentCase) {
+      setEditCaseForm({
+        case_number: currentCase.case_number || '',
+        title: currentCase.title || '',
+        case_type: currentCase.case_type || 'patent',
+        status: currentCase.status || 'draft',
+        application_number: currentCase.application_number || '',
+        filing_date: currentCase.filing_date || '',
+        territory: currentCase.territory || 'IL',
+        notes: currentCase.notes || '',
+        expiry_date: currentCase.expiry_date || '',
+        renewal_date: currentCase.renewal_date || '',
+      });
+    }
+  }, [currentCase]);
+
+  // --- Mutations ---
+
+  // 1. עדכון תיק (החלק החדש)
+  const updateCaseMutation = useMutation({
+    mutationFn: (data) => base44.entities.Case.update(caseId, data),
+    onSuccess: () => {
+      // רענון קריטי: מעדכן את התצוגה הנוכחית וגם את רשימת התיקים ברקע
+      queryClient.invalidateQueries(['case', caseId]);
+      queryClient.invalidateQueries(['cases']);
+      
+      setIsEditCaseDialogOpen(false);
+      toast({
+        title: "התיק עודכן בהצלחה",
+        description: "השינויים נשמרו במערכת",
+      });
+    },
+    onError: (error) => {
+      toast({
+        variant: "destructive",
+        title: "שגיאה בעדכון",
+        description: error.message,
+      });
+    }
   });
 
   const createDeadlineMutation = useMutation({
@@ -146,9 +212,6 @@ export default function CaseView() {
     },
   });
 
-  const currentCase = caseData?.[0];
-  const currentClient = client?.[0];
-
   if (isLoading) {
     return (
       <div className="space-y-6">
@@ -175,7 +238,7 @@ export default function CaseView() {
     .reduce((sum, t) => sum + ((t.hours || 0) * (t.rate || 0)), 0);
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 pb-10">
       {/* Header */}
       <div className="flex items-center gap-4">
         <Link to={createPageUrl('Cases')}>
@@ -190,12 +253,12 @@ export default function CaseView() {
           </div>
           <p className="text-slate-500 mt-1">{currentCase.title}</p>
         </div>
-        <Link to={createPageUrl(`Cases`)} state={{ edit: currentCase.id }}>
-          <Button variant="outline" className="gap-2">
-            <Edit className="w-4 h-4" />
-            עריכה
-          </Button>
-        </Link>
+        
+        {/* כפתור העריכה המתוקן - פותח דיאלוג */}
+        <Button variant="outline" className="gap-2" onClick={() => setIsEditCaseDialogOpen(true)}>
+          <Edit className="w-4 h-4" />
+          עריכה
+        </Button>
       </div>
 
       {/* Info Cards */}
@@ -413,7 +476,74 @@ export default function CaseView() {
         </TabsContent>
       </Tabs>
 
-      {/* Deadline Dialog */}
+      {/* --- Case Edit Dialog (New) --- */}
+      <Dialog open={isEditCaseDialogOpen} onOpenChange={setIsEditCaseDialogOpen}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>עריכת תיק {editCaseForm.case_number}</DialogTitle>
+          </DialogHeader>
+          <form onSubmit={(e) => { e.preventDefault(); updateCaseMutation.mutate(editCaseForm); }} className="space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>מספר תיק</Label>
+                <Input value={editCaseForm.case_number || ''} onChange={e => setEditCaseForm({...editCaseForm, case_number: e.target.value})} />
+              </div>
+              <div className="space-y-2">
+                <Label>סטטוס</Label>
+                <Select value={editCaseForm.status} onValueChange={v => setEditCaseForm({...editCaseForm, status: v})}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {caseStatuses.map(s => <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            
+            <div className="space-y-2">
+              <Label>כותרת</Label>
+              <Input value={editCaseForm.title || ''} onChange={e => setEditCaseForm({...editCaseForm, title: e.target.value})} />
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>מספר בקשה</Label>
+                <Input value={editCaseForm.application_number || ''} onChange={e => setEditCaseForm({...editCaseForm, application_number: e.target.value})} />
+              </div>
+              <div className="space-y-2">
+                <Label>מדינה</Label>
+                <Input value={editCaseForm.territory || ''} onChange={e => setEditCaseForm({...editCaseForm, territory: e.target.value})} />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-3 gap-4">
+              <div className="space-y-2">
+                <Label>תאריך הגשה</Label>
+                <Input type="date" value={editCaseForm.filing_date || ''} onChange={e => setEditCaseForm({...editCaseForm, filing_date: e.target.value})} />
+              </div>
+              <div className="space-y-2">
+                <Label>מועד פקיעה</Label>
+                <Input type="date" value={editCaseForm.expiry_date || ''} onChange={e => setEditCaseForm({...editCaseForm, expiry_date: e.target.value})} />
+              </div>
+              <div className="space-y-2">
+                <Label>מועד חידוש</Label>
+                <Input type="date" value={editCaseForm.renewal_date || ''} onChange={e => setEditCaseForm({...editCaseForm, renewal_date: e.target.value})} />
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label>הערות</Label>
+              <Textarea value={editCaseForm.notes || ''} onChange={e => setEditCaseForm({...editCaseForm, notes: e.target.value})} />
+            </div>
+
+            <div className="flex justify-end gap-3 pt-4">
+              <Button type="button" variant="outline" onClick={() => setIsEditCaseDialogOpen(false)}>ביטול</Button>
+              <Button type="submit" disabled={updateCaseMutation.isPending}>שמור שינויים</Button>
+            </div>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Deadline Dialog (Existing) */}
       <Dialog open={isDeadlineDialogOpen} onOpenChange={setIsDeadlineDialogOpen}>
         <DialogContent>
           <DialogHeader>
@@ -458,7 +588,7 @@ export default function CaseView() {
         </DialogContent>
       </Dialog>
 
-      {/* Time Entry Dialog */}
+      {/* Time Entry Dialog (Existing) */}
       <Dialog open={isTimeEntryDialogOpen} onOpenChange={setIsTimeEntryDialogOpen}>
         <DialogContent>
           <DialogHeader>
