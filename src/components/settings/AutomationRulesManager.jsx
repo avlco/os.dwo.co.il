@@ -22,7 +22,6 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 
-// ייבוא הרכיבים הנלווים שקיימים במערכת
 import RuleOptimizationBanner from '../mailrules/RuleOptimizationBanner';
 import RuleOnboardingWizard from '../mailrules/RuleOnboardingWizard';
 
@@ -58,24 +57,24 @@ const defaultRule = {
   map_config: [{ ...defaultMapRow }],
   action_bundle: {
     send_email: { 
-      enabled: false, 
-      recipients: [], 
-      subject_template: '', 
-      body_template: '',
-      enable_english: false,      // <--- חדש
-      subject_template_en: '',    // <--- חדש
-      body_template_en: ''        // <--- חדש
+        enabled: false, 
+        recipients: [], 
+        subject_template: '', 
+        body_template: '',
+        enable_english: false,
+        subject_template_en: '',
+        body_template_en: ''
     },
     save_file: { enabled: false, path_template: '' },
     calendar_event: { 
         enabled: false, 
         title_template: '', 
+        description_template: '',
         timing_direction: 'after', 
         timing_offset: 7, 
         timing_unit: 'days', 
         attendees: [], 
         create_meet_link: false,
-        // --- חדש ---
         enable_english: false,
         title_template_en: '',
         description_template_en: ''
@@ -88,15 +87,12 @@ const defaultRule = {
         timing_offset: 7, 
         timing_unit: 'days', 
         recipients: [],
-        // --- חדש ---
         enable_english: false,
         message_template_en: ''
     },
     billing: { enabled: false, hours: 0.25, hourly_rate: 0, description_template: '' }
   }
 };
-
-// --- עוזרי ממשק (UI Helpers) ---
 
 function TokenButton({ onInsert }) {
   return (
@@ -145,7 +141,7 @@ function TokenTextarea({ value, onChange, placeholder, className }) {
   return (
     <div className="space-y-1">
       <div className="flex justify-end"><TokenButton onInsert={handleInsertToken} /></div>
-      <Textarea ref={textareaRef} value={value} onChange={e => onChange(e.target.value)} placeholder={placeholder} className={`min-h-[150px] ${className}`} />
+      <Textarea ref={textareaRef} value={value} onChange={e => onChange(e.target.value)} placeholder={placeholder} className={`min-h-[120px] ${className}`} />
     </div>
   );
 }
@@ -185,8 +181,6 @@ function TimingSelector({ direction, offset, unit, onDirectionChange, onOffsetCh
     </div>
   );
 }
-
-// --- המרכיב הראשי ---
 
 export default function AutomationRulesManager() {
   const { t } = useTranslation();
@@ -236,7 +230,6 @@ export default function AutomationRulesManager() {
     }
   });
 
-  // פונקציית השכפול
   const handleDuplicate = (rule) => {
     const { id, created_date, updated_date, created_by, ...ruleData } = rule;
     const duplicatedRule = {
@@ -246,6 +239,7 @@ export default function AutomationRulesManager() {
     };
     createMutation.mutate(duplicatedRule);
   };
+
   const openEdit = (rule) => {
     const mapConfig = rule.map_config?.length > 0 ? rule.map_config : [{ ...defaultMapRow }];
     const mergedRule = {
@@ -286,29 +280,31 @@ export default function AutomationRulesManager() {
     updateMutation.mutate({ id, data: { is_active: checked } });
   };
 
-  // Map config handlers
   const addMapRow = () => {
-    setCurrentRule({
-      ...currentRule,
-      map_config: [...currentRule.map_config, { ...defaultMapRow }]
-    });
+    setCurrentRule(prev => ({
+      ...prev,
+      map_config: [...prev.map_config, { ...defaultMapRow }]
+    }));
   };
 
   const updateMapRow = (index, field, value) => {
-    const newMap = [...currentRule.map_config];
-    newMap[index] = { ...newMap[index], [field]: value };
-    setCurrentRule({ ...currentRule, map_config: newMap });
-  };
-
-  const removeMapRow = (index) => {
-    const newMap = currentRule.map_config.filter((_, i) => i !== index);
-    setCurrentRule({
-      ...currentRule,
-      map_config: newMap.length > 0 ? newMap : [{ ...defaultMapRow }]
+    setCurrentRule(prev => {
+        const newMap = [...prev.map_config];
+        newMap[index] = { ...newMap[index], [field]: value };
+        return { ...prev, map_config: newMap };
     });
   };
 
-  // Action bundle handlers
+  const removeMapRow = (index) => {
+    setCurrentRule(prev => {
+        const newMap = prev.map_config.filter((_, i) => i !== index);
+        return {
+          ...prev,
+          map_config: newMap.length > 0 ? newMap : [{ ...defaultMapRow }]
+        };
+    });
+  };
+
   const updateAction = (actionKey, field, value) => {
     setCurrentRule(prev => ({
       ...prev,
@@ -323,7 +319,6 @@ export default function AutomationRulesManager() {
 
   return (
     <>
-      {/* Banner for Optimization Suggestions */}
       <RuleOptimizationBanner onEditRule={(ruleId) => {
         const rule = rules.find(r => r.id === ruleId);
         if (rule) openEdit(rule);
@@ -379,7 +374,7 @@ export default function AutomationRulesManager() {
                 
                 <div className="flex items-center gap-1">
                   <Switch checked={rule.is_active} onCheckedChange={(c) => toggleActive(rule.id, c)} />
-                  <div className="w-2" /> {/* Spacer */}
+                  <div className="w-2" />
                   
                   <Button variant="ghost" size="icon" onClick={() => openEdit(rule)} title="ערוך חוק">
                     <Edit className="w-4 h-4" />
@@ -405,7 +400,6 @@ export default function AutomationRulesManager() {
             <DialogTitle>{currentRule.id ? t('settings.edit_rule') : t('settings.new_rule')}</DialogTitle>
           </DialogHeader>
 
-          {/* Approval Header */}
           <div className="flex items-center justify-between p-3 bg-slate-50 dark:bg-slate-900 rounded-lg mb-4">
             <div className="flex items-center gap-2">
               <ShieldCheck className="w-5 h-5 text-blue-600" />
@@ -437,7 +431,6 @@ export default function AutomationRulesManager() {
               <TabsTrigger value="actions">3. פעולות</TabsTrigger>
             </TabsList>
 
-            {/* Tab 1: Catch */}
             <TabsContent value="catch" className="space-y-4 pt-4">
               <div>
                 <Label>שם החוק</Label>
@@ -457,7 +450,6 @@ export default function AutomationRulesManager() {
               </div>
             </TabsContent>
 
-            {/* Tab 2: Map */}
             <TabsContent value="map" className="space-y-4 pt-4">
               <p className="text-sm text-slate-500 dark:text-slate-400">הגדר כללי חילוץ: חפש טקסט עוגן וקח את מה שאחריו</p>
               
@@ -490,7 +482,6 @@ export default function AutomationRulesManager() {
               <Button variant="outline" onClick={addMapRow} className="w-full gap-2"><Plus className="w-4 h-4" /> הוסף כלל חילוץ</Button>
             </TabsContent>
 
-            {/* Tab 3: Actions */}
             <TabsContent value="actions" className="space-y-4 pt-4">
               
               {/* Billing */}
@@ -553,31 +544,33 @@ export default function AutomationRulesManager() {
                       <Label className="text-sm">הודעה</Label>
                       <TokenInput value={currentRule.action_bundle.create_alert.message_template} onChange={v => updateAction('create_alert', 'message_template', v)} placeholder="נדרשת תגובה בתיק {Case_No}" />
                     </div>
+                    
+                    {/* English Alert */}
+                    <div className="mt-4 pt-4 border-t border-slate-200 dark:border-slate-700">
+                        <div className="flex items-center gap-2 mb-3">
+                            <Switch 
+                              checked={currentRule.action_bundle.create_alert.enable_english || false} 
+                              onCheckedChange={c => updateAction('create_alert', 'enable_english', c)} 
+                            />
+                            <Label className="text-sm text-blue-600 dark:text-blue-400 font-medium">הוסף גרסה באנגלית</Label>
+                        </div>
+                        {currentRule.action_bundle.create_alert.enable_english && (
+                            <div className="space-y-3 p-3 bg-slate-50 dark:bg-slate-900 rounded border border-slate-200 dark:border-slate-700">
+                                <div>
+                                    <Label className="text-sm">English Message</Label>
+                                    <TokenInput 
+                                      value={currentRule.action_bundle.create_alert.message_template_en || ''} 
+                                      onChange={v => updateAction('create_alert', 'message_template_en', v)} 
+                                      placeholder="Alert for case {Case_No}" 
+                                    />
+                                </div>
+                            </div>
+                        )}
+                    </div>
+
                     <div>
                       <Label className="text-sm">נמענים</Label>
                       <RecipientsSelect value={currentRule.action_bundle.create_alert.recipients} onChange={v => updateAction('create_alert', 'recipients', v)} />
-                    </div>
-                    <div className="mt-4 pt-4 border-t border-slate-200 dark:border-slate-700">
-                        <div className="flex items-center gap-2 mb-3">
-                           <Switch 
-      checked={currentRule.action_bundle.create_alert.enable_english || false} 
-      onCheckedChange={c => updateAction('create_alert', 'enable_english', c)} 
-    />
-                            <Label className="text-sm text-blue-600 dark:text-blue-400 font-medium">הוסף גרסה באנגלית</Label>
-                        </div>
-                        
-                        {currentRule.action_bundle.create_alert.enable_english && (
-                            <div className="space-y-3 p-3 bg-slate-50 dark:bg-slate-900 rounded border">
-                            <div>
-                                <Label className="text-sm">English Message</Label>
-                                <TokenInput 
-                                value={currentRule.action_bundle.create_alert.message_template_en || ''} 
-                                onChange={v => updateAction('create_alert', 'message_template_en', v)} 
-                                placeholder="Alert for case {Case_No}" 
-                                />
-                            </div>
-                            </div>
-                        )}
                     </div>
                   </div>
                 )}
@@ -596,11 +589,11 @@ export default function AutomationRulesManager() {
                       <TokenInput value={currentRule.action_bundle.calendar_event.title_template} onChange={v => updateAction('calendar_event', 'title_template', v)} placeholder="מועד אחרון - {Case_No}" />
                     </div>
                     <div>
-                      <Label className="text-sm">תיאור (בעברית)</Label>
+                      <Label className="text-sm">תיאור האירוע (עברית)</Label>
                       <TokenTextarea 
-                        value={currentRule.action_bundle.calendar_event.description_template} 
+                        value={currentRule.action_bundle.calendar_event.description_template || ''} 
                         onChange={v => updateAction('calendar_event', 'description_template', v)} 
-                        placeholder="פרטים נוספים..." 
+                        placeholder="פרטים נוספים ליומן..." 
                       />
                     </div>
                     <div>
@@ -614,6 +607,39 @@ export default function AutomationRulesManager() {
                         onUnitChange={v => updateAction('calendar_event', 'timing_unit', v)}
                       />
                     </div>
+
+                    {/* English Calendar */}
+                    <div className="mt-4 pt-4 border-t border-slate-200 dark:border-slate-700">
+                      <div className="flex items-center gap-2 mb-3">
+                        <Switch 
+                          checked={currentRule.action_bundle.calendar_event.enable_english || false} 
+                          onCheckedChange={c => updateAction('calendar_event', 'enable_english', c)} 
+                        />
+                        <Label className="text-sm text-blue-600 dark:text-blue-400 font-medium">הוסף גרסה באנגלית</Label>
+                      </div>
+                      
+                      {currentRule.action_bundle.calendar_event.enable_english && (
+                        <div className="space-y-3 p-3 bg-slate-50 dark:bg-slate-900 rounded border border-slate-200 dark:border-slate-700">
+                          <div>
+                            <Label className="text-sm">English Event Title</Label>
+                            <TokenInput 
+                              value={currentRule.action_bundle.calendar_event.title_template_en || ''} 
+                              onChange={v => updateAction('calendar_event', 'title_template_en', v)} 
+                              placeholder="Meeting: {Case_No}" 
+                            />
+                          </div>
+                          <div>
+                            <Label className="text-sm">English Description</Label>
+                            <TokenTextarea 
+                              value={currentRule.action_bundle.calendar_event.description_template_en || ''} 
+                              onChange={v => updateAction('calendar_event', 'description_template_en', v)} 
+                              placeholder="Meeting details..." 
+                            />
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
                     <div>
                       <Label className="text-sm">משתתפים</Label>
                       <RecipientsSelect value={currentRule.action_bundle.calendar_event.attendees} onChange={v => updateAction('calendar_event', 'attendees', v)} />
@@ -621,36 +647,6 @@ export default function AutomationRulesManager() {
                     <div className="flex items-center gap-2">
                       <Checkbox checked={currentRule.action_bundle.calendar_event.create_meet_link} onCheckedChange={c => updateAction('calendar_event', 'create_meet_link', c)} />
                       <Label className="text-sm">צור קישור וידאו</Label>
-                    </div>
-                    <div className="mt-4 pt-4 border-t border-slate-200 dark:border-slate-700">
-                        <div className="flex items-center gap-2 mb-3">
-                            <Switch 
-      checked={currentRule.action_bundle.calendar_event.enable_english || false} 
-      onCheckedChange={c => updateAction('calendar_event', 'enable_english', c)} 
-    />
-                            <Label className="text-sm text-blue-600 dark:text-blue-400 font-medium">הוסף גרסה באנגלית</Label>
-                        </div>
-                        
-                        {currentRule.action_bundle.calendar_event.enable_english && (
-                            <div className="space-y-3 p-3 bg-slate-50 dark:bg-slate-900 rounded border">
-                            <div>
-                                <Label className="text-sm">English Event Title</Label>
-                                <TokenInput 
-                                value={currentRule.action_bundle.calendar_event.title_template_en || ''} 
-                                onChange={v => updateAction('calendar_event', 'title_template_en', v)} 
-                                placeholder="Meeting: {Case_No}" 
-                                />
-                            </div>
-                            <div>
-                                <Label className="text-sm">English Description</Label>
-                                <TokenTextarea 
-                                value={currentRule.action_bundle.calendar_event.description_template_en || ''} 
-                                onChange={v => updateAction('calendar_event', 'description_template_en', v)} 
-                                placeholder="Meeting details..." 
-                                />
-                            </div>
-                            </div>
-                        )}
                     </div>
                   </div>
                 )}
@@ -676,15 +672,15 @@ export default function AutomationRulesManager() {
                       <Label className="text-sm">תוכן</Label>
                       <TokenTextarea value={currentRule.action_bundle.send_email.body_template} onChange={v => updateAction('send_email', 'body_template', v)} placeholder="שלום {Client_Name},&#10;&#10;התקבלה הודעה בתיק..." />
                     </div>
+
+                    {/* English Email */}
                     <div className="mt-4 pt-4 border-t border-slate-200 dark:border-slate-700">
                       <div className="flex items-center gap-2 mb-3">
                         <Switch 
                           checked={currentRule.action_bundle.send_email.enable_english || false} 
                           onCheckedChange={c => updateAction('send_email', 'enable_english', c)} 
                         />
-                        <Label className="text-sm text-blue-600 dark:text-blue-400 font-medium">
-                          הוסף גרסה באנגלית (English Version)
-                        </Label>
+                        <Label className="text-sm text-blue-600 dark:text-blue-400 font-medium">הוסף גרסה באנגלית</Label>
                       </div>
                       
                       {currentRule.action_bundle.send_email.enable_english && (
@@ -708,6 +704,7 @@ export default function AutomationRulesManager() {
                         </div>
                       )}
                     </div>
+
                   </div>
                 )}
               </div>
@@ -735,7 +732,6 @@ export default function AutomationRulesManager() {
         </DialogContent>
       </Dialog>
 
-      {/* Wizard Overlay */}
       {isWizardOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80">
           <div className="w-full max-w-4xl p-4">
