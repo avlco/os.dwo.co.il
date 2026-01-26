@@ -1,7 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { base44 } from '@/api/base44Client';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { createPageUrl } from '../utils';
 import { useTranslation } from 'react-i18next';
 import { format } from 'date-fns';
@@ -50,13 +50,16 @@ export default function Cases() {
   const { t, i18n } = useTranslation();
   const isRTL = i18n.language === 'he';
   const navigate = useNavigate();
+  const location = useLocation();
   const queryClient = useQueryClient();
   const { toast } = useToast();
+  
   const [searchTerm, setSearchTerm] = useState('');
   const [filterType, setFilterType] = useState('all');
   const [filterStatus, setFilterStatus] = useState('all');
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingCase, setEditingCase] = useState(null);
+  
   const [formData, setFormData] = useState({
     case_number: '',
     title: '',
@@ -123,6 +126,20 @@ export default function Cases() {
       }
     },
   });
+
+  // Deep Linking: פתיחת עריכה לפי URL
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const editId = params.get('edit');
+    if (editId && cases.length > 0) {
+      const caseToEdit = cases.find(c => c.id === editId);
+      if (caseToEdit) {
+        openEditDialog(caseToEdit);
+        // מנקה את ה-URL
+        window.history.replaceState({}, '', createPageUrl('Cases'));
+      }
+    }
+  }, [location.search, cases]);
 
   const createMutation = useMutation({
     mutationFn: (data) => base44.entities.Case.create(data),
@@ -209,7 +226,6 @@ export default function Cases() {
   const validateCaseForm = (data) => {
     const errors = [];
 
-    // Required fields
     if (!data.case_number || data.case_number.trim() === '') {
       errors.push('מספר תיק הוא שדה חובה');
     }
@@ -218,11 +234,9 @@ export default function Cases() {
       errors.push('נושא התיק הוא שדה חובה');
     }
 
-    // Date logic validation
     if (data.filing_date && data.renewal_date) {
       const filing = new Date(data.filing_date);
       const renewal = new Date(data.renewal_date);
-
       if (renewal <= filing) {
         errors.push('תאריך חידוש חייב להיות אחרי תאריך ההגשה');
       }
@@ -231,13 +245,11 @@ export default function Cases() {
     if (data.filing_date && data.expiry_date) {
       const filing = new Date(data.filing_date);
       const expiry = new Date(data.expiry_date);
-
       if (expiry <= filing) {
         errors.push('תאריך פקיעה חייב להיות אחרי תאריך ההגשה');
       }
     }
 
-    // Hourly rate validation
     if (data.hourly_rate && parseFloat(data.hourly_rate) < 0) {
       errors.push('תעריף שעתי חייב להיות מספר חיובי');
     }
@@ -275,9 +287,7 @@ export default function Cases() {
   const handleSubmit = (e) => {
     e.preventDefault();
 
-    // Validate form
     const validationErrors = validateCaseForm(formData);
-
     if (validationErrors.length > 0) {
       toast({
         variant: "destructive",
@@ -287,7 +297,6 @@ export default function Cases() {
       return;
     }
 
-    // Check uniqueness of case_number
     const isDuplicate = cases.some(c =>
       c.case_number === formData.case_number &&
       (!editingCase || c.id !== editingCase.id)
@@ -304,7 +313,6 @@ export default function Cases() {
 
     const submitData = { ...formData };
 
-    // Convert empty strings to null for optional fields
     if (!submitData.hourly_rate) submitData.hourly_rate = null;
     if (!submitData.assigned_lawyer_id) submitData.assigned_lawyer_id = null;
     if (!submitData.client_id) submitData.client_id = null;
@@ -450,27 +458,37 @@ export default function Cases() {
         const r = row.original;
         return (
           <DropdownMenu>
-            <DropdownMenuTrigger asChild>
+            <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
               <Button variant="ghost" size="icon" className="h-8 w-8 dark:hover:bg-slate-700">
                 <MoreHorizontal className="w-4 h-4" />
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="dark:bg-slate-800 dark:border-slate-700">
-              <DropdownMenuItem asChild className="dark:text-slate-200 dark:hover:bg-slate-700">
-                <Link to={createPageUrl(`CaseView?id=${r.id}`)} className="flex items-center gap-2">
-                  <Eye className="w-4 h-4" />
-                  {t('cases.view')}
-                </Link>
+              <DropdownMenuItem 
+                className="dark:text-slate-200 dark:hover:bg-slate-700"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  navigate(createPageUrl('CaseView', { id: r.id }));
+                }}
+              >
+                <Eye className="w-4 h-4 mr-2" />
+                {t('cases.view')}
               </DropdownMenuItem>
               <DropdownMenuItem
-                onClick={() => openEditDialog(r)}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  openEditDialog(r);
+                }}
                 className="flex items-center gap-2 dark:text-slate-200 dark:hover:bg-slate-700"
               >
                 <Edit className="w-4 h-4" />
                 {t('cases.edit')}
               </DropdownMenuItem>
               <DropdownMenuItem
-                onClick={() => deleteMutation.mutate(r.id)}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  deleteMutation.mutate(r.id);
+                }}
                 className="flex items-center gap-2 text-rose-600 dark:text-rose-400 dark:hover:bg-slate-700"
               >
                 <Trash2 className="w-4 h-4" />
@@ -540,12 +558,12 @@ export default function Cases() {
         />
       ) : (
         <DataTable
-  columns={columns}
-  data={filteredCases}
-  isLoading={isLoading}
-  emptyMessage={t('cases.no_results')}
-  onRowClick={(row) => navigate(createPageUrl('CaseView', { id: row.id }))} // <--- הוספה
-/>
+          columns={columns}
+          data={filteredCases}
+          isLoading={isLoading}
+          emptyMessage={t('cases.no_results')}
+          onRowClick={(row) => navigate(createPageUrl('CaseView', { id: row.id }))}
+        />
       )}
 
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
