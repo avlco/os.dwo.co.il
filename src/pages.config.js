@@ -4,6 +4,7 @@ import AutomationMetrics from './pages/AutomationMetrics';
 import AutomationRules from './pages/AutomationRules';
 import CaseView from './pages/CaseView';
 import Cases from './pages/Cases';
+import ClientView from './pages/ClientView';
 import Clients from './pages/Clients';
 import Dashboard from './pages/Dashboard';
 import Docketing from './pages/Docketing';
@@ -14,7 +15,6 @@ import MailView from './pages/MailView';
 import Settings from './pages/Settings';
 import Tasks from './pages/Tasks';
 import Workbench from './pages/Workbench';
-import ClientView from './pages/ClientView';
 import __Layout from './Layout.jsx';
 
 
@@ -25,6 +25,7 @@ export const PAGES = {
     "AutomationRules": AutomationRules,
     "CaseView": CaseView,
     "Cases": Cases,
+    "ClientView": ClientView,
     "Clients": Clients,
     "Dashboard": Dashboard,
     "Docketing": Docketing,
@@ -35,7 +36,6 @@ export const PAGES = {
     "Settings": Settings,
     "Tasks": Tasks,
     "Workbench": Workbench,
-    "ClientView": ClientView,
 }
 
 export const pagesConfig = {
