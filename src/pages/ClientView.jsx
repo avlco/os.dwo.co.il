@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { base44 } from '@/api/base44Client';
 import { Link, useNavigate } from 'react-router-dom';
@@ -20,11 +20,8 @@ import {
   Cloud,
   ExternalLink,
   Edit,
-  Trash2,
-  Plus,
-  Loader2,
   FileText,
-  Globe
+  Loader2
 } from 'lucide-react';
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -32,12 +29,17 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import DataTable from '../components/ui/DataTable';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
+import { useToast } from "@/components/ui/use-toast";
 
 // --- רכיב פנימי למסמכי לקוח ---
 function ClientDocuments({ clientId }) {
   const { t, i18n } = useTranslation();
-  const isRTL = i18n.language === 'he';
-
+  
   const { data: tasks = [], isLoading } = useQuery({
     queryKey: ['client-tasks-docs', clientId],
     queryFn: () => base44.entities.Task.filter({ client_id: clientId }),
@@ -106,8 +108,14 @@ export default function ClientView() {
   const { t, i18n } = useTranslation();
   const isRTL = i18n.language === 'he';
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
   const urlParams = new URLSearchParams(window.location.search);
   const clientId = urlParams.get('id');
+
+  // State לעריכה
+  const [isEditOpen, setIsEditOpen] = useState(false);
+  const [formData, setFormData] = useState({});
 
   const { data: clientData, isLoading: clientLoading } = useQuery({
     queryKey: ['client', clientId],
@@ -129,6 +137,58 @@ export default function ClientView() {
 
   const client = clientData?.[0];
   const BackIcon = isRTL ? ArrowRight : ArrowLeft;
+
+  // טעינת נתונים לטופס כשפותחים עריכה
+  useEffect(() => {
+    if (client) {
+      setFormData({
+        name: client.name || '',
+        type: client.type || 'company',
+        communication_language: client.communication_language || 'he',
+        email: client.email || '',
+        phone: client.phone || '',
+        address: client.address || '',
+        country: client.country || 'IL',
+        registration_number: client.registration_number || '',
+        tax_id: client.tax_id || '',
+        payment_terms: client.payment_terms || 'net_30',
+        is_active: client.is_active !== false,
+        notes: client.notes || '',
+        client_number: client.client_number || '',
+        assigned_lawyer_id: client.assigned_lawyer_id || '',
+        hourly_rate: client.hourly_rate || 800,
+        billing_currency: client.billing_currency || 'ILS',
+        contact_person_name: client.contact_person_name || '',
+      });
+    }
+  }, [client]);
+
+  const updateMutation = useMutation({
+    mutationFn: (data) => base44.entities.Client.update(clientId, data),
+    onSuccess: () => {
+      // עדכון קריטי: רענון הלקוח הספציפי וגם הרשימה הכללית
+      queryClient.invalidateQueries(['client', clientId]);
+      queryClient.invalidateQueries(['clients']);
+      
+      setIsEditOpen(false);
+      toast({
+        title: "הלקוח עודכן בהצלחה",
+        description: "השינויים נשמרו והתצוגה עודכנה",
+      });
+    },
+    onError: (error) => {
+      toast({
+        variant: "destructive",
+        title: "שגיאה בעדכון",
+        description: error.message,
+      });
+    }
+  });
+
+  const handleSave = (e) => {
+    e.preventDefault();
+    updateMutation.mutate(formData);
+  };
 
   if (clientLoading) {
     return (
@@ -197,7 +257,7 @@ export default function ClientView() {
             )}
           </div>
         </div>
-        <Button variant="outline" onClick={() => navigate(`${createPageUrl('Clients')}?edit=${client.id}`)}>
+        <Button variant="outline" onClick={() => setIsEditOpen(true)}>
           <Edit className="w-4 h-4 mr-2" />
           עריכה
         </Button>
@@ -239,7 +299,7 @@ export default function ClientView() {
                 </div>
               )}
 
-              {/* --- תצוגת שפה --- */}
+              {/* תצוגת שפה */}
               <div className="flex items-center gap-3 pt-2 border-t border-slate-100 dark:border-slate-700 mt-2">
                 <div className="w-8 h-8 rounded-lg bg-slate-100 dark:bg-slate-700 flex items-center justify-center">
                    <span className="text-xs font-bold text-slate-500 dark:text-slate-400">
@@ -253,7 +313,6 @@ export default function ClientView() {
                   </p>
                 </div>
               </div>
-              {/* ---------------- */}
 
             </CardContent>
           </Card>
@@ -342,6 +401,104 @@ export default function ClientView() {
           </Tabs>
         </div>
       </div>
+
+      {/* Edit Dialog - Internal */}
+      <Dialog open={isEditOpen} onOpenChange={setIsEditOpen}>
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto dark:bg-slate-800 dark:border-slate-700">
+          <DialogHeader>
+            <DialogTitle className="dark:text-slate-200">עריכת לקוח</DialogTitle>
+          </DialogHeader>
+          <form onSubmit={handleSave} className="space-y-6 mt-4">
+            <div className="grid grid-cols-3 gap-4">
+              <div className="col-span-2 space-y-2">
+                <Label className="dark:text-slate-300">שם הלקוח / חברה *</Label>
+                <Input
+                  value={formData.name || ''}
+                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                  className="dark:bg-slate-900 dark:border-slate-600"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label className="dark:text-slate-300">מספר לקוח</Label>
+                <Input
+                  value={formData.client_number || ''}
+                  onChange={(e) => setFormData({ ...formData, client_number: e.target.value })}
+                  className="dark:bg-slate-900 dark:border-slate-600"
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label className="dark:text-slate-300">אימייל</Label>
+                <Input
+                  value={formData.email || ''}
+                  onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                  className="dark:bg-slate-900 dark:border-slate-600"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label className="dark:text-slate-300">טלפון</Label>
+                <Input
+                  value={formData.phone || ''}
+                  onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                  className="dark:bg-slate-900 dark:border-slate-600"
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-3 gap-4">
+              <div className="space-y-2">
+                <Label className="dark:text-slate-300">מדינה</Label>
+                <Input
+                  value={formData.country || ''}
+                  onChange={(e) => setFormData({ ...formData, country: e.target.value })}
+                  className="dark:bg-slate-900 dark:border-slate-600"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label className="dark:text-slate-300">שפת תקשורת</Label>
+                <Select
+                  value={formData.communication_language || 'he'}
+                  onValueChange={(v) => setFormData({ ...formData, communication_language: v })}
+                >
+                  <SelectTrigger className="dark:bg-slate-900 dark:border-slate-600">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent className="dark:bg-slate-800 dark:border-slate-700">
+                    <SelectItem value="he" className="dark:text-slate-200">עברית</SelectItem>
+                    <SelectItem value="en" className="dark:text-slate-200">אנגלית</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label className="dark:text-slate-300">כתובת</Label>
+                <Input
+                  value={formData.address || ''}
+                  onChange={(e) => setFormData({ ...formData, address: e.target.value })}
+                  className="dark:bg-slate-900 dark:border-slate-600"
+                />
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label className="dark:text-slate-300">הערות</Label>
+              <Textarea
+                value={formData.notes || ''}
+                onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+                className="dark:bg-slate-900 dark:border-slate-600"
+              />
+            </div>
+
+            <div className="flex justify-end gap-3 pt-4">
+              <Button type="button" variant="outline" onClick={() => setIsEditOpen(false)} className="dark:border-slate-600">ביטול</Button>
+              <Button type="submit" className="bg-slate-800 hover:bg-slate-700 dark:bg-slate-700" disabled={updateMutation.isPending}>
+                {updateMutation.isPending ? 'שומר...' : 'שמור שינויים'}
+              </Button>
+            </div>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
