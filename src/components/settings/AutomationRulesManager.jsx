@@ -57,7 +57,15 @@ const defaultRule = {
   catch_config: { senders: [], subject_contains: '', body_contains: '' },
   map_config: [{ ...defaultMapRow }],
   action_bundle: {
-    send_email: { enabled: false, recipients: [], subject_template: '', body_template: '' },
+    send_email: { 
+      enabled: false, 
+      recipients: [], 
+      subject_template: '', 
+      body_template: '',
+      enable_english: false,      // <--- חדש
+      subject_template_en: '',    // <--- חדש
+      body_template_en: ''        // <--- חדש
+    },
     save_file: { enabled: false, path_template: '' },
     calendar_event: { enabled: false, title_template: '', timing_direction: 'after', timing_offset: 7, timing_unit: 'days', attendees: [], create_meet_link: false },
     create_alert: { enabled: false, alert_type: 'reminder', message_template: '', timing_direction: 'after', timing_offset: 7, timing_unit: 'days', recipients: [] },
@@ -584,6 +592,38 @@ export default function AutomationRulesManager() {
                     <div>
                       <Label className="text-sm">תוכן</Label>
                       <TokenTextarea value={currentRule.action_bundle.send_email.body_template} onChange={v => updateAction('send_email', 'body_template', v)} placeholder="שלום {Client_Name},&#10;&#10;התקבלה הודעה בתיק..." />
+                    </div>
+                    <div className="mt-4 pt-4 border-t border-slate-200 dark:border-slate-700">
+                      <div className="flex items-center gap-2 mb-3">
+                        <Switch 
+                          checked={currentRule.action_bundle.send_email.enable_english || false} 
+                          onCheckedChange={c => updateAction('send_email', 'enable_english', c)} 
+                        />
+                        <Label className="text-sm text-blue-600 dark:text-blue-400 font-medium">
+                          הוסף גרסה באנגלית (English Version)
+                        </Label>
+                      </div>
+                      
+                      {currentRule.action_bundle.send_email.enable_english && (
+                        <div className="space-y-3 p-3 bg-slate-50 dark:bg-slate-900 rounded border border-slate-200 dark:border-slate-700">
+                          <div>
+                            <Label className="text-sm">English Subject</Label>
+                            <TokenInput 
+                              value={currentRule.action_bundle.send_email.subject_template_en || ''} 
+                              onChange={v => updateAction('send_email', 'subject_template_en', v)} 
+                              placeholder="Update re: Case {Case_No}" 
+                            />
+                          </div>
+                          <div>
+                            <Label className="text-sm">English Body</Label>
+                            <TokenTextarea 
+                              value={currentRule.action_bundle.send_email.body_template_en || ''} 
+                              onChange={v => updateAction('send_email', 'body_template_en', v)} 
+                              placeholder="Dear {Client_Name},&#10;&#10;An update has been received..." 
+                            />
+                          </div>
+                        </div>
+                      )}
                     </div>
                   </div>
                 )}
