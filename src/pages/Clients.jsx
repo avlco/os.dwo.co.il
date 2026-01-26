@@ -55,6 +55,7 @@ export default function Clients() {
   const [formData, setFormData] = useState({
     name: '',
     type: 'company',
+    communication_language: 'he',
     email: '',
     phone: '',
     address: '',
@@ -207,6 +208,7 @@ export default function Clients() {
     setFormData({
   name: '',
   type: 'company',
+  communication_language: 'he',
   email: '',
   phone: '',
   address: '',
@@ -280,6 +282,7 @@ export default function Clients() {
     setFormData({
       name: client.name || '',
       type: client.type || 'company',
+      communication_language: client.communication_language || 'he',
       email: client.email || '',
       phone: client.phone || '',
       address: client.address || '',
@@ -745,6 +748,21 @@ export default function Clients() {
                   onChange={(e) => setFormData({ ...formData, country: e.target.value })}
                   className="dark:bg-slate-900 dark:border-slate-600"
                 />
+              </div>
+              <div className="space-y-2">
+                <Label className="dark:text-slate-300">שפת תקשורת</Label>
+                <Select
+                  value={formData.communication_language}
+                  onValueChange={(v) => setFormData({ ...formData, communication_language: v })}
+                >
+                  <SelectTrigger className="dark:bg-slate-900 dark:border-slate-600">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent className="dark:bg-slate-800 dark:border-slate-700">
+                    <SelectItem value="he" className="dark:text-slate-200">עברית</SelectItem>
+                    <SelectItem value="en" className="dark:text-slate-200">אנגלית</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
               <div className="space-y-2">
                 <Label className="dark:text-slate-300">מספר תאגיד</Label>
