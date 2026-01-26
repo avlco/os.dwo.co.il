@@ -560,9 +560,17 @@ export default function AutomationRulesManager() {
                     <div className="mt-4 pt-4 border-t border-slate-200 dark:border-slate-700">
                         <div className="flex items-center gap-2 mb-3">
                             <Switch 
-                            checked={currentRule.action_bundle.create_alert.enable_english || false} 
-                            onCheckedChange={c => updateAction('create_alert', 'enable_english', c)} 
-                            />
+      checked={currentRule.action_bundle.create_alert.enable_english || false} 
+      onCheckedChange={c => {
+          // 1. עדכון המצב
+          updateAction('create_alert', 'enable_english', c);
+          
+          // 2. העתקת תוכן אוטומטית
+          if (c && !currentRule.action_bundle.create_alert.message_template_en) {
+              updateAction('create_alert', 'message_template_en', currentRule.action_bundle.create_alert.message_template);
+          }
+      }} 
+    />
                             <Label className="text-sm text-blue-600 dark:text-blue-400 font-medium">הוסף גרסה באנגלית</Label>
                         </div>
                         
@@ -617,9 +625,21 @@ export default function AutomationRulesManager() {
                     <div className="mt-4 pt-4 border-t border-slate-200 dark:border-slate-700">
                         <div className="flex items-center gap-2 mb-3">
                             <Switch 
-                            checked={currentRule.action_bundle.calendar_event.enable_english || false} 
-                            onCheckedChange={c => updateAction('calendar_event', 'enable_english', c)} 
-                            />
+      checked={currentRule.action_bundle.calendar_event.enable_english || false} 
+      onCheckedChange={c => {
+          // 1. עדכון המצב (דלוק/כבוי)
+          updateAction('calendar_event', 'enable_english', c);
+          
+          // 2. העתקת תוכן אוטומטית אם השדות ריקים
+          if (c && !currentRule.action_bundle.calendar_event.title_template_en) {
+              updateAction('calendar_event', 'title_template_en', currentRule.action_bundle.calendar_event.title_template);
+          }
+          if (c && !currentRule.action_bundle.calendar_event.description_template_en) {
+              // הוספנו קידומת קטנה כדי להבדיל, אפשר למחוק אם לא רוצים
+              updateAction('calendar_event', 'description_template_en', 'English description: ' + (currentRule.action_bundle.calendar_event.description_template || ''));
+          }
+      }} 
+    />
                             <Label className="text-sm text-blue-600 dark:text-blue-400 font-medium">הוסף גרסה באנגלית</Label>
                         </div>
                         
