@@ -1,8 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { base44 } from '@/api/base44Client';
 import { useTranslation } from 'react-i18next';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { createPageUrl } from '../utils';
 import PageHeader from '../components/ui/PageHeader';
 import DataTable from '../components/ui/DataTable';
@@ -51,11 +51,14 @@ export default function Clients() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const navigate = useNavigate();
+  const location = useLocation();
+
   const [searchTerm, setSearchTerm] = useState('');
   const [filterType, setFilterType] = useState('all');
   const [showArchived, setShowArchived] = useState(false);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingClient, setEditingClient] = useState(null);
+  
   const [formData, setFormData] = useState({
     name: '',
     type: 'company',
@@ -69,7 +72,7 @@ export default function Clients() {
     payment_terms: 'net_30',
     is_active: true,
     notes: '',
-    client_number: '',
+    client_number: '0001',
     assigned_lawyer_id: '',
     hourly_rate: 800,
     billing_currency: 'ILS',
@@ -115,21 +118,37 @@ export default function Clients() {
     },
   });
 
+  // פתיחה אוטומטית של עריכה אם יש ב-URL פרמטר edit
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const editId = params.get('edit');
+    if (editId && clients.length > 0) {
+      const clientToEdit = clients.find(c => c.id === editId);
+      if (clientToEdit) {
+        openEditDialog(clientToEdit);
+        // מנקה את ה-URL
+        window.history.replaceState({}, '', createPageUrl('Clients')); 
+      }
+    }
+  }, [location.search, clients]);
+
   const createMutation = useMutation({
     mutationFn: (data) => base44.entities.Client.create(data),
     onSuccess: async () => {
       queryClient.invalidateQueries(['clients']);
       setIsDialogOpen(false);
-          // יצירת תיקייה ב-Dropbox
-    try {
-      await base44.functions.invoke('createClientFolder', {
-        client_name: formData.name,
-        client_number: formData.client_number
-      });
-      console.log('[Clients] Dropbox folder created');
-    } catch (folderError) {
-      console.error('[Clients] Failed to create Dropbox folder:', folderError);
-    }
+      
+      // יצירת תיקייה ב-Dropbox
+      try {
+        await base44.functions.invoke('createClientFolder', {
+          client_name: formData.name,
+          client_number: formData.client_number
+        });
+        console.log('[Clients] Dropbox folder created');
+      } catch (folderError) {
+        console.error('[Clients] Failed to create Dropbox folder:', folderError);
+      }
+      
       resetForm();
       toast({
         title: "הלקוח נוסף בהצלחה",
@@ -210,24 +229,24 @@ export default function Clients() {
 
   const resetForm = () => {
     setFormData({
-  name: '',
-  type: 'company',
-  communication_language: 'he',
-  email: '',
-  phone: '',
-  address: '',
-  country: 'IL',
-  registration_number: '',
-  tax_id: '',
-  payment_terms: 'net_30',
-  is_active: true,
-  notes: '',
-  client_number: '0001',  // ← זה החלק החדש
-  assigned_lawyer_id: '',
-  hourly_rate: 800,
-  billing_currency: 'ILS',
-  contact_person_name: '',
-});
+      name: '',
+      type: 'company',
+      communication_language: 'he',
+      email: '',
+      phone: '',
+      address: '',
+      country: 'IL',
+      registration_number: '',
+      tax_id: '',
+      payment_terms: 'net_30',
+      is_active: true,
+      notes: '',
+      client_number: '0001',
+      assigned_lawyer_id: '',
+      hourly_rate: 800,
+      billing_currency: 'ILS',
+      contact_person_name: '',
+    });
     setEditingClient(null);
   };
 
@@ -328,15 +347,15 @@ export default function Clients() {
       );
 
       if (isDuplicate) {
-  const duplicate = clients.find(c => c.client_number === formData.client_number);
-  const nextNumber = (parseInt(formData.client_number) + 1).toString().padStart(4, '0');
-  toast({
-    variant: "destructive",
-    title: `מספר ${formData.client_number} תפוס`,
-    description: `"${duplicate.name}" משתמש בו. נסה ${nextNumber}`,
-  });
-  return;
-}
+        const duplicate = clients.find(c => c.client_number === formData.client_number);
+        const nextNumber = (parseInt(formData.client_number) + 1).toString().padStart(4, '0');
+        toast({
+          variant: "destructive",
+          title: `מספר ${formData.client_number} תפוס`,
+          description: `"${duplicate.name}" משתמש בו. נסה ${nextNumber}`,
+        });
+        return;
+      }
     }
 
     if (editingClient) {
@@ -390,6 +409,7 @@ export default function Clients() {
                     {r.client_number}
                   </Badge>
                 )}
+                {r.communication_language === 'en' && <Badge variant="outline" className="text-xs bg-blue-50 text-blue-700 border-blue-200">EN</Badge>}
               </div>
             </div>
           </div>
@@ -494,10 +514,10 @@ export default function Clients() {
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="dark:bg-slate-800 dark:border-slate-700">
-            <DropdownMenuItem
+              <DropdownMenuItem
                 onClick={(e) => {
-                  e.stopPropagation(); // עוצר את הלחיצה מלהגיע לשורה
-                  openEditDialog(r);
+                  e.stopPropagation();
+                  navigate(createPageUrl('ClientView', { id: r.id }));
                 }}
                 className="flex items-center gap-2 dark:text-slate-200 dark:hover:bg-slate-700"
               >
@@ -505,7 +525,10 @@ export default function Clients() {
                 צפייה
               </DropdownMenuItem>
               <DropdownMenuItem
-                onClick={() => openEditDialog(r)}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  openEditDialog(r);
+                }}
                 className="flex items-center gap-2 dark:text-slate-200 dark:hover:bg-slate-700"
               >
                 <Edit className="w-4 h-4" />
@@ -513,7 +536,7 @@ export default function Clients() {
               </DropdownMenuItem>
               <DropdownMenuItem
                 onClick={(e) => {
-                  e.stopPropagation(); // <--- הוספה
+                  e.stopPropagation();
                   deleteMutation.mutate(r.id);
                 }}
                 className="flex items-center gap-2 text-rose-600 dark:text-rose-400 dark:hover:bg-slate-700"
@@ -565,13 +588,13 @@ export default function Clients() {
           </SelectContent>
         </Select>
         <Button 
-    variant="outline" 
-    size="sm" 
-    onClick={() => setShowArchived(!showArchived)}
-    className="ml-2"
-  >
-    {showArchived ? 'הסתר' : 'הצג'} ארכיון
-  </Button>
+          variant="outline" 
+          size="sm" 
+          onClick={() => setShowArchived(!showArchived)}
+          className="ml-2"
+        >
+          {showArchived ? 'הסתר' : 'הצג'} ארכיון
+        </Button>
       </div>
 
       {clients.length === 0 && !isLoading ? (
@@ -661,7 +684,7 @@ export default function Clients() {
               </div>
             </div>
 
-{formData.type === 'company' && (
+            {formData.type === 'company' && (
               <div className="space-y-2">
                 <Label className="dark:text-slate-300">שם איש קשר בחברה</Label>
                 <Input
@@ -693,15 +716,6 @@ export default function Clients() {
                   className="dark:bg-slate-900 dark:border-slate-600"
                 />
               </div>
-            </div>
-
-            <div className="space-y-2">
-              <Label className="dark:text-slate-300">כתובת</Label>
-              <Input
-                value={formData.address}
-                onChange={(e) => setFormData({ ...formData, address: e.target.value })}
-                className="dark:bg-slate-900 dark:border-slate-600"
-              />
             </div>
 
             <div className="grid grid-cols-3 gap-4">
@@ -778,7 +792,7 @@ export default function Clients() {
                   </SelectTrigger>
                   <SelectContent className="dark:bg-slate-800 dark:border-slate-700">
                     <SelectItem value="he" className="dark:text-slate-200">עברית</SelectItem>
-                    <SelectItem value="en" className="dark:text-slate-200">אנגלית</SelectItem>
+                    <SelectItem value="en" className="dark:text-slate-200">אנגלית (English)</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -803,6 +817,15 @@ export default function Clients() {
             </div>
 
             <div className="space-y-2">
+              <Label className="dark:text-slate-300">כתובת</Label>
+              <Input
+                value={formData.address}
+                onChange={(e) => setFormData({ ...formData, address: e.target.value })}
+                className="dark:bg-slate-900 dark:border-slate-600"
+              />
+            </div>
+
+            <div className="space-y-2">
               <Label className="dark:text-slate-300">הערות</Label>
               <Textarea
                 value={formData.notes}
@@ -819,7 +842,7 @@ export default function Clients() {
                 onClick={() => setIsDialogOpen(false)}
                 className="dark:border-slate-600"
               >
-                ביטול
+                {t('common.cancel')}
               </Button>
               <Button
                 type="submit"
