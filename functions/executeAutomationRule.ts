@@ -280,6 +280,118 @@ function calculateDueDate(offsetDays) {
 }
 
 /**
+ * Build actions array from action_bundle for ApprovalBatch
+ */
+async function buildActionsArray(actionBundle, context) {
+  const actions = [];
+  const { mail, caseId, clientId, mailId, base44, userEmail } = context;
+
+  // send_email
+  if (actionBundle.send_email?.enabled) {
+    const recipients = await resolveRecipients(
+      actionBundle.send_email.recipients,
+      { caseId, clientId },
+      base44
+    );
+    
+    if (recipients.length > 0) {
+      actions.push({
+        action_type: 'send_email',
+        enabled: true,
+        config: {
+          to: recipients.join(','),
+          subject: await replaceTokens(actionBundle.send_email.subject_template, { mail, caseId, clientId }, base44),
+          body: await replaceTokens(actionBundle.send_email.body_template, { mail, caseId, clientId }, base44)
+        }
+      });
+    }
+  }
+
+  // create_task
+  if (actionBundle.create_task?.enabled) {
+    actions.push({
+      action_type: 'create_task',
+      enabled: true,
+      config: {
+        title: await replaceTokens(actionBundle.create_task.title, { mail, caseId, clientId }, base44),
+        description: await replaceTokens(actionBundle.create_task.description, { mail, caseId, clientId }, base44),
+        due_date: calculateDueDate(actionBundle.create_task.due_offset_days),
+        priority: 'medium'
+      }
+    });
+  }
+
+  // billing
+  if (actionBundle.billing?.enabled) {
+    let rate = actionBundle.billing.hourly_rate || 800;
+    
+    if (caseId) {
+      try {
+        const caseData = await base44.entities.Case.get(caseId);
+        if (caseData?.hourly_rate) rate = caseData.hourly_rate;
+      } catch (e) { /* ignore */ }
+    }
+    
+    actions.push({
+      action_type: 'billing',
+      enabled: true,
+      config: {
+        hours: actionBundle.billing.hours || 0.25,
+        rate: rate,
+        description: actionBundle.billing.description_template 
+          ? await replaceTokens(actionBundle.billing.description_template, { mail, caseId, clientId }, base44)
+          : mail.subject
+      }
+    });
+  }
+
+  // save_file (Dropbox)
+  if (actionBundle.save_file?.enabled && mail.attachments && mail.attachments.length > 0) {
+    actions.push({
+      action_type: 'save_file',
+      enabled: true,
+      config: {
+        path: await replaceTokens(actionBundle.save_file.path_template, { mail, caseId, clientId }, base44),
+        mail_id: mailId,
+        attachment_count: mail.attachments.length
+      }
+    });
+  }
+
+  // calendar_event
+  if (actionBundle.calendar_event?.enabled) {
+    actions.push({
+      action_type: 'calendar_event',
+      enabled: true,
+      config: {
+        title: await replaceTokens(actionBundle.calendar_event.title_template || 'תזכורת אוטומטית', { mail, caseId, clientId }, base44),
+        description: await replaceTokens(actionBundle.calendar_event.description_template || '', { mail, caseId, clientId }, base44),
+        start_date: calculateDueDate(actionBundle.calendar_event.timing_offset || 7),
+        duration_minutes: actionBundle.calendar_event.duration_minutes || 60,
+        create_meet_link: actionBundle.calendar_event.create_meet_link || false,
+        attendees: actionBundle.calendar_event.attendees || []
+      }
+    });
+  }
+
+  // create_alert
+  if (actionBundle.create_alert?.enabled) {
+    actions.push({
+      action_type: 'create_alert',
+      enabled: true,
+      config: {
+        alert_type: actionBundle.create_alert.alert_type || 'reminder',
+        message: await replaceTokens(actionBundle.create_alert.message_template, { mail, caseId, clientId }, base44),
+        timing_offset: actionBundle.create_alert.timing_offset,
+        timing_unit: actionBundle.create_alert.timing_unit
+      }
+    });
+  }
+
+  return actions;
+}
+
+/**
  * Create an ApprovalBatch for the entire action bundle
  * This replaces the old per-action Activity-based approval system
  */
