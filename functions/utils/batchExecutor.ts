@@ -49,22 +49,19 @@ export async function executeBatchActions(base44, batch, context) {
       continue;
     }
     
-    // Fail actions without idempotency key - this is a critical error
+    // Fail actions without idempotency key - this is a critical error (fail-fast)
     if (!action.idempotency_key) {
       const errorMessage = `Missing idempotency_key for action type: ${action.action_type}`;
       console.error(`[BatchExecutor] ❌ ${action.action_type} failed: ${errorMessage}`);
-      results.push({
-        action_type: action.action_type,
-        status: 'failed',
-        error: errorMessage,
-        details: { reason: 'missing_idempotency_key' }
-      });
       
-      // Treat as revertible failure - rollback and stop
-      hasRevertibleFailure = true;
-      console.log(`[BatchExecutor] 🔄 Missing idempotency_key - initiating rollback`);
-      await performRollback(base44, rollbackStack);
-      break;
+      // Rollback any completed actions before throwing
+      if (rollbackStack.length > 0) {
+        console.log(`[BatchExecutor] 🔄 Missing idempotency_key - initiating rollback`);
+        await performRollback(base44, rollbackStack);
+      }
+      
+      // Throw to fail-fast - caller must handle this error
+      throw new Error(errorMessage);
     }
     
     // RESERVE-FIRST: Try to create ExecutionLog with status='pending'
@@ -103,10 +100,25 @@ export async function executeBatchActions(base44, batch, context) {
         });
         continue;
       }
+      
+      // Default continue for any unhandled existingStatus (safety net)
+      console.warn(`[BatchExecutor] ⚠️ Unhandled existingStatus: ${reserveResult.existingStatus} for ${action.action_type}`);
+      results.push({
+        action_type: action.action_type,
+        idempotency_key: action.idempotency_key,
+        status: 'skipped',
+        details: { reason: 'unhandled_existing_status', existing_status: reserveResult.existingStatus }
+      });
+      continue;
     }
     
     // Reserve succeeded - now execute the action
     const executionLogId = reserveResult.executionLogId;
+    
+    // Defensive guard - should never happen if reserve returned true
+    if (!executionLogId) {
+      throw new Error(`Missing executionLogId after successful reserve for ${action.action_type}`);
+    }
     
     try {
       const result = await executeAction(base44, action, batch, context);
