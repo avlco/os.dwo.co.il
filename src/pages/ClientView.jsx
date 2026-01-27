@@ -455,7 +455,8 @@ export default function ClientView() {
                   value={formData.client_number || ''} 
                   onChange={(e) => setFormData({...formData, client_number: e.target.value})} 
                   required 
-                  className="dark:bg-slate-900 dark:border-slate-600" 
+                  disabled={true} // נעול תמיד כי זה מסך עריכה
+                  className="dark:bg-slate-900 dark:border-slate-600 disabled:opacity-50 disabled:cursor-not-allowed" 
                 />
               </div>
             </div>
