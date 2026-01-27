@@ -114,20 +114,64 @@ Deno.serve(async (req) => {
     if (action === 'rename') {
       const { oldName, newName, clientNumber } = requestData;
 
-      if (!oldName || !newName || !clientNumber) {
-        throw new Error('Rename requires: oldName, newName, and clientNumber');
+      if (!newName || !clientNumber) {
+        throw new Error('Rename requires: newName and clientNumber');
       }
 
-      // בניית הנתיבים הישן והחדש
-      const safeNumber = sanitizeFolderName(clientNumber);
-      const safeOldName = sanitizeFolderName(oldName);
+      console.log(`[DropboxHandler] Starting Smart Rename for Client #${clientNumber}`);
+
+      // 1. שלב החיפוש: מציאת התיקייה האמיתית לפי מספר לקוח
+      // אנחנו מחפשים תיקייה שמתחילה במספר הלקוח
+      const searchResponse = await fetch('https://api.dropboxapi.com/2/files/search_v2', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${accessToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          query: clientNumber + " -", // חיפוש לפי "1234 -"
+          options: {
+            path: "/DWO/לקוחות - משרד", // נתיב החיפוש
+            filename_only: true, // חפש רק בשמות הקבצים/תיקיות
+            file_categories: [{".tag": "folder"}] // רק תיקיות
+          }
+        })
+      });
+
+      const searchResult = await searchResponse.json();
+      
+      // בדיקה אם נמצאה תיקייה
+      let fromPath = null;
+      if (searchResult.matches && searchResult.matches.length > 0) {
+        // לוקחים את התוצאה הראשונה (מניחים שמספר הלקוח ייחודי)
+        const match = searchResult.matches[0];
+        // המבנה של התשובה משתנה קצת ב-API V2, מוודאים שלוקחים את הנתיב הנכון
+        fromPath = match.metadata.metadata.path_display; 
+        console.log(`[DropboxHandler] Found actual folder path: "${fromPath}"`);
+      } else {
+        // Fallback: אם החיפוש נכשל, מנסים לנחש לפי השם הישן (כמו קודם)
+        console.log('[DropboxHandler] Folder not found by search, trying fallback path...');
+        const safeNumber = sanitizeFolderName(clientNumber);
+        const safeOldName = sanitizeFolderName(oldName);
+        fromPath = `/DWO/לקוחות - משרד/${safeNumber} - ${safeOldName}`;
+      }
+
+      // 2. בניית הנתיב החדש
+      const safeNumberForNew = sanitizeFolderName(clientNumber);
       const safeNewName = sanitizeFolderName(newName);
+      const toPath = `/DWO/לקוחות - משרד/${safeNumberForNew} - ${safeNewName}`;
 
-      const fromPath = `/DWO/לקוחות - משרד/${safeNumber} - ${safeOldName}`;
-      const toPath = `/DWO/לקוחות - משרד/${safeNumber} - ${safeNewName}`;
+      // אם הנתיב הישן והחדש זהים - אין מה לעשות
+      if (fromPath === toPath) {
+         console.log('[DropboxHandler] Paths are identical, skipping rename.');
+         return new Response(JSON.stringify({ success: true, message: 'No name change detected' }), {
+           headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+         });
+      }
 
-      console.log(`[DropboxHandler] Renaming: "${fromPath}" -> "${toPath}"`);
+      console.log(`[DropboxHandler] Executing Rename: "${fromPath}" -> "${toPath}"`);
 
+      // 3. ביצוע הפקודה
       const response = await fetch('https://api.dropboxapi.com/2/files/move_v2', {
         method: 'POST',
         headers: {
@@ -137,17 +181,17 @@ Deno.serve(async (req) => {
         body: JSON.stringify({
           from_path: fromPath,
           to_path: toPath,
-          autorename: false // אם השם תפוס, נרצה לדעת ולא לשנות אוטומטית
+          autorename: false
         })
       });
 
       const result = await response.json();
 
       if (!response.ok) {
-        // טיפול בשגיאה נפוצה: התיקייה הישנה לא נמצאה
-        if (result.error?.path?.['.tag'] === 'not_found') {
-           console.warn('[DropboxHandler] Source folder not found, skipping rename.');
-           return new Response(JSON.stringify({ success: true, message: 'Source folder not found, nothing to rename' }), {
+        // אם עדיין לא מצאנו (למרות החיפוש), נחזיר הודעה שלא תזרוק שגיאה למשתמש
+        if (result.error?.path?.['.tag'] === 'not_found' || result.error?.['.tag'] === 'from_lookup') {
+           console.warn('[DropboxHandler] Source folder not found even after search.');
+           return new Response(JSON.stringify({ success: false, warning: 'Dropbox folder not found, skipping rename' }), {
              headers: { ...corsHeaders, 'Content-Type': 'application/json' }
            });
         }
