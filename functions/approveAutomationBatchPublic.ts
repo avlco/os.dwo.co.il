@@ -6,13 +6,15 @@
  * - Nonce for anti-replay protection
  * - Token expiry (60 minutes)
  * - Approver email verification
+ * - Strict CORS origin validation
  * 
  * Flow:
- * 1. Verify token signature
- * 2. Verify token not expired
- * 3. Verify nonce not used (anti-replay)
- * 4. Verify batch exists and is pending
- * 5. Mark batch as approved and execute
+ * 1. Validate CORS origin (403 if not allowed)
+ * 2. Verify token signature
+ * 3. Verify token not expired
+ * 4. Verify nonce not used (anti-replay)
+ * 5. Verify batch exists and is pending
+ * 6. Mark batch as approved and execute
  */
 
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.6';
@@ -20,32 +22,42 @@ import { verifyApprovalToken, hashNonce } from './utils/approvalToken.js';
 import { executeBatchActions } from './utils/batchExecutor.js';
 
 /**
- * Get allowed CORS origin based on APP_BASE_URL
+ * Build list of allowed CORS origins
  */
-function getCorsHeaders(req) {
-  const appBaseUrl = Deno.env.get('APP_BASE_URL');
-  const requestOrigin = req.headers.get('origin');
-  
-  // Build list of allowed origins
+function getAllowedOrigins() {
   const allowedOrigins = [];
   
+  const appBaseUrl = Deno.env.get('APP_BASE_URL');
   if (appBaseUrl) {
+    // Add exact URL
     allowedOrigins.push(appBaseUrl);
-    // Also allow without trailing slash
-    allowedOrigins.push(appBaseUrl.replace(/\/$/, ''));
+    // Also add without trailing slash if present
+    if (appBaseUrl.endsWith('/')) {
+      allowedOrigins.push(appBaseUrl.slice(0, -1));
+    }
   }
   
-  // Add base44 preview domains
+  // Add base44 domains
   allowedOrigins.push('https://preview.base44.com');
   allowedOrigins.push('https://app.base44.com');
   
-  // Check if request origin is allowed
-  const isAllowed = requestOrigin && allowedOrigins.some(allowed => 
-    requestOrigin === allowed || requestOrigin.startsWith(allowed)
-  );
-  
+  return allowedOrigins;
+}
+
+/**
+ * Check if origin is allowed (strict equality check)
+ */
+function isOriginAllowed(requestOrigin, allowedOrigins) {
+  if (!requestOrigin) return false;
+  return allowedOrigins.some(allowed => requestOrigin === allowed);
+}
+
+/**
+ * Get CORS headers for allowed origin
+ */
+function getCorsHeaders(origin) {
   return {
-    'Access-Control-Allow-Origin': isAllowed ? requestOrigin : allowedOrigins[0] || 'https://app.base44.com',
+    'Access-Control-Allow-Origin': origin,
     'Access-Control-Allow-Headers': 'content-type, authorization',
     'Access-Control-Allow-Methods': 'POST, OPTIONS',
     'Vary': 'Origin'
@@ -53,7 +65,20 @@ function getCorsHeaders(req) {
 }
 
 Deno.serve(async (req) => {
-  const corsHeaders = getCorsHeaders(req);
+  const requestOrigin = req.headers.get('origin');
+  const allowedOrigins = getAllowedOrigins();
+  
+  // CORS validation - strict equality check
+  if (requestOrigin && !isOriginAllowed(requestOrigin, allowedOrigins)) {
+    console.log(`[ApprovePublic] Forbidden origin: ${requestOrigin}`);
+    return Response.json(
+      { success: false, code: 'FORBIDDEN_ORIGIN', message: 'Origin not allowed' },
+      { status: 403 }
+    );
+  }
+  
+  // Get CORS headers for valid origin
+  const corsHeaders = requestOrigin ? getCorsHeaders(requestOrigin) : {};
   
   // Handle CORS preflight
   if (req.method === 'OPTIONS') {
@@ -158,11 +183,11 @@ Deno.serve(async (req) => {
       );
     }
 
-    // 7. Check nonce (anti-replay)
+    // 7. Check nonce (anti-replay) - UNIQUE constraint handles duplicates
     const nonceHash = await hashNonce(payload.nonce, secret);
     
     try {
-      // Try to create nonce record - will fail if already exists
+      // Try to create nonce record - will fail if already exists due to UNIQUE constraint
       await base44.asServiceRole.entities.ApprovalNonce.create({
         batch_id: batch.id,
         nonce_hash: nonceHash,
@@ -174,7 +199,8 @@ Deno.serve(async (req) => {
         }
       });
     } catch (nonceError) {
-      // Check if it's a duplicate error
+      // Check if it's a duplicate (UNIQUE constraint violation)
+      // Fallback: query to verify
       const existingNonces = await base44.asServiceRole.entities.ApprovalNonce.filter({
         batch_id: batch.id,
         nonce_hash: nonceHash
@@ -225,7 +251,7 @@ Deno.serve(async (req) => {
         userEmail: payload.approver_email
       });
       
-      // If any action failed, status is failed (regardless of rollback)
+      // If any action failed, status is failed
       if (executionSummary.failed > 0) {
         finalStatus = 'failed';
       }

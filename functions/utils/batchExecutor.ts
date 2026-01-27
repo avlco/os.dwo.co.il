@@ -1,19 +1,21 @@
 /**
  * Batch Executor - Executes approval batch actions with rollback support
  * 
+ * Uses Reserve-First Idempotency Pattern:
+ * 1. Try to CREATE ExecutionLog with status='pending' (this is the lock/reserve)
+ * 2. If UNIQUE conflict → read existing record and return skipped based on status
+ * 3. Only after successful reserve → execute the actual action
+ * 4. Update ExecutionLog to 'completed' or 'failed'
+ * 
  * Execution Order (to minimize damage on failure):
  * 1. Revertible actions first: Task, TimeEntry, Deadline, Activity
  * 2. Non-revertible actions last: send_email, save_file, calendar_event
- * 
- * Rollback Strategy:
- * - If revertible action fails → rollback all completed, mark batch as failed
- * - If non-revertible action fails → no rollback (data is consistent), mark action as failed
  */
 
 // Action categories
 const REVERTIBLE_ACTIONS = ['create_task', 'billing', 'create_alert', 'create_deadline'];
 const NON_REVERTIBLE_ACTIONS = ['send_email', 'save_file', 'calendar_event'];
-const BEST_EFFORT_ACTIONS = ['save_file', 'calendar_event']; // Won't block batch on failure
+const BEST_EFFORT_ACTIONS = ['save_file', 'calendar_event'];
 
 /**
  * Execute all enabled actions in a batch
@@ -47,21 +49,68 @@ export async function executeBatchActions(base44, batch, context) {
       continue;
     }
     
-    // Check idempotency - skip if already executed
-    const existingResult = await checkIdempotency(base44, action.idempotency_key);
-    if (existingResult) {
-      console.log(`[BatchExecutor] Skipping ${action.action_type} - already executed (idempotency)`);
+    // Skip actions without idempotency key
+    if (!action.idempotency_key) {
+      console.log(`[BatchExecutor] Skipping ${action.action_type} - no idempotency_key`);
       results.push({
         action_type: action.action_type,
-        idempotency_key: action.idempotency_key,
         status: 'skipped',
-        details: { reason: 'idempotency', existing_id: existingResult }
+        details: { reason: 'no_idempotency_key' }
       });
       continue;
     }
     
+    // RESERVE-FIRST: Try to create ExecutionLog with status='pending'
+    const reserveResult = await tryReserveExecution(base44, action, batch, context);
+    
+    if (reserveResult.reserved === false) {
+      // Already exists - check existing status
+      console.log(`[BatchExecutor] Action ${action.action_type} already has ExecutionLog with status: ${reserveResult.existingStatus}`);
+      
+      if (reserveResult.existingStatus === 'completed') {
+        results.push({
+          action_type: action.action_type,
+          idempotency_key: action.idempotency_key,
+          status: 'skipped',
+          details: { reason: 'already_completed', existing_id: reserveResult.existingResultId }
+        });
+        continue;
+      }
+      
+      if (reserveResult.existingStatus === 'pending') {
+        results.push({
+          action_type: action.action_type,
+          idempotency_key: action.idempotency_key,
+          status: 'skipped',
+          details: { reason: 'in_progress' }
+        });
+        continue;
+      }
+      
+      if (reserveResult.existingStatus === 'failed') {
+        results.push({
+          action_type: action.action_type,
+          idempotency_key: action.idempotency_key,
+          status: 'skipped',
+          details: { reason: 'previously_failed', error: reserveResult.existingError }
+        });
+        continue;
+      }
+    }
+    
+    // Reserve succeeded - now execute the action
+    const executionLogId = reserveResult.executionLogId;
+    
     try {
       const result = await executeAction(base44, action, batch, context);
+      
+      // Update ExecutionLog to 'completed'
+      await base44.asServiceRole.entities.ExecutionLog.update(executionLogId, {
+        status: 'completed',
+        result_id: String(result.id || ''),
+        result_entity: result.entity || getEntityForActionType(action.action_type),
+        completed_at: new Date().toISOString()
+      });
       
       results.push({
         action_type: action.action_type,
@@ -76,7 +125,8 @@ export async function executeBatchActions(base44, batch, context) {
         rollbackStack.push({
           action_type: action.action_type,
           id: result.id,
-          idempotency_key: action.idempotency_key
+          idempotency_key: action.idempotency_key,
+          executionLogId: executionLogId
         });
       }
       
@@ -84,6 +134,13 @@ export async function executeBatchActions(base44, batch, context) {
       
     } catch (error) {
       console.error(`[BatchExecutor] ❌ ${action.action_type} failed:`, error.message);
+      
+      // Update ExecutionLog to 'failed'
+      await base44.asServiceRole.entities.ExecutionLog.update(executionLogId, {
+        status: 'failed',
+        error_message: error.message,
+        completed_at: new Date().toISOString()
+      });
       
       const isRevertible = REVERTIBLE_ACTIONS.includes(action.action_type);
       const isBestEffort = BEST_EFFORT_ACTIONS.includes(action.action_type);
@@ -145,32 +202,72 @@ function sortActionsByExecutionOrder(actions) {
 }
 
 /**
- * Check if action was already executed (idempotency)
- * Uses ExecutionLog entity with UNIQUE constraint on idempotency_key
+ * Try to reserve execution slot (Reserve-First Pattern)
+ * This is the idempotency check - the CREATE itself is the lock
+ * 
+ * @returns {Promise<{reserved: boolean, executionLogId?: string, existingStatus?: string, existingResultId?: string, existingError?: string}>}
  */
-async function checkIdempotency(base44, idempotencyKey) {
-  if (!idempotencyKey) return null;
-  
+async function tryReserveExecution(base44, action, batch, context = {}) {
   try {
-    const logs = await base44.asServiceRole.entities.ExecutionLog.filter({
-      idempotency_key: idempotencyKey
+    // Try to create ExecutionLog with status='pending'
+    // If UNIQUE constraint is violated, this will throw
+    const executionLog = await base44.asServiceRole.entities.ExecutionLog.create({
+      idempotency_key: action.idempotency_key,
+      batch_id: batch.id,
+      action_type: action.action_type,
+      status: 'pending',
+      executed_at: new Date().toISOString(),
+      executed_by: context.userEmail || 'system',
+      execution_context: {
+        via: context.executedBy || 'unknown',
+        mail_id: batch.mail_id || null,
+        case_id: batch.case_id || null,
+        client_id: batch.client_id || null
+      }
     });
     
-    if (logs && logs.length > 0) {
-      return logs[0].result_id || logs[0].id;
-    }
+    console.log(`[BatchExecutor] Reserved execution slot: ${action.idempotency_key} -> ${executionLog.id}`);
+    
+    return {
+      reserved: true,
+      executionLogId: executionLog.id
+    };
+    
   } catch (error) {
-    console.log('[BatchExecutor] Idempotency check failed:', error.message);
+    // UNIQUE constraint violation - record already exists
+    console.log(`[BatchExecutor] Reserve failed for ${action.idempotency_key}: ${error.message}`);
+    
+    // Fetch the existing record to check its status
+    try {
+      const existingLogs = await base44.asServiceRole.entities.ExecutionLog.filter({
+        idempotency_key: action.idempotency_key
+      });
+      
+      if (existingLogs && existingLogs.length > 0) {
+        const existing = existingLogs[0];
+        return {
+          reserved: false,
+          existingStatus: existing.status,
+          existingResultId: existing.result_id,
+          existingError: existing.error_message
+        };
+      }
+    } catch (fetchError) {
+      console.error(`[BatchExecutor] Failed to fetch existing ExecutionLog:`, fetchError.message);
+    }
+    
+    // If we can't fetch existing record, assume it's in progress
+    return {
+      reserved: false,
+      existingStatus: 'pending'
+    };
   }
-  
-  return null;
 }
 
 /**
- * Execute a single action
+ * Execute a single action (called only after successful reserve)
  */
 async function executeAction(base44, action, batch, context = {}) {
-  const idempotencyKey = action.idempotency_key;
   const config = action.config || {};
   
   switch (action.action_type) {
@@ -185,16 +282,11 @@ async function executeAction(base44, action, batch, context = {}) {
         priority: config.priority || 'medium',
         due_date: config.due_date || null,
         extracted_data: {
-          idempotency_key: idempotencyKey,
           approval_batch_id: batch.id
         }
       };
       
       const task = await base44.asServiceRole.entities.Task.create(taskData);
-      
-      // Log for idempotency tracking - MUST succeed or throw
-      await logExecution(base44, batch, action, task.id, context);
-      
       return { id: task.id, entity: 'Task' };
     }
     
@@ -210,10 +302,6 @@ async function executeAction(base44, action, batch, context = {}) {
       };
       
       const timeEntry = await base44.asServiceRole.entities.TimeEntry.create(timeEntryData);
-      
-      // Log for idempotency tracking - MUST succeed or throw
-      await logExecution(base44, batch, action, timeEntry.id, context);
-      
       return { id: timeEntry.id, entity: 'TimeEntry', amount: timeEntryData.hours * timeEntryData.rate };
     }
     
@@ -228,10 +316,6 @@ async function executeAction(base44, action, batch, context = {}) {
       };
       
       const deadline = await base44.asServiceRole.entities.Deadline.create(deadlineData);
-      
-      // Log for idempotency tracking - MUST succeed or throw
-      await logExecution(base44, batch, action, deadline.id, context);
-      
       return { id: deadline.id, entity: 'Deadline' };
     }
     
@@ -245,13 +329,11 @@ async function executeAction(base44, action, batch, context = {}) {
         status: 'active',
         metadata: {
           alert_type: config.alert_type || 'reminder',
-          idempotency_key: idempotencyKey,
           approval_batch_id: batch.id
         }
       };
       
       const activity = await base44.asServiceRole.entities.Activity.create(activityData);
-      
       return { id: activity.id, entity: 'Activity' };
     }
     
@@ -266,21 +348,14 @@ async function executeAction(base44, action, batch, context = {}) {
         throw new Error(emailResult.error);
       }
       
-      // Log for idempotency tracking - MUST succeed or throw
-      await logExecution(base44, batch, action, emailResult.messageId || 'sent', context);
-      
-      return { id: emailResult.messageId, entity: 'Email', sent_to: config.to };
+      return { id: emailResult.messageId || 'sent', entity: 'Email', sent_to: config.to };
     }
     
     case 'save_file': {
-      // Call Dropbox upload function
       const uploadResult = await base44.functions.invoke('downloadGmailAttachment', {
         mail_id: batch.mail_id,
         destination_path: config.path || config.dropbox_folder_path
       });
-      
-      // Log for idempotency tracking - MUST succeed or throw
-      await logExecution(base44, batch, action, 'uploaded', context);
       
       return { id: 'dropbox', entity: 'Dropbox', path: config.path };
     }
@@ -301,42 +376,12 @@ async function executeAction(base44, action, batch, context = {}) {
         throw new Error(eventResult.error);
       }
       
-      // Log for idempotency tracking - MUST succeed or throw
-      await logExecution(base44, batch, action, eventResult.google_event_id || 'created', context);
-      
-      return { id: eventResult.google_event_id, entity: 'CalendarEvent', link: eventResult.htmlLink };
+      return { id: eventResult.google_event_id || 'created', entity: 'CalendarEvent', link: eventResult.htmlLink };
     }
     
     default:
       throw new Error(`Unknown action type: ${action.action_type}`);
   }
-}
-
-/**
- * Log execution for idempotency tracking
- * CRITICAL: If this fails, we throw to prevent duplicate executions
- * Uses ExecutionLog entity with UNIQUE constraint on idempotency_key
- */
-async function logExecution(base44, batch, action, resultId, context = {}) {
-  // This MUST succeed - if it fails, we need to stop the action
-  // The UNIQUE constraint on idempotency_key prevents duplicates
-  await base44.asServiceRole.entities.ExecutionLog.create({
-    idempotency_key: action.idempotency_key,
-    batch_id: batch.id,
-    action_type: action.action_type,
-    result_id: String(resultId),
-    result_entity: getEntityForActionType(action.action_type),
-    executed_at: new Date().toISOString(),
-    executed_by: context.userEmail || 'system',
-    execution_context: {
-      via: context.executedBy || 'unknown',
-      mail_id: batch.mail_id || null,
-      case_id: batch.case_id || null,
-      client_id: batch.client_id || null
-    }
-  });
-  
-  console.log(`[BatchExecutor] Logged execution: ${action.idempotency_key} -> ${resultId}`);
 }
 
 /**
@@ -387,6 +432,16 @@ async function performRollback(base44, rollbackStack) {
           console.log(`[Rollback] ✅ Deleted Activity ${item.id}`);
           break;
       }
+      
+      // Update ExecutionLog to reflect rollback
+      if (item.executionLogId) {
+        await base44.asServiceRole.entities.ExecutionLog.update(item.executionLogId, {
+          status: 'failed',
+          error_message: 'Rolled back due to subsequent failure',
+          completed_at: new Date().toISOString()
+        });
+      }
+      
     } catch (error) {
       console.error(`[Rollback] ❌ Failed to rollback ${item.action_type} ${item.id}:`, error.message);
     }
