@@ -648,7 +648,8 @@ export default function Clients() {
                   onChange={(e) => setFormData({ ...formData, client_number: e.target.value })}
                   placeholder="CL-2024-001"
                   required
-                  className="dark:bg-slate-900 dark:border-slate-600"
+                  disabled={!!editingClient} // נועל את השדה אם אנחנו במצב עריכה
+                  className="dark:bg-slate-900 dark:border-slate-600 disabled:opacity-50 disabled:cursor-not-allowed"
                 />
               </div>
             </div>
