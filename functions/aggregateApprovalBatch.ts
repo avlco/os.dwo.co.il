@@ -8,7 +8,6 @@ const corsHeaders = {
 
 // ==========================================
 // INTERNAL HELPER: EMAIL TEMPLATE GENERATOR
-// (הוטמע כאן כדי למנוע בעיות תלות בקבצים חיצוניים)
 // ==========================================
 function renderApprovalEmail({ batch, approveUrl, editUrl, language = 'he', caseName, clientName }) {
   const isHebrew = language === 'he';
@@ -28,7 +27,6 @@ function renderApprovalEmail({ batch, approveUrl, editUrl, language = 'he', case
     let desc = action.action_type;
     let details = '';
     
-    // שליפת פרטים רלוונטיים להצגה במייל
     const config = action.config || {};
     
     switch(action.action_type) {
@@ -178,6 +176,14 @@ Deno.serve(async (req) => {
         let batch;
         const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 60 minutes
 
+        // 🔥 FIX 422: Prepare map_snapshot as Dictionary
+        let mapSnapshotDict = {};
+        if (Array.isArray(firstAction.map_snapshot)) {
+            mapSnapshotDict = { rules: firstAction.map_snapshot };
+        } else if (firstAction.map_snapshot && typeof firstAction.map_snapshot === 'object') {
+            mapSnapshotDict = firstAction.map_snapshot;
+        }
+
         if (existingBatches && existingBatches.length > 0) {
           // Update existing
           batch = existingBatches[0];
@@ -196,7 +202,6 @@ Deno.serve(async (req) => {
             expires_at: expiresAt.toISOString()
           });
           
-          // Refetch to get updated data for email
           batch = await base44.asServiceRole.entities.ApprovalBatch.get(batch.id);
         } else {
           // Create new
@@ -218,7 +223,7 @@ Deno.serve(async (req) => {
             approver_email: approverEmail,
             expires_at: expiresAt.toISOString(),
             catch_snapshot: firstAction.catch_snapshot || {},
-            map_snapshot: firstAction.map_snapshot || [],
+            map_snapshot: mapSnapshotDict, // ✅ FIXED: Now guaranteed to be an object
             extracted_info: extractedInfo || {},
             actions_original: actionsWithKeys,
             actions_current: JSON.parse(JSON.stringify(actionsWithKeys))
@@ -231,10 +236,9 @@ Deno.serve(async (req) => {
           const editUrl = `${appUrl}/ApprovalBatchEdit?batchId=${batch.id}`;
 
           let language = 'he';
-          // Simple language detection logic based on client/case could go here
-          
           let caseName = null;
           let clientName = null;
+          
           if (batch.case_id) {
              try {
                 const c = await base44.entities.Case.get(batch.case_id);
@@ -248,7 +252,6 @@ Deno.serve(async (req) => {
              } catch(e) {}
           }
 
-          // Use the INTERNAL helper function
           const emailHtml = renderApprovalEmail({
             batch: {
               id: batch.id,
@@ -281,12 +284,13 @@ Deno.serve(async (req) => {
 
       } catch (e) {
         console.error(`[AggregateApproval] ❌ Error processing approver ${approverEmail}:`, e);
+        // Important: Log error but continue to next approver
       }
     }
 
     return new Response(
       JSON.stringify({
-        success: true,
+        success: createdBatches.length > 0,
         batches_created: createdBatches.length,
         batches: createdBatches
       }),
