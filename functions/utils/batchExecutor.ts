@@ -146,24 +146,21 @@ function sortActionsByExecutionOrder(actions) {
 
 /**
  * Check if action was already executed (idempotency)
- * Uses ExecutionLog entity with UNIQUE constraint on idempotency_key
  */
 async function checkIdempotency(base44, idempotencyKey) {
   if (!idempotencyKey) return null;
   
   try {
-    // Check in ExecutionLog for already executed actions
-    const logs = await base44.asServiceRole.entities.ExecutionLog.filter({
-      idempotency_key: idempotencyKey
+    // Check in Activity log for executed actions
+    const activities = await base44.asServiceRole.entities.Activity.filter({
+      'metadata.idempotency_key': idempotencyKey
     });
     
-    if (logs && logs.length > 0) {
-      return logs[0].result_id || logs[0].id;
+    if (activities && activities.length > 0) {
+      return activities[0].id;
     }
   } catch (error) {
-    console.error('[BatchExecutor] Idempotency check failed:', error.message);
-    // Re-throw - if we can't check idempotency, we must fail
-    throw new Error(`Idempotency check failed: ${error.message}`);
+    console.log('[BatchExecutor] Idempotency check failed:', error.message);
   }
   
   return null;
@@ -195,8 +192,8 @@ async function executeAction(base44, action, batch, context) {
       
       const task = await base44.asServiceRole.entities.Task.create(taskData);
       
-      // Log for idempotency tracking - MUST succeed
-      await logExecution(base44, batch, action, task.id, { ...context, entity: 'Task' });
+      // Log for idempotency tracking
+      await logExecution(base44, batch, action, task.id);
       
       return { id: task.id, entity: 'Task' };
     }
@@ -214,8 +211,7 @@ async function executeAction(base44, action, batch, context) {
       
       const timeEntry = await base44.asServiceRole.entities.TimeEntry.create(timeEntryData);
       
-      // Log for idempotency tracking - MUST succeed
-      await logExecution(base44, batch, action, timeEntry.id, { ...context, entity: 'TimeEntry' });
+      await logExecution(base44, batch, action, timeEntry.id);
       
       return { id: timeEntry.id, entity: 'TimeEntry', amount: timeEntryData.hours * timeEntryData.rate };
     }
@@ -232,8 +228,7 @@ async function executeAction(base44, action, batch, context) {
       
       const deadline = await base44.asServiceRole.entities.Deadline.create(deadlineData);
       
-      // Log for idempotency tracking - MUST succeed
-      await logExecution(base44, batch, action, deadline.id, { ...context, entity: 'Deadline' });
+      await logExecution(base44, batch, action, deadline.id);
       
       return { id: deadline.id, entity: 'Deadline' };
     }
@@ -269,8 +264,7 @@ async function executeAction(base44, action, batch, context) {
         throw new Error(emailResult.error);
       }
       
-      // Log for idempotency tracking - MUST succeed
-      await logExecution(base44, batch, action, emailResult.messageId || 'sent', { ...context, entity: 'Email' });
+      await logExecution(base44, batch, action, emailResult.messageId || 'sent');
       
       return { id: emailResult.messageId, entity: 'Email', sent_to: config.to };
     }
@@ -282,8 +276,7 @@ async function executeAction(base44, action, batch, context) {
         destination_path: config.path || config.dropbox_folder_path
       });
       
-      // Log for idempotency tracking - MUST succeed
-      await logExecution(base44, batch, action, 'uploaded', { ...context, entity: 'Dropbox' });
+      await logExecution(base44, batch, action, 'uploaded');
       
       return { id: 'dropbox', entity: 'Dropbox', path: config.path };
     }
@@ -304,8 +297,7 @@ async function executeAction(base44, action, batch, context) {
         throw new Error(eventResult.error);
       }
       
-      // Log for idempotency tracking - MUST succeed
-      await logExecution(base44, batch, action, eventResult.google_event_id || 'created', { ...context, entity: 'CalendarEvent' });
+      await logExecution(base44, batch, action, eventResult.google_event_id || 'created');
       
       return { id: eventResult.google_event_id, entity: 'CalendarEvent', link: eventResult.htmlLink };
     }
@@ -317,26 +309,26 @@ async function executeAction(base44, action, batch, context) {
 
 /**
  * Log execution for idempotency tracking
- * CRITICAL: If this fails, the action must fail to prevent duplicate executions
  */
-async function logExecution(base44, batch, action, resultId, context = {}) {
-  // This MUST succeed - if it fails, we throw to prevent losing idempotency
-  await base44.asServiceRole.entities.ExecutionLog.create({
-    idempotency_key: action.idempotency_key,
-    batch_id: batch.id,
-    action_type: action.action_type,
-    result_id: String(resultId),
-    result_entity: context.entity || action.action_type,
-    executed_at: new Date().toISOString(),
-    executed_by: context.userEmail || 'system',
-    execution_context: {
-      via: context.executedBy || 'unknown',
+async function logExecution(base44, batch, action, resultId) {
+  try {
+    await base44.asServiceRole.entities.Activity.create({
+      activity_type: 'automation_log',
+      title: `Batch Action: ${action.action_type}`,
       case_id: batch.case_id || null,
-      client_id: batch.client_id || null
-    }
-  });
-  
-  console.log(`[BatchExecutor] ExecutionLog created for ${action.idempotency_key}`);
+      client_id: batch.client_id || null,
+      status: 'completed',
+      metadata: {
+        idempotency_key: action.idempotency_key,
+        approval_batch_id: batch.id,
+        action_type: action.action_type,
+        result_id: resultId,
+        executed_at: new Date().toISOString()
+      }
+    });
+  } catch (error) {
+    console.error('[BatchExecutor] Failed to log execution:', error.message);
+  }
 }
 
 /**
