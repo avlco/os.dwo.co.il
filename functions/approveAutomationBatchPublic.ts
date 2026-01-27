@@ -16,7 +16,7 @@
  */
 
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.6';
-import { verifyApprovalToken, hashNonce } from './utils/approvalToken.ts';
+import { verifyApprovalToken, hashNonce } from './utils/approvalToken.js';
 import { executeBatchActions } from './utils/batchExecutor.js';
 
 const corsHeaders = {
