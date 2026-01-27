@@ -49,15 +49,22 @@ export async function executeBatchActions(base44, batch, context) {
       continue;
     }
     
-    // Skip actions without idempotency key
+    // Fail actions without idempotency key - this is a critical error
     if (!action.idempotency_key) {
-      console.log(`[BatchExecutor] Skipping ${action.action_type} - no idempotency_key`);
+      const errorMessage = `Missing idempotency_key for action type: ${action.action_type}`;
+      console.error(`[BatchExecutor] ❌ ${action.action_type} failed: ${errorMessage}`);
       results.push({
         action_type: action.action_type,
-        status: 'skipped',
-        details: { reason: 'no_idempotency_key' }
+        status: 'failed',
+        error: errorMessage,
+        details: { reason: 'missing_idempotency_key' }
       });
-      continue;
+      
+      // Treat as revertible failure - rollback and stop
+      hasRevertibleFailure = true;
+      console.log(`[BatchExecutor] 🔄 Missing idempotency_key - initiating rollback`);
+      await performRollback(base44, rollbackStack);
+      break;
     }
     
     // RESERVE-FIRST: Try to create ExecutionLog with status='pending'
@@ -201,6 +208,9 @@ function sortActionsByExecutionOrder(actions) {
   });
 }
 
+// Stale pending TTL in minutes
+const STALE_PENDING_TTL_MINUTES = 10;
+
 /**
  * Try to reserve execution slot (Reserve-First Pattern)
  * This is the idempotency check - the CREATE itself is the lock
@@ -245,6 +255,31 @@ async function tryReserveExecution(base44, action, batch, context = {}) {
       
       if (existingLogs && existingLogs.length > 0) {
         const existing = existingLogs[0];
+        
+        // Handle stale pending - if pending for too long, mark as failed
+        if (existing.status === 'pending') {
+          const executedAt = new Date(existing.executed_at);
+          const now = new Date();
+          const ageMinutes = (now.getTime() - executedAt.getTime()) / (1000 * 60);
+          
+          if (ageMinutes > STALE_PENDING_TTL_MINUTES) {
+            console.warn(`[BatchExecutor] ⚠️ Stale pending execution found for ${action.idempotency_key} (age: ${ageMinutes.toFixed(1)} min). Marking as failed.`);
+            
+            // Update the stale record to failed
+            await base44.asServiceRole.entities.ExecutionLog.update(existing.id, {
+              status: 'failed',
+              error_message: `Stale pending execution (exceeded ${STALE_PENDING_TTL_MINUTES} min TTL)`,
+              completed_at: now.toISOString()
+            });
+            
+            return {
+              reserved: false,
+              existingStatus: 'failed',
+              existingError: `Stale pending execution (exceeded ${STALE_PENDING_TTL_MINUTES} min TTL)`
+            };
+          }
+        }
+        
         return {
           reserved: false,
           existingStatus: existing.status,
@@ -356,6 +391,10 @@ async function executeAction(base44, action, batch, context = {}) {
         mail_id: batch.mail_id,
         destination_path: config.path || config.dropbox_folder_path
       });
+      
+      if (uploadResult.error) {
+        throw new Error(uploadResult.error);
+      }
       
       return { id: 'dropbox', entity: 'Dropbox', path: config.path };
     }

@@ -27,7 +27,16 @@ import { executeBatchActions } from './utils/batchExecutor.js';
 function getAllowedOrigins() {
   const allowedOrigins = [];
   
-  const appBaseUrl = Deno.env.get('APP_BASE_URL');
+  // Support both new and old env var names for backward compatibility
+  let appBaseUrl = Deno.env.get('APP_BASE_URL');
+  if (!appBaseUrl) {
+    const oldAppBaseUrl = Deno.env.get('APPBASEURL');
+    if (oldAppBaseUrl) {
+      console.warn('[ApprovePublic] ⚠️ Using deprecated environment variable APPBASEURL. Please update to APP_BASE_URL.');
+      appBaseUrl = oldAppBaseUrl;
+    }
+  }
+  
   if (appBaseUrl) {
     // Add exact URL
     allowedOrigins.push(appBaseUrl);
@@ -107,14 +116,20 @@ Deno.serve(async (req) => {
 
     console.log('[ApprovePublic] Processing approval request');
 
-    // 1. Get HMAC secret
-    const secret = Deno.env.get('APPROVAL_HMAC_SECRET');
+    // 1. Get HMAC secret - support both new and old env var names for backward compatibility
+    let secret = Deno.env.get('APPROVAL_HMAC_SECRET');
     if (!secret) {
-      console.error('[ApprovePublic] APPROVAL_HMAC_SECRET not configured');
-      return Response.json(
-        { success: false, code: 'CONFIG_ERROR', message: 'Server configuration error' },
-        { status: 500, headers: corsHeaders }
-      );
+      const oldSecret = Deno.env.get('APPROVALHMACSECRET');
+      if (oldSecret) {
+        console.warn('[ApprovePublic] ⚠️ Using deprecated environment variable APPROVALHMACSECRET. Please update to APPROVAL_HMAC_SECRET.');
+        secret = oldSecret;
+      } else {
+        console.error('[ApprovePublic] APPROVAL_HMAC_SECRET not configured');
+        return Response.json(
+          { success: false, code: 'CONFIG_ERROR', message: 'Server configuration error' },
+          { status: 500, headers: corsHeaders }
+        );
+      }
     }
 
     // 2. Verify token signature and expiry
