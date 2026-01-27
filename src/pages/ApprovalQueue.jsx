@@ -92,20 +92,23 @@ export default function ApprovalQueue() {
 
   const isLoading = batchesLoading || legacyLoading;
 
-  // Fetch related data
+  // Fetch related data (only for legacy approvals)
   const { data: cases = [] } = useQuery({
     queryKey: ['cases'],
     queryFn: () => base44.entities.Case.list('-created_date', 500),
+    enabled: legacyApprovals.length > 0
   });
 
   const { data: clients = [] } = useQuery({
     queryKey: ['clients'],
     queryFn: () => base44.entities.Client.list('-created_date', 500),
+    enabled: legacyApprovals.length > 0
   });
 
   const { data: mails = [] } = useQuery({
     queryKey: ['mails'],
     queryFn: () => base44.entities.Mail.list('-created_date', 500),
+    enabled: legacyApprovals.length > 0
   });
 
   // Approve mutation
@@ -578,17 +581,24 @@ export default function ApprovalQueue() {
         </TabsContent>
       </Tabs>
 
-      {/* Details/Rejection Dialog */}
+      {/* Details/Rejection Dialog (for legacy approvals) */}
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
         <DialogContent className="max-w-2xl dark:bg-slate-800 dark:border-slate-700">
           <DialogHeader>
             <DialogTitle className="dark:text-slate-200">
-              {selectedApproval?.status === 'pending' ? 'דחיית בקשה' : 'פרטי בקשת אישור'}
+              {selectedApproval?.status === 'pending' ? 'דחיית בקשה (מערכת ישנה)' : 'פרטי בקשת אישור'}
             </DialogTitle>
           </DialogHeader>
           
           {selectedApproval && (
             <div className="space-y-4 mt-4">
+              <div className="bg-amber-50 dark:bg-amber-900/20 p-3 rounded-lg flex items-center gap-2 mb-4">
+                <AlertTriangle className="w-5 h-5 text-amber-600" />
+                <span className="text-amber-700 dark:text-amber-400 text-sm">
+                  זוהי בקשה מהמערכת הישנה. בקשות חדשות מנוהלות כחבילות אישור.
+                </span>
+              </div>
+
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <Label className="text-sm text-slate-600 dark:text-slate-400">סוג פעולה</Label>
