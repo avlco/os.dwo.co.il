@@ -146,18 +146,18 @@ function sortActionsByExecutionOrder(actions) {
 
 /**
  * Check if action was already executed (idempotency)
+ * Uses ExecutionLog entity with UNIQUE constraint on idempotency_key
  */
 async function checkIdempotency(base44, idempotencyKey) {
   if (!idempotencyKey) return null;
   
   try {
-    // Check in Activity log for executed actions
-    const activities = await base44.asServiceRole.entities.Activity.filter({
-      'metadata.idempotency_key': idempotencyKey
+    const logs = await base44.asServiceRole.entities.ExecutionLog.filter({
+      idempotency_key: idempotencyKey
     });
     
-    if (activities && activities.length > 0) {
-      return activities[0].id;
+    if (logs && logs.length > 0) {
+      return logs[0].result_id || logs[0].id;
     }
   } catch (error) {
     console.log('[BatchExecutor] Idempotency check failed:', error.message);
@@ -169,7 +169,7 @@ async function checkIdempotency(base44, idempotencyKey) {
 /**
  * Execute a single action
  */
-async function executeAction(base44, action, batch, context) {
+async function executeAction(base44, action, batch, context = {}) {
   const idempotencyKey = action.idempotency_key;
   const config = action.config || {};
   
@@ -192,8 +192,8 @@ async function executeAction(base44, action, batch, context) {
       
       const task = await base44.asServiceRole.entities.Task.create(taskData);
       
-      // Log for idempotency tracking
-      await logExecution(base44, batch, action, task.id);
+      // Log for idempotency tracking - MUST succeed or throw
+      await logExecution(base44, batch, action, task.id, context);
       
       return { id: task.id, entity: 'Task' };
     }
@@ -211,7 +211,8 @@ async function executeAction(base44, action, batch, context) {
       
       const timeEntry = await base44.asServiceRole.entities.TimeEntry.create(timeEntryData);
       
-      await logExecution(base44, batch, action, timeEntry.id);
+      // Log for idempotency tracking - MUST succeed or throw
+      await logExecution(base44, batch, action, timeEntry.id, context);
       
       return { id: timeEntry.id, entity: 'TimeEntry', amount: timeEntryData.hours * timeEntryData.rate };
     }
@@ -228,7 +229,8 @@ async function executeAction(base44, action, batch, context) {
       
       const deadline = await base44.asServiceRole.entities.Deadline.create(deadlineData);
       
-      await logExecution(base44, batch, action, deadline.id);
+      // Log for idempotency tracking - MUST succeed or throw
+      await logExecution(base44, batch, action, deadline.id, context);
       
       return { id: deadline.id, entity: 'Deadline' };
     }
@@ -264,7 +266,8 @@ async function executeAction(base44, action, batch, context) {
         throw new Error(emailResult.error);
       }
       
-      await logExecution(base44, batch, action, emailResult.messageId || 'sent');
+      // Log for idempotency tracking - MUST succeed or throw
+      await logExecution(base44, batch, action, emailResult.messageId || 'sent', context);
       
       return { id: emailResult.messageId, entity: 'Email', sent_to: config.to };
     }
@@ -276,7 +279,8 @@ async function executeAction(base44, action, batch, context) {
         destination_path: config.path || config.dropbox_folder_path
       });
       
-      await logExecution(base44, batch, action, 'uploaded');
+      // Log for idempotency tracking - MUST succeed or throw
+      await logExecution(base44, batch, action, 'uploaded', context);
       
       return { id: 'dropbox', entity: 'Dropbox', path: config.path };
     }
@@ -297,7 +301,8 @@ async function executeAction(base44, action, batch, context) {
         throw new Error(eventResult.error);
       }
       
-      await logExecution(base44, batch, action, eventResult.google_event_id || 'created');
+      // Log for idempotency tracking - MUST succeed or throw
+      await logExecution(base44, batch, action, eventResult.google_event_id || 'created', context);
       
       return { id: eventResult.google_event_id, entity: 'CalendarEvent', link: eventResult.htmlLink };
     }
@@ -309,26 +314,45 @@ async function executeAction(base44, action, batch, context) {
 
 /**
  * Log execution for idempotency tracking
+ * CRITICAL: If this fails, we throw to prevent duplicate executions
+ * Uses ExecutionLog entity with UNIQUE constraint on idempotency_key
  */
-async function logExecution(base44, batch, action, resultId) {
-  try {
-    await base44.asServiceRole.entities.Activity.create({
-      activity_type: 'automation_log',
-      title: `Batch Action: ${action.action_type}`,
+async function logExecution(base44, batch, action, resultId, context = {}) {
+  // This MUST succeed - if it fails, we need to stop the action
+  // The UNIQUE constraint on idempotency_key prevents duplicates
+  await base44.asServiceRole.entities.ExecutionLog.create({
+    idempotency_key: action.idempotency_key,
+    batch_id: batch.id,
+    action_type: action.action_type,
+    result_id: String(resultId),
+    result_entity: getEntityForActionType(action.action_type),
+    executed_at: new Date().toISOString(),
+    executed_by: context.userEmail || 'system',
+    execution_context: {
+      via: context.executedBy || 'unknown',
+      mail_id: batch.mail_id || null,
       case_id: batch.case_id || null,
-      client_id: batch.client_id || null,
-      status: 'completed',
-      metadata: {
-        idempotency_key: action.idempotency_key,
-        approval_batch_id: batch.id,
-        action_type: action.action_type,
-        result_id: resultId,
-        executed_at: new Date().toISOString()
-      }
-    });
-  } catch (error) {
-    console.error('[BatchExecutor] Failed to log execution:', error.message);
-  }
+      client_id: batch.client_id || null
+    }
+  });
+  
+  console.log(`[BatchExecutor] Logged execution: ${action.idempotency_key} -> ${resultId}`);
+}
+
+/**
+ * Get entity name for action type
+ */
+function getEntityForActionType(actionType) {
+  const mapping = {
+    'create_task': 'Task',
+    'billing': 'TimeEntry',
+    'create_deadline': 'Deadline',
+    'create_alert': 'Activity',
+    'send_email': 'Email',
+    'save_file': 'Dropbox',
+    'calendar_event': 'CalendarEvent'
+  };
+  return mapping[actionType] || 'Unknown';
 }
 
 /**
