@@ -516,36 +516,8 @@ async function createApprovalBatch(base44, data) {
   return batch;
 }
 
-// Legacy function - kept for backwards compatibility but now creates a batch
-async function createApprovalActivity(base44, data) {
-  console.log('[Approval] Legacy createApprovalActivity called - redirecting to batch system');
-  // This is kept for any legacy code paths, but we prefer the batch system
-  const expiresAt = new Date();
-  expiresAt.setDate(expiresAt.getDate() + 7);
-
-  const activity = await base44.entities.Activity.create({
-    activity_type: 'approval_request',
-    title: `אישור: ${data.action_type} - ${data.mail_subject || 'ללא נושא'}`,
-    case_id: data.case_id || null,
-    client_id: data.client_id || null,
-    status: 'pending',
-    description: `בקשת אישור: ${data.action_type}`,
-    metadata: {
-      automation_rule_id: data.automation_rule_id,
-      mail_id: data.mail_id,
-      action_type: data.action_type,
-      action_config: data.action_config,
-      approver_email: data.approver_email,
-      mail_subject: data.mail_subject,
-      mail_from: data.mail_from,
-      expires_at: expiresAt.toISOString(),
-      legacy_approval: true // Mark as legacy
-    }
-  });
-
-  console.log(`[Approval] Created LEGACY approval request: ${activity.id}`);
-  return activity;
-}
+// Legacy createApprovalActivity function has been removed
+// All approvals now go through the ApprovalBatch system
 
 // ========================================
 // MAIN HANDLER
@@ -700,11 +672,28 @@ Deno.serve(async (req) => {
       }
     }
 
-    // --- DISPATCH: Execute Actions (immediate execution when no approval required) ---
+    // --- DISPATCH: Execute Actions (ONLY when no approval required or in test mode) ---
+    // If approval is required and we're not in test mode, we should have already returned above
+    // This section only runs for immediate execution scenarios
+    if (rule.require_approval && !testMode) {
+      // This should never happen - we should have returned after creating ApprovalBatch
+      console.error('[AutoRule] ❌ Logic error: reached DISPATCH phase with require_approval=true');
+      return new Response(
+        JSON.stringify({
+          success: false,
+          error: 'Internal logic error: DISPATCH phase reached with approval required'
+        }),
+        { 
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          status: 500
+        }
+      );
+    }
+
     const results = [];
     const actions = rule.action_bundle || {};
 
-    console.log('[AutoRule] 🎬 Starting DISPATCH phase (immediate execution)...');
+    console.log('[AutoRule] 🎬 Starting DISPATCH phase (immediate execution - no approval required)...');
 
     // ✅ Action 1: Send Email
     if (actions.send_email?.enabled) {
@@ -754,22 +743,6 @@ Deno.serve(async (req) => {
         if (testMode) {
           results.push({ action: 'send_email', status: 'test_skipped', data: emailConfig });
           console.log('[Action] ⏭️ Skipped (test mode)');
-        } else if (rule.require_approval) {
-          const approvalActivity = await createApprovalActivity(base44, { 
-            ...emailConfig, 
-            automation_rule_id: ruleId, 
-            mail_id: mailId, 
-            case_id: caseId, 
-            client_id: clientId, 
-            action_type: 'send_email', 
-            action_config: emailConfig, 
-            approver_email: rule.approver_email, 
-            mail_subject: mail.subject, 
-            mail_from: mail.sender_email 
-          });
-          rollbackManager.register({ type: 'approval', id: approvalActivity.id });
-          results.push({ action: 'send_email', status: 'pending_approval', approval_id: approvalActivity.id });
-          console.log('[Action] ⏸️ Pending approval');
         } else {
           const emailResult = await base44.functions.invoke('sendEmail', {
             to: emailConfig.to,
@@ -809,21 +782,6 @@ Deno.serve(async (req) => {
       if (testMode) {
         results.push({ action: 'create_task', status: 'test_skipped', data: taskData });
         console.log('[Action] ⏭️ Skipped (test mode)');
-      } else if (rule.require_approval) {
-        const approvalActivity = await createApprovalActivity(base44, { 
-          automation_rule_id: ruleId, 
-          mail_id: mailId, 
-          case_id: caseId, 
-          client_id: clientId, 
-          action_type: 'create_task', 
-          action_config: taskData, 
-          approver_email: rule.approver_email, 
-          mail_subject: mail.subject, 
-          mail_from: mail.sender_email 
-        });
-        rollbackManager.register({ type: 'approval', id: approvalActivity.id });
-        results.push({ action: 'create_task', status: 'pending_approval', approval_id: approvalActivity.id });
-        console.log('[Action] ⏸️ Pending approval');
       } else {
         const task = await base44.entities.Task.create(taskData);
         rollbackManager.register({ type: 'create_task', id: task.id });
@@ -872,21 +830,6 @@ Deno.serve(async (req) => {
       if (testMode) {
         results.push({ action: 'billing', status: 'test_skipped', data: billingData });
         console.log('[Action] ⏭️ Skipped (test mode)');
-      } else if (rule.require_approval) {
-        const approvalActivity = await createApprovalActivity(base44, { 
-          automation_rule_id: ruleId, 
-          mail_id: mailId, 
-          case_id: caseId, 
-          client_id: clientId, 
-          action_type: 'billing', 
-          action_config: billingData, 
-          approver_email: rule.approver_email, 
-          mail_subject: mail.subject, 
-          mail_from: mail.sender_email 
-        });
-        rollbackManager.register({ type: 'approval', id: approvalActivity.id });
-        results.push({ action: 'billing', status: 'pending_approval', approval_id: approvalActivity.id });
-        console.log('[Action] ⏸️ Pending approval');
       } else {
         const timeEntry = await base44.entities.TimeEntry.create(billingData);
 
@@ -983,21 +926,6 @@ Deno.serve(async (req) => {
       if (testMode) {
         results.push({ action: 'calendar_event', status: 'test_skipped', data: eventData });
         console.log('[Action] ⏭️ Skipped (test mode)');
-      } else if (rule.require_approval) {
-        const approvalActivity = await createApprovalActivity(base44, { 
-          automation_rule_id: ruleId, 
-          mail_id: mailId, 
-          case_id: caseId, 
-          client_id: clientId, 
-          action_type: 'calendar_event', 
-          action_config: eventData, 
-          approver_email: rule.approver_email, 
-          mail_subject: mail.subject, 
-          mail_from: mail.sender_email 
-        });
-        rollbackManager.register({ type: 'approval', id: approvalActivity.id });
-        results.push({ action: 'calendar_event', status: 'pending_approval', approval_id: approvalActivity.id });
-        console.log('[Action] ⏸️ Pending approval');
       } else {
         try {
           const calendarResult = await base44.functions.invoke('createCalendarEvent', eventData);
