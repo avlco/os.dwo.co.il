@@ -12,6 +12,8 @@ import {
   Search,
   Edit,
   Trash2,
+  Archive,
+  RefreshCcw,
   MoreHorizontal,
   Mail,
   Phone,
@@ -186,16 +188,15 @@ export default function Clients() {
     },
   });
 
+  // לוגיקת ארכיון/שחזור מעודכנת
   const deleteMutation = useMutation({
     mutationFn: async (id) => {
-      // Check if client has active cases
       const clientCases = cases.filter(c => c.client_id === id);
 
       if (clientCases.length > 0) {
-        // Show warning with case count
         const confirmed = window.confirm(
           `ללקוח זה יש ${clientCases.length} תיקים פעילים.\n\n` +
-          `סימון הלקוח כלא פעיל יסתיר אותו מהרשימות אך ישמור את התיקים.\n\n` +
+          `העברת הלקוח לארכיון תסתיר אותו מהרשימות השוטפות.\n\n` +
           `האם להמשיך?`
         );
 
@@ -204,20 +205,18 @@ export default function Clients() {
         }
       }
 
-      // Soft delete: set is_active to false
       return base44.entities.Client.update(id, { is_active: false });
     },
     onSuccess: () => {
       queryClient.invalidateQueries(['clients']);
       toast({
-        title: "הלקוח סומן כלא פעיל",
-        description: "הלקוח הוסתר מהרשימות אך הנתונים נשמרו",
+        title: "הלקוח הועבר לארכיון",
+        description: "ניתן לצפות בלקוח על ידי לחיצה על 'הצג ארכיון'",
       });
     },
     onError: (error) => {
-      // Don't show error if user cancelled
       if (error.message !== 'USER_CANCELLED') {
-        console.error('Failed to delete client:', error);
+        console.error('Failed to archive client:', error);
         toast({
           variant: "destructive",
           title: "שגיאה בעדכון סטטוס",
@@ -253,17 +252,14 @@ export default function Clients() {
   const validateClientForm = (data) => {
     const errors = [];
 
-    // Required fields
     if (!data.name || data.name.trim() === '') {
       errors.push('שם הלקוח הוא שדה חובה');
     }
 
-    // Client number is required
     if (!data.client_number || data.client_number.trim() === '') {
       errors.push('מספר לקוח הוא שדה חובה');
     }
 
-    // At least one contact method required (email or phone)
     const hasEmail = data.email && data.email.trim() !== '';
     const hasPhone = data.phone && data.phone.trim() !== '';
 
@@ -271,7 +267,6 @@ export default function Clients() {
       errors.push('חובה למלא לפחות אמצעי תקשורת אחד: אימייל או טלפון');
     }
 
-    // Email validation (if provided)
     if (hasEmail) {
       const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
       if (!emailRegex.test(data.email)) {
@@ -279,7 +274,6 @@ export default function Clients() {
       }
     }
 
-    // Phone validation (basic - if provided)
     if (hasPhone) {
       const phoneRegex = /^[\d\s\-\+\(\)]+$/;
       if (!phoneRegex.test(data.phone)) {
@@ -287,7 +281,6 @@ export default function Clients() {
       }
     }
 
-    // Hourly rate must be positive
     if (data.hourly_rate && parseFloat(data.hourly_rate) < 0) {
       errors.push('תעריף שעתי חייב להיות מספר חיובי');
     }
@@ -327,7 +320,6 @@ export default function Clients() {
   const handleSubmit = (e) => {
     e.preventDefault();
 
-    // Validate form
     const validationErrors = validateClientForm(formData);
 
     if (validationErrors.length > 0) {
@@ -339,7 +331,6 @@ export default function Clients() {
       return;
     }
 
-    // Check uniqueness of client_number (only when creating or changing number)
     if (formData.client_number && formData.client_number.trim() !== '') {
       const isDuplicate = clients.some(c =>
         c.client_number === formData.client_number &&
@@ -379,7 +370,7 @@ export default function Clients() {
       c.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       c.client_number?.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesType = filterType === 'all' || c.type === filterType;
-    const isActive = showArchived || c.is_active !== false;
+    const isActive = showArchived ? true : (c.is_active !== false); // שינוי קטן: אם מציגים ארכיון, מציגים הכל (גם פעיל וגם לא)
     return matchesSearch && matchesType && isActive;
   });
 
@@ -506,6 +497,8 @@ export default function Clients() {
       header: '',
       cell: ({ row }) => {
         const r = row.original;
+        const isActive = r.is_active !== false;
+        
         return (
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
@@ -534,16 +527,31 @@ export default function Clients() {
                 <Edit className="w-4 h-4" />
                 {t('clients.edit')}
               </DropdownMenuItem>
-              <DropdownMenuItem
-                onClick={(e) => {
-                  e.stopPropagation();
-                  deleteMutation.mutate(r.id);
-                }}
-                className="flex items-center gap-2 text-rose-600 dark:text-rose-400 dark:hover:bg-slate-700"
-              >
-                <Trash2 className="w-4 h-4" />
-                {t('clients.delete')}
-              </DropdownMenuItem>
+              
+              {/* כפתור ארכיון / שחזור דינמי */}
+              {isActive ? (
+                <DropdownMenuItem
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    deleteMutation.mutate(r.id);
+                  }}
+                  className="flex items-center gap-2 text-amber-600 dark:text-amber-400 dark:hover:bg-slate-700"
+                >
+                  <Archive className="w-4 h-4" />
+                  ארכיון
+                </DropdownMenuItem>
+              ) : (
+                <DropdownMenuItem
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    updateMutation.mutate({ id: r.id, data: { is_active: true } });
+                  }}
+                  className="flex items-center gap-2 text-green-600 dark:text-green-400 dark:hover:bg-slate-700"
+                >
+                  <RefreshCcw className="w-4 h-4" />
+                  שחזור
+                </DropdownMenuItem>
+              )}
             </DropdownMenuContent>
           </DropdownMenu>
         );
