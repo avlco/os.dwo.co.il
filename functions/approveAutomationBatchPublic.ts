@@ -19,11 +19,21 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.6';
 import { verifyApprovalToken, hashNonce } from './utils/approvalToken.js';
 import { executeBatchActions } from './utils/batchExecutor.js';
 
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'content-type, authorization',
-  'Access-Control-Allow-Methods': 'POST, OPTIONS',
-};
+// CORS: Restrict to app domain only
+function getCorsHeaders() {
+  const appBaseUrl = Deno.env.get('APP_BASE_URL') || 'https://app.base44.com';
+  // Extract origin from APP_BASE_URL (remove trailing slash if present)
+  const allowedOrigin = appBaseUrl.replace(/\/$/, '');
+  
+  return {
+    'Access-Control-Allow-Origin': allowedOrigin,
+    'Access-Control-Allow-Headers': 'content-type, authorization',
+    'Access-Control-Allow-Methods': 'POST, OPTIONS',
+    'Access-Control-Allow-Credentials': 'true',
+  };
+}
+
+const corsHeaders = getCorsHeaders();
 
 Deno.serve(async (req) => {
   // Handle CORS preflight
