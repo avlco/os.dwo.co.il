@@ -689,14 +689,15 @@ Deno.serve(async (req) => {
       }
     }
 
-    // 🔥 תיקון קריטי: אוטומציה ברקע - לא חוסמת את הסנכרון!
+    // ========================================
+    // 🔥 NEW AUTOMATION ORCHESTRATOR
+    // ========================================
     console.log(`[Automation] 🚀 Starting async automation for ${savedMails.length} new mails`);
     
-    // הפעל אוטומציה ברקע
+    // Non-blocking automation execution
     setTimeout(async () => {
       let totalRulesExecuted = 0;
-      let totalRulesSuccess = 0;
-      let totalRulesFailed = 0;
+      let totalBatchesCreated = 0;
 
       for (const mail of savedMails) {
         try {
@@ -709,68 +710,71 @@ Deno.serve(async (req) => {
             continue;
           }
           
-          console.log(`[Automation] 🎯 Found ${matchingRules.length} matching rule(s) for mail ${mail.id}`);
+          // Buffer for collecting actions that require approval (for batching)
+          const mailActionsBuffer = [];
+          // Buffer for extracted info (merge all info extracted by different rules)
+          const aggregatedExtractedInfo = {};
           
-          // Collect all actions requiring approval
-          const allActionsToApprove = [];
-
           for (const rule of matchingRules) {
             try {
               console.log(`[Automation] ▶️ Executing rule "${rule.name}" (ID: ${rule.id}) on mail ${mail.id}`);
-
+              
+              // Call execution function
               const automationResult = await base44.functions.invoke('executeAutomationRule', {
                 mailId: mail.id,
                 ruleId: rule.id,
                 testMode: false
               });
-
+              
               totalRulesExecuted++;
-
+              
+              // Handle results
               if (automationResult.error) {
-                  console.error(`[Automation] ❌ Rule "${rule.name}" failed:`, automationResult.error);
-                  totalRulesFailed++;
-                } else {
-                  const responseData = automationResult.data || automationResult;
-                  console.log(`[Automation] Result from rule "${rule.name}": status=${responseData.status}, actions_count=${responseData.actions_count}`);
-                  // Check if actions are ready for approval (new aggregation flow)
-                  if (responseData.status === 'actions_ready_for_approval') {
-                    console.log(`[Automation] 📦 Rule "${rule.name}" returned ${responseData.actions_count} action(s) for approval`);
-                    allActionsToApprove.push(...(responseData.actions || []));
-                  } else if (responseData.status === 'no_actions_for_approval') {
-                    console.log(`[Automation] ℹ️ Rule "${rule.name}" required approval but generated no actions`);
-                  } else {
-                    console.log(`[Automation] ✅ Rule "${rule.name}" executed successfully (immediate dispatch)`);
-                    totalRulesSuccess++;
-                  }
+                console.error(`[Automation] ❌ Rule "${rule.name}" failed:`, automationResult.error);
+                continue;
+              }
+              
+              // Collect extraction info
+              if (automationResult.extracted_info) {
+                Object.assign(aggregatedExtractedInfo, automationResult.extracted_info);
+              }
+              // Prefer last non-null case/client ID
+              if (automationResult.case_id) aggregatedExtractedInfo.case_id = automationResult.case_id;
+              if (automationResult.client_id) aggregatedExtractedInfo.client_id = automationResult.client_id;
+              
+              // Check for actions needing approval
+              if (automationResult.results && Array.isArray(automationResult.results)) {
+                const pendingActions = automationResult.results.filter(r => r.status === 'pending_batch');
+                if (pendingActions.length > 0) {
+                  console.log(`[Automation] 📥 Collected ${pendingActions.length} pending actions from rule "${rule.name}"`);
+                  mailActionsBuffer.push(...pendingActions);
                 }
-
+              }
+              
             } catch (ruleError) {
               console.error(`[Automation] ❌ Exception executing rule "${rule.name}":`, ruleError);
-              totalRulesFailed++;
             }
-          }
-
-          // If there are actions to approve, aggregate them and send unified approval emails
-          if (allActionsToApprove.length > 0) {
+          } // End of rules loop
+          
+          // If we have pending actions for this mail, create a BATCH
+          if (mailActionsBuffer.length > 0) {
+            console.log(`[Automation] 📦 Creating approval batch with ${mailActionsBuffer.length} actions for mail ${mail.id}`);
+            
             try {
-              console.log(`[Automation] 🔄 Aggregating ${allActionsToApprove.length} action(s) for approval for mail ID: ${mail.id}`);
-              console.log(`[Automation] Actions to approve: ${JSON.stringify(allActionsToApprove.map(a => ({type: a.action_type, rule: a.rule_name, approver: a.approver_email})), null, 2)}`);
-
-              const aggregationResult = await base44.functions.invoke('aggregateApprovalBatch', {
+              const batchResult = await base44.functions.invoke('aggregateApprovalBatch', {
                 mailId: mail.id,
-                actionsToApprove: allActionsToApprove,
-                extractedInfo: {
-                  case_id: mail.inferred_case_id,
-                  client_id: mail.inferred_client_id
-                }
+                actionsToApprove: mailActionsBuffer,
+                extractedInfo: aggregatedExtractedInfo
               });
-
-              if (aggregationResult.data?.success) {
-                console.log(`[Automation] ✅ Created ${aggregationResult.data.batches_created} aggregated approval batch(es)`);
-                totalRulesSuccess += aggregationResult.data.batches_created;
+              
+              if (batchResult.success) {
+                totalBatchesCreated++;
+                console.log(`[Automation] ✅ Batch created successfully for mail ${mail.id}`);
+              } else {
+                console.error(`[Automation] ❌ Batch creation failed:`, batchResult);
               }
-            } catch (aggregationError) {
-              console.error(`[Automation] ❌ Failed to aggregate approvals:`, aggregationError);
+            } catch (batchError) {
+              console.error(`[Automation] ❌ Exception calling aggregateApprovalBatch:`, batchError);
             }
           }
           
@@ -779,8 +783,8 @@ Deno.serve(async (req) => {
         }
       }
 
-      console.log(`[Automation] 📊 Summary: Executed: ${totalRulesExecuted}, Success: ${totalRulesSuccess}, Failed: ${totalRulesFailed}`);
-    }, 0); // רץ מיד אבל לא חוסם!
+      console.log(`[Automation] 📊 Summary: Executed Rules: ${totalRulesExecuted}, Batches Created: ${totalBatchesCreated}`);
+    }, 0); // End of async automation
 
     const syncMode = gmailSync?.sync_mode || 'unknown';
     console.log(`[Sync] ✅ COMPLETE - Saved ${savedMails.length} new mail(s) | Mode: ${syncMode}`);
