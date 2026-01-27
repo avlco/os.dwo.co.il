@@ -1,6 +1,6 @@
 // @ts-nocheck
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.6';
-import { signApprovalToken, createTokenPayload, generateNonce } from './utils/approvalToken.js';
+import { signApprovalToken, createTokenPayload, generateNonce } from './utils/approvalToken.ts';
 import { renderApprovalEmail } from './utils/approvalEmailTemplates.js';
 
 const corsHeaders = {
