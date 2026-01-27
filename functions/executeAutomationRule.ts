@@ -660,7 +660,7 @@ Deno.serve(async (req) => {
       console.log('[AutoRule] 📋 Rule requires approval - creating ApprovalBatch');
       
       // Build actions array from action_bundle
-      const actionsToApprove = buildActionsArray(rule.action_bundle || {}, {
+      const actionsToApprove = await buildActionsArray(rule.action_bundle || {}, {
         mail, caseId, clientId, mailId, base44, userEmail
       });
       
