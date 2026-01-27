@@ -214,6 +214,7 @@ export default function ApprovalQueue() {
   };
 
   const getActionTypeLabel = (type) => {
+    if (!type) return '-';
     const labels = {
       send_email: 'שליחת מייל',
       create_task: 'יצירת משימה',
@@ -617,25 +618,37 @@ export default function ApprovalQueue() {
                 <div>
                   <Label className="text-sm text-slate-600 dark:text-slate-400">לקוח</Label>
                   <p className="dark:text-slate-200">
-                    {getClientName(selectedApproval.metadata?.client_id)}
+                    {getClientName(selectedApproval.client_id || selectedApproval.metadata?.client_id)}
                   </p>
                 </div>
               </div>
 
               <div>
                 <Label className="text-sm text-slate-600 dark:text-slate-400">מייל מקורי</Label>
-                <p className="dark:text-slate-200">{selectedApproval.metadata?.mail_subject}</p>
+                <p className="dark:text-slate-200">{selectedApproval.metadata?.mail_subject || '-'}</p>
                 <p className="text-sm text-slate-500">
-                  מאת: {selectedApproval.metadata?.mail_from}
+                  מאת: {selectedApproval.metadata?.mail_from || '-'}
                 </p>
               </div>
 
               <div>
-                <Label className="text-sm text-slate-600 dark:text-slate-400">פרטי הפעולה</Label>
-                <pre className="mt-2 p-3 bg-slate-50 dark:bg-slate-900 rounded text-xs overflow-auto max-h-40 dark:text-slate-300">
-                  {JSON.stringify(selectedApproval.metadata?.action_config, null, 2)}
-                </pre>
+                <Label className="text-sm text-slate-600 dark:text-slate-400">תאריך יצירה</Label>
+                <p className="dark:text-slate-200">
+                  {selectedApproval.created_date 
+                    ? format(new Date(selectedApproval.created_date), 'dd/MM/yyyy HH:mm')
+                    : '-'
+                  }
+                </p>
               </div>
+
+              {selectedApproval.metadata?.action_config && (
+                <div>
+                  <Label className="text-sm text-slate-600 dark:text-slate-400">פרטי הפעולה</Label>
+                  <pre className="mt-2 p-3 bg-slate-50 dark:bg-slate-900 rounded text-xs overflow-auto max-h-40 dark:text-slate-300">
+                    {JSON.stringify(selectedApproval.metadata.action_config, null, 2)}
+                  </pre>
+                </div>
+              )}
 
               {selectedApproval.status === 'pending' && (
                 <div>
