@@ -176,18 +176,22 @@ Deno.serve(async (req) => {
           status: 'executing'
         });
 
+        // Re-fetch batch to get latest actions_current after any updates
+        const freshBatch = await base44.asServiceRole.entities.ApprovalBatch.get(batch_id);
+        
         // Execute actions
         let executionSummary;
         let finalStatus = 'executed';
         
         try {
-          executionSummary = await executeBatchActions(base44, batch, {
+          executionSummary = await executeBatchActions(base44, freshBatch, {
             executedBy: 'ui',
             userEmail: user.email
           });
           
+          // If any action failed, status is failed (regardless of rollback)
           if (executionSummary.failed > 0) {
-            finalStatus = executionSummary.rollback_performed ? 'failed' : 'executed';
+            finalStatus = 'failed';
           }
         } catch (execError) {
           console.error('[HandleBatch] Execution error:', execError);

@@ -16,7 +16,7 @@
  */
 
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.6';
-import { verifyApprovalToken, hashNonce } from './utils/approvalToken.js';
+import { verifyApprovalToken, hashNonce } from './utils/approvalToken.ts';
 import { executeBatchActions } from './utils/batchExecutor.js';
 
 const corsHeaders = {
@@ -183,19 +183,22 @@ Deno.serve(async (req) => {
       status: 'executing'
     });
 
-    // 10. Execute actions
+    // 10. Re-fetch batch to get latest actions_current
+    const freshBatch = await base44.asServiceRole.entities.ApprovalBatch.get(batch.id);
+    
+    // 11. Execute actions
     let executionSummary;
     let finalStatus = 'executed';
     
     try {
-      executionSummary = await executeBatchActions(base44, batch, {
+      executionSummary = await executeBatchActions(base44, freshBatch, {
         executedBy: 'email_link',
         userEmail: payload.approver_email
       });
       
-      // Check if there were failures
+      // If any action failed, status is failed (regardless of rollback)
       if (executionSummary.failed > 0) {
-        finalStatus = executionSummary.rollback_performed ? 'failed' : 'executed';
+        finalStatus = 'failed';
       }
     } catch (execError) {
       console.error('[ApprovePublic] Execution error:', execError);
@@ -211,7 +214,7 @@ Deno.serve(async (req) => {
       };
     }
 
-    // 11. Update batch with final status
+    // 12. Update batch with final status
     await base44.asServiceRole.entities.ApprovalBatch.update(batch.id, {
       status: finalStatus,
       execution_summary: executionSummary,
