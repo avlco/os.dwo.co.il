@@ -542,11 +542,57 @@ Deno.serve(async (req) => {
     console.log(`[MAP] Extracted info:`, extractedInfo);
     console.log(`[MAP] Case ID: ${caseId || 'N/A'}, Client ID: ${clientId || 'N/A'}`);
 
-    // --- DISPATCH: Execute Actions ---
+    // --- APPROVAL BATCH CHECK ---
+    // If rule requires approval, create a batch and send approval email instead of executing
+    if (rule.require_approval && !testMode) {
+      console.log('[AutoRule] 📋 Rule requires approval - creating ApprovalBatch');
+      
+      // Build actions array from action_bundle
+      const actionsToApprove = buildActionsArray(rule.action_bundle || {}, {
+        mail, caseId, clientId, mailId, base44, userEmail
+      });
+      
+      if (actionsToApprove.length > 0) {
+        try {
+          const batch = await createApprovalBatch(base44, {
+            rule,
+            mail,
+            caseId,
+            clientId,
+            actions: actionsToApprove,
+            extractedInfo,
+            userEmail
+          });
+          
+          console.log(`[AutoRule] ✅ ApprovalBatch created: ${batch.id}`);
+          
+          return new Response(
+            JSON.stringify({
+              success: true,
+              status: 'pending_approval',
+              batch_id: batch.id,
+              message: 'Approval batch created and email sent',
+              actions_count: actionsToApprove.length
+            }),
+            { 
+              headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+              status: 200
+            }
+          );
+        } catch (batchError) {
+          console.error('[AutoRule] ❌ Failed to create ApprovalBatch:', batchError);
+          throw batchError;
+        }
+      } else {
+        console.log('[AutoRule] ⏭️ No actions to approve');
+      }
+    }
+
+    // --- DISPATCH: Execute Actions (immediate execution when no approval required) ---
     const results = [];
     const actions = rule.action_bundle || {};
 
-    console.log('[AutoRule] 🎬 Starting DISPATCH phase...');
+    console.log('[AutoRule] 🎬 Starting DISPATCH phase (immediate execution)...');
 
     // ✅ Action 1: Send Email
     if (actions.send_email?.enabled) {
