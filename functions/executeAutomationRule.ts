@@ -680,10 +680,22 @@ Deno.serve(async (req) => {
             status: 200
           }
         );
-      }
-      }
+        }
+        }
 
-      // --- DISPATCH: Execute Actions (ONLY when NO approval is required OR in test mode) ---
+        return new Response(
+        JSON.stringify({
+          success: true,
+          status: 'awaiting_approval',
+          message: 'Batch created - awaiting approval'
+        }),
+        { 
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          status: 200
+        }
+        );
+
+        // --- DISPATCH: Execute Actions (ONLY when NO approval is required OR in test mode) ---
 
     const results = [];
     const actions = rule.action_bundle || {};
