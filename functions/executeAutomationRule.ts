@@ -1,5 +1,7 @@
 // @ts-nocheck
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.6';
+import { signApprovalToken, createTokenPayload, generateNonce } from './utils/approvalToken.js';
+import { renderApprovalEmail } from './utils/approvalEmailTemplates.js';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -277,7 +279,135 @@ function calculateDueDate(offsetDays) {
   return date.toISOString().split('T')[0];
 }
 
+/**
+ * Create an ApprovalBatch for the entire action bundle
+ * This replaces the old per-action Activity-based approval system
+ */
+async function createApprovalBatch(base44, data) {
+  const { rule, mail, caseId, clientId, actions, extractedInfo, userEmail } = data;
+  
+  const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 60 minutes for quick approval
+  
+  // Build actions array with idempotency keys
+  const actionsWithKeys = actions.map((action, index) => ({
+    ...action,
+    idempotency_key: `${Date.now()}_${index}_${action.action_type}`
+  }));
+
+  // Create the batch
+  const batch = await base44.asServiceRole.entities.ApprovalBatch.create({
+    status: 'pending',
+    automation_rule_id: rule.id,
+    automation_rule_name: rule.name,
+    mail_id: mail.id,
+    mail_subject: mail.subject,
+    mail_from: mail.sender_email,
+    case_id: caseId || null,
+    client_id: clientId || null,
+    approver_email: rule.approver_email,
+    expires_at: expiresAt.toISOString(),
+    catch_snapshot: rule.catch_config || {},
+    map_snapshot: rule.map_config || [],
+    extracted_info: extractedInfo || {},
+    actions_original: actionsWithKeys,
+    actions_current: JSON.parse(JSON.stringify(actionsWithKeys)) // deep copy
+  });
+
+  console.log(`[ApprovalBatch] ✅ Created batch: ${batch.id} with ${actionsWithKeys.length} actions`);
+
+  // Generate signed token for quick approval
+  const secret = Deno.env.get('APPROVAL_HMAC_SECRET');
+  if (!secret) {
+    console.error('[ApprovalBatch] ⚠️ APPROVAL_HMAC_SECRET not set, cannot generate quick approval link');
+  }
+
+  let approveUrl = null;
+  let editUrl = null;
+  const appUrl = Deno.env.get('APP_BASE_URL') || 'https://app.base44.com';
+
+  if (secret) {
+    const tokenPayload = createTokenPayload({
+      batchId: batch.id,
+      approverEmail: rule.approver_email,
+      expiresInMinutes: 60
+    });
+    
+    const token = await signApprovalToken(tokenPayload, secret);
+    approveUrl = `${appUrl}/ApproveBatch?token=${encodeURIComponent(token)}`;
+  }
+  
+  editUrl = `${appUrl}/ApprovalBatchEdit?batchId=${batch.id}`;
+
+  // Detect language for email
+  let language = 'he';
+  if (clientId) {
+    try {
+      const client = await base44.entities.Client.get(clientId);
+      if (client?.communication_language === 'en') {
+        language = 'en';
+      }
+    } catch (e) { /* ignore */ }
+  }
+
+  // Get case and client names for email
+  let caseName = null;
+  let clientName = null;
+  
+  if (caseId) {
+    try {
+      const caseData = await base44.entities.Case.get(caseId);
+      caseName = caseData?.case_number || caseData?.title;
+    } catch (e) { /* ignore */ }
+  }
+  
+  if (clientId) {
+    try {
+      const client = await base44.entities.Client.get(clientId);
+      clientName = client?.name;
+    } catch (e) { /* ignore */ }
+  }
+
+  // Send approval email
+  if (rule.approver_email && approveUrl) {
+    try {
+      const emailHtml = renderApprovalEmail({
+        batch: {
+          id: batch.id,
+          automation_rule_name: rule.name,
+          mail_subject: mail.subject,
+          mail_from: mail.sender_email,
+          actions_current: actionsWithKeys
+        },
+        approveUrl,
+        editUrl,
+        language,
+        caseName,
+        clientName
+      });
+
+      const subject = language === 'he' 
+        ? `אישור נדרש: ${rule.name}` 
+        : `Approval Required: ${rule.name}`;
+
+      await base44.functions.invoke('sendEmail', {
+        to: rule.approver_email,
+        subject,
+        body: emailHtml
+      });
+
+      console.log(`[ApprovalBatch] ✅ Approval email sent to ${rule.approver_email}`);
+    } catch (emailError) {
+      console.error('[ApprovalBatch] ❌ Failed to send approval email:', emailError.message);
+    }
+  }
+
+  return batch;
+}
+
+// Legacy function - kept for backwards compatibility but now creates a batch
 async function createApprovalActivity(base44, data) {
+  console.log('[Approval] Legacy createApprovalActivity called - redirecting to batch system');
+  // This is kept for any legacy code paths, but we prefer the batch system
   const expiresAt = new Date();
   expiresAt.setDate(expiresAt.getDate() + 7);
 
@@ -297,31 +427,11 @@ async function createApprovalActivity(base44, data) {
       mail_subject: data.mail_subject,
       mail_from: data.mail_from,
       expires_at: expiresAt.toISOString(),
+      legacy_approval: true // Mark as legacy
     }
   });
 
-  console.log(`[Approval] Created approval request: ${activity.id}`);
-  
-  if (data.approver_email) {
-    try {
-      await base44.functions.invoke('sendEmail', {
-        to: data.approver_email,
-        subject: `אישור נדרש: ${data.action_type}`,
-        body: `
-          <h2>בקשת אישור לאוטומציה</h2>
-          <p><strong>פעולה:</strong> ${data.action_type}</p>
-          <p><strong>מייל:</strong> ${data.mail_subject}</p>
-          <p><strong>מאת:</strong> ${data.mail_from}</p>
-          <hr>
-          <pre>${JSON.stringify(data, null, 2)}</pre>
-        `,
-      });
-      console.log(`[Approval] ✅ Email sent to ${data.approver_email}`);
-    } catch (emailError) {
-      console.error('[Approval] ❌ Failed to send email:', emailError.message);
-    }
-  }
-  
+  console.log(`[Approval] Created LEGACY approval request: ${activity.id}`);
   return activity;
 }
 
