@@ -1,18 +1,118 @@
 // @ts-nocheck
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.6';
-import { renderApprovalEmail } from './utils/approvalEmailTemplates.js';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
-// Redeployment trigger - approvals aggregation v3
 
-/**
- * צבירת פעולות מכל הכללים התואמים למייל יחיד
- * יצירת/עדכון באטצ' אישור אחד לכל מאשר
- * שליחת מייל אישור מאוחד יחיד
- */
+// ==========================================
+// INTERNAL HELPER: EMAIL TEMPLATE GENERATOR
+// (הוטמע כאן כדי למנוע בעיות תלות בקבצים חיצוניים)
+// ==========================================
+function renderApprovalEmail({ batch, approveUrl, editUrl, language = 'he', caseName, clientName }) {
+  const isHebrew = language === 'he';
+  const dir = isHebrew ? 'rtl' : 'ltr';
+  const align = isHebrew ? 'right' : 'left';
+  
+  const title = isHebrew 
+    ? `אישור נדרש: ${batch.automation_rule_name}`
+    : `Approval Required: ${batch.automation_rule_name}`;
+    
+  const contextText = [];
+  if (caseName) contextText.push(isHebrew ? `תיק: ${caseName}` : `Case: ${caseName}`);
+  if (clientName) contextText.push(isHebrew ? `לקוח: ${clientName}` : `Client: ${clientName}`);
+  
+  const actionsList = (batch.actions_current || []).map(action => {
+    let icon = '⚡';
+    let desc = action.action_type;
+    let details = '';
+    
+    // שליפת פרטים רלוונטיים להצגה במייל
+    const config = action.config || {};
+    
+    switch(action.action_type) {
+      case 'send_email':
+        icon = '📧';
+        desc = isHebrew ? 'שליחת מייל' : 'Send Email';
+        details = config.to || '';
+        break;
+      case 'create_task':
+        icon = '✅';
+        desc = isHebrew ? 'יצירת משימה' : 'Create Task';
+        details = config.title || '';
+        break;
+      case 'billing':
+        icon = '💰';
+        desc = isHebrew ? 'חיוב' : 'Billing';
+        details = `${config.hours || 0}h @ ${config.rate || config.hourly_rate || 0}`;
+        break;
+      case 'save_file':
+        icon = '💾';
+        desc = isHebrew ? 'שמירת קבצים' : 'Save Files';
+        details = config.path || '';
+        break;
+      case 'calendar_event':
+        icon = '📅';
+        desc = isHebrew ? 'פגישה ביומן' : 'Calendar Event';
+        details = config.title || config.title_template || '';
+        break;
+    }
+    
+    return `
+      <div style="background: #f8f9fa; padding: 10px; margin-bottom: 8px; border-radius: 6px; border-${align}: 4px solid #3b82f6;">
+        <div style="font-weight: bold;">${icon} ${desc}</div>
+        <div style="color: #666; font-size: 0.9em;">${details}</div>
+      </div>
+    `;
+  }).join('');
+
+  return `
+    <!DOCTYPE html>
+    <html lang="${language}" dir="${dir}">
+    <head>
+      <meta charset="UTF-8">
+      <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; line-height: 1.6; color: #333; }
+        .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+        .header { text-align: center; margin-bottom: 30px; }
+        .card { border: 1px solid #e5e7eb; border-radius: 8px; padding: 20px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
+        .btn { display: inline-block; padding: 12px 24px; background-color: #2563eb; color: white; text-decoration: none; border-radius: 6px; font-weight: bold; margin-top: 20px; }
+        .meta { color: #6b7280; font-size: 0.875rem; margin-bottom: 20px; border-bottom: 1px solid #e5e7eb; padding-bottom: 15px; }
+      </style>
+    </head>
+    <body>
+      <div class="container">
+        <div class="header">
+          <h2>${title}</h2>
+        </div>
+        
+        <div class="card">
+          <div class="meta">
+            <div><strong>${isHebrew ? 'נושא המייל' : 'Mail Subject'}:</strong> ${batch.mail_subject}</div>
+            <div><strong>${isHebrew ? 'מאת' : 'From'}:</strong> ${batch.mail_from}</div>
+            ${contextText.length > 0 ? `<div style="margin-top: 8px; color: #4b5563;">${contextText.join(' | ')}</div>` : ''}
+          </div>
+          
+          <h3 style="margin-top: 0;">${isHebrew ? 'פעולות ממתינות לאישור' : 'Actions Pending Approval'}</h3>
+          ${actionsList}
+          
+          <div style="text-align: center; margin-top: 30px;">
+            <a href="${editUrl}" class="btn">${isHebrew ? 'סקירה ואישור במערכת' : 'Review & Approve'}</a>
+            <p style="font-size: 0.8rem; color: #9ca3af; margin-top: 15px;">
+              ${isHebrew ? 'לחיצה תוביל למסך עריכה ואישור מרוכז' : 'Link leads to batch review screen'}
+            </p>
+          </div>
+        </div>
+      </div>
+    </body>
+    </html>
+  `;
+}
+
+// ==========================================
+// MAIN FUNCTION LOGIC
+// ==========================================
 Deno.serve(async (req) => {
   console.log(`[AggregateApproval] 🚀 Function invoked`);
   if (req.method === 'OPTIONS') {
@@ -23,7 +123,7 @@ Deno.serve(async (req) => {
     const base44 = createClientFromRequest(req);
     const { mailId, actionsToApprove, extractedInfo } = await req.json();
     
-    console.log(`[AggregateApproval] 📥 Received: mailId=${mailId}, actionsToApprove.length=${actionsToApprove?.length}, extractedInfo=${JSON.stringify(extractedInfo)}`);
+    console.log(`[AggregateApproval] 📥 Received: mailId=${mailId}, actions=${actionsToApprove?.length}`);
 
     if (!mailId || !Array.isArray(actionsToApprove) || actionsToApprove.length === 0) {
       return new Response(
@@ -36,8 +136,6 @@ Deno.serve(async (req) => {
       );
     }
 
-    console.log(`[AggregateApproval] 📦 Processing ${actionsToApprove.length} action(s) for mail ${mailId}`);
-
     // Fetch mail details
     const mail = await base44.entities.Mail.get(mailId);
     if (!mail) {
@@ -49,7 +147,7 @@ Deno.serve(async (req) => {
     for (const action of actionsToApprove) {
       const approverEmail = action.approver_email;
       if (!approverEmail) {
-        console.warn('[AggregateApproval] ⚠️ Action without approver_email - rule:', action.rule_id, 'action_type:', action.action_type);
+        console.warn('[AggregateApproval] ⚠️ Action without approver_email - skipping');
         continue;
       }
 
@@ -59,21 +157,18 @@ Deno.serve(async (req) => {
       actionsByApprover[approverEmail].push(action);
     }
 
-    console.log(`[AggregateApproval] 👥 Grouped into ${Object.keys(actionsByApprover).length} approver(s)`);
-
     const createdBatches = [];
 
     // Create/Update batch for each approver
     for (const [approverEmail, approverActions] of Object.entries(actionsByApprover)) {
       try {
-        console.log(`[AggregateApproval] ✉️ Processing ${approverActions.length} action(s) for approver: ${approverEmail}`);
+        console.log(`[AggregateApproval] ✉️ Processing for approver: ${approverEmail}`);
 
-        // Extract rule_id and rule_name from first action
         const firstAction = approverActions[0];
         const ruleId = firstAction.rule_id;
         const ruleName = firstAction.rule_name;
 
-        // Check if batch already exists for this mail + approver (in pending/editing)
+        // Check if batch already exists
         const existingBatches = await base44.asServiceRole.entities.ApprovalBatch.filter({
           mail_id: mailId,
           approver_email: approverEmail,
@@ -84,38 +179,31 @@ Deno.serve(async (req) => {
         const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 60 minutes
 
         if (existingBatches && existingBatches.length > 0) {
-          // Update existing batch
+          // Update existing
           batch = existingBatches[0];
-          console.log(`[AggregateApproval] 🔄 Updating existing batch: ${batch.id} for approver ${approverEmail}`);
+          console.log(`[AggregateApproval] 🔄 Updating existing batch: ${batch.id}`);
 
-          // Merge actions
           const existingActions = batch.actions_current || [];
           const mergedActions = [...existingActions];
 
           for (const newAction of approverActions) {
-            // Avoid duplicates based on idempotency_key
-            const exists = mergedActions.some(
-              a => a.idempotency_key === newAction.idempotency_key
-            );
-            if (!exists) {
-              mergedActions.push(newAction);
-            }
+            const exists = mergedActions.some(a => a.idempotency_key === newAction.idempotency_key);
+            if (!exists) mergedActions.push(newAction);
           }
 
-          // Update batch with merged actions
           await base44.asServiceRole.entities.ApprovalBatch.update(batch.id, {
             actions_current: mergedActions,
             expires_at: expiresAt.toISOString()
           });
-
+          
+          // Refetch to get updated data for email
           batch = await base44.asServiceRole.entities.ApprovalBatch.get(batch.id);
-          console.log(`[AggregateApproval] ✅ Batch updated and refetched: ${batch.id}`);
         } else {
-          // Create new batch
-          console.log(`[AggregateApproval] ➕ Creating NEW batch for approver ${approverEmail}`);
+          // Create new
+          console.log(`[AggregateApproval] ➕ Creating NEW batch`);
           const actionsWithKeys = approverActions.map((action, index) => ({
             ...action,
-            idempotency_key: `${Date.now()}_${index}_${action.action_type}`
+            idempotency_key: action.idempotency_key || `${Date.now()}_${index}_${action.action_type}`
           }));
 
           batch = await base44.asServiceRole.entities.ApprovalBatch.create({
@@ -135,44 +223,32 @@ Deno.serve(async (req) => {
             actions_original: actionsWithKeys,
             actions_current: JSON.parse(JSON.stringify(actionsWithKeys))
           });
-
-          console.log(`[AggregateApproval] ✅ Created batch: ${batch.id}`);
         }
 
-        // Send approval email
+        // Send Email
         try {
           const appUrl = Deno.env.get('APP_BASE_URL') || 'https://app.base44.com';
           const editUrl = `${appUrl}/ApprovalBatchEdit?batchId=${batch.id}`;
 
-          // Detect language
           let language = 'he';
-          if (batch.client_id) {
-            try {
-              const client = await base44.entities.Client.get(batch.client_id);
-              if (client?.communication_language === 'en') {
-                language = 'en';
-              }
-            } catch (e) { /* ignore */ }
-          }
-
-          // Get case and client names
+          // Simple language detection logic based on client/case could go here
+          
           let caseName = null;
           let clientName = null;
-
           if (batch.case_id) {
-            try {
-              const caseData = await base44.entities.Case.get(batch.case_id);
-              caseName = caseData?.case_number || caseData?.title;
-            } catch (e) { /* ignore */ }
+             try {
+                const c = await base44.entities.Case.get(batch.case_id);
+                caseName = c?.case_number || c?.title;
+             } catch(e) {}
           }
-
           if (batch.client_id) {
-            try {
-              const client = await base44.entities.Client.get(batch.client_id);
-              clientName = client?.name;
-            } catch (e) { /* ignore */ }
+             try {
+                const c = await base44.entities.Client.get(batch.client_id);
+                clientName = c?.name;
+             } catch(e) {}
           }
 
+          // Use the INTERNAL helper function
           const emailHtml = renderApprovalEmail({
             batch: {
               id: batch.id,
@@ -188,34 +264,25 @@ Deno.serve(async (req) => {
             clientName
           });
 
-          const subject = language === 'he'
-            ? `אישור נדרש: ${batch.automation_rule_name}`
-            : `Approval Required: ${batch.automation_rule_name}`;
+          const subject = `אישור נדרש: ${batch.automation_rule_name} (${batch.actions_current.length} פעולות)`;
 
-          // Send email using the sendEmail function
           await base44.functions.invoke('sendEmail', {
             to: approverEmail,
             subject,
             body: emailHtml
           });
 
-          console.log(`[AggregateApproval] ✅ Approval email sent to ${approverEmail}`);
+          console.log(`[AggregateApproval] ✅ Email sent to ${approverEmail}`);
         } catch (emailError) {
-          console.error('[AggregateApproval] ❌ Failed to send approval email:', emailError.message, emailError.stack);
+          console.error('[AggregateApproval] ❌ Failed to send email:', emailError);
         }
 
-        createdBatches.push({
-          batch_id: batch.id,
-          approver_email: approverEmail,
-          actions_count: (batch.actions_current || []).length
-        });
+        createdBatches.push({ batch_id: batch.id, approver: approverEmail });
 
-      } catch (approverError) {
-        console.error(`[AggregateApproval] ❌ Failed to process approver ${approverEmail}:`, approverError);
+      } catch (e) {
+        console.error(`[AggregateApproval] ❌ Error processing approver ${approverEmail}:`, e);
       }
     }
-
-    console.log(`[AggregateApproval] 📊 Complete: Created/Updated ${createdBatches.length} batch(es)`);
 
     return new Response(
       JSON.stringify({
@@ -227,7 +294,7 @@ Deno.serve(async (req) => {
     );
 
   } catch (error) {
-    console.error('[AggregateApproval] ❌ Error:', error.message, 'Stack:', error.stack);
+    console.error('[AggregateApproval] ❌ Critical Error:', error);
     return new Response(
       JSON.stringify({ error: error.message }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
