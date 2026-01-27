@@ -730,12 +730,13 @@ Deno.serve(async (req) => {
                   console.error(`[Automation] ❌ Rule "${rule.name}" failed:`, automationResult.error);
                   totalRulesFailed++;
                 } else {
-                  console.log(`[Automation] Result from rule "${rule.name}": status=${automationResult.data?.status}, actions_count=${automationResult.data?.actions_count}`);
+                  const responseData = automationResult.data || automationResult;
+                  console.log(`[Automation] Result from rule "${rule.name}": status=${responseData.status}, actions_count=${responseData.actions_count}`);
                   // Check if actions are ready for approval (new aggregation flow)
-                  if (automationResult.data?.status === 'actions_ready_for_approval') {
-                    console.log(`[Automation] 📦 Rule "${rule.name}" returned ${automationResult.data.actions_count} action(s) for approval`);
-                    allActionsToApprove.push(...(automationResult.data.actions || []));
-                  } else if (automationResult.data?.status === 'no_actions_for_approval') {
+                  if (responseData.status === 'actions_ready_for_approval') {
+                    console.log(`[Automation] 📦 Rule "${rule.name}" returned ${responseData.actions_count} action(s) for approval`);
+                    allActionsToApprove.push(...(responseData.actions || []));
+                  } else if (responseData.status === 'no_actions_for_approval') {
                     console.log(`[Automation] ℹ️ Rule "${rule.name}" required approval but generated no actions`);
                   } else {
                     console.log(`[Automation] ✅ Rule "${rule.name}" executed successfully (immediate dispatch)`);
