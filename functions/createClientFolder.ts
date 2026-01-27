@@ -6,7 +6,8 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-// פונקציות הצפנה
+// --- פונקציות עזר והצפנה (ללא שינוי) ---
+
 async function getCryptoKey() {
   const envKey = Deno.env.get("ENCRYPTION_KEY");
   if (!envKey) throw new Error("ENCRYPTION_KEY is missing");
@@ -66,6 +67,8 @@ function sanitizeFolderName(name) {
   return name.replace(/[\\/:*?"<>|]/g, '').replace(/\s+/g, ' ').trim();
 }
 
+// --- הבלוק הראשי המעודכן ---
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
@@ -73,14 +76,14 @@ Deno.serve(async (req) => {
 
   try {
     const base44 = createClientFromRequest(req);
-    const { client_name, client_number } = await req.json();
+    // קריאת הנתונים מהבקשה
+    const requestData = await req.json();
+    const { action } = requestData; // זיהוי סוג הפעולה: 'create' או 'rename'
 
-    if (!client_name || !client_number) {
-      throw new Error('client_name and client_number are required');
-    }
+    console.log(`[DropboxHandler] Action received: ${action || 'create (default)'}`);
 
-    console.log('[CreateClientFolder] Starting for:', client_name);
-
+    // --- שלב 1: התחברות לדרופבוקס (משותף לכל הפעולות) ---
+    
     const connections = await base44.entities.IntegrationConnection.filter({
       provider: 'dropbox',
       is_active: true
@@ -92,13 +95,12 @@ Deno.serve(async (req) => {
 
     const connection = connections[0];
     
-    // רענון הטוקן
-    console.log('[CreateClientFolder] Refreshing token...');
+    console.log('[DropboxHandler] Refreshing token...');
     const refreshToken = await decrypt(connection.refresh_token_encrypted);
     if (!refreshToken) throw new Error('No refresh token - reconnect Dropbox');
     
     const accessToken = await refreshDropboxToken(refreshToken);
-    console.log('[CreateClientFolder] Token refreshed successfully');
+    console.log('[DropboxHandler] Token refreshed successfully');
 
     // שמירת הטוקן החדש
     const encryptedToken = await encrypt(accessToken);
@@ -106,40 +108,100 @@ Deno.serve(async (req) => {
       access_token_encrypted: encryptedToken
     });
 
-    const safeNumber = sanitizeFolderName(client_number);
-    const safeName = sanitizeFolderName(client_name);
-    const folderPath = `/DWO/לקוחות - משרד/${safeNumber} - ${safeName}`;
+    // --- שלב 2: ביצוע הפעולה לפי ה-Action ---
 
-    console.log('[CreateClientFolder] Creating folder:', folderPath);
+    // === אפשרות א': שינוי שם (Rename) ===
+    if (action === 'rename') {
+      const { oldName, newName, clientNumber } = requestData;
 
-    const response = await fetch('https://api.dropboxapi.com/2/files/create_folder_v2', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${accessToken}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ path: folderPath, autorename: false })
-    });
-
-    const result = await response.json();
-
-    if (!response.ok) {
-      if (result.error?.['.tag'] === 'path' && result.error?.path?.['.tag'] === 'conflict') {
-        console.log('[CreateClientFolder] Folder already exists');
-        return new Response(JSON.stringify({ success: true, message: 'Folder already exists', path: folderPath }), {
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-        });
+      if (!oldName || !newName || !clientNumber) {
+        throw new Error('Rename requires: oldName, newName, and clientNumber');
       }
-      throw new Error(`Dropbox API error: ${JSON.stringify(result.error)}`);
+
+      // בניית הנתיבים הישן והחדש
+      const safeNumber = sanitizeFolderName(clientNumber);
+      const safeOldName = sanitizeFolderName(oldName);
+      const safeNewName = sanitizeFolderName(newName);
+
+      const fromPath = `/DWO/לקוחות - משרד/${safeNumber} - ${safeOldName}`;
+      const toPath = `/DWO/לקוחות - משרד/${safeNumber} - ${safeNewName}`;
+
+      console.log(`[DropboxHandler] Renaming: "${fromPath}" -> "${toPath}"`);
+
+      const response = await fetch('https://api.dropboxapi.com/2/files/move_v2', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${accessToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          from_path: fromPath,
+          to_path: toPath,
+          autorename: false // אם השם תפוס, נרצה לדעת ולא לשנות אוטומטית
+        })
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        // טיפול בשגיאה נפוצה: התיקייה הישנה לא נמצאה
+        if (result.error?.path?.['.tag'] === 'not_found') {
+           console.warn('[DropboxHandler] Source folder not found, skipping rename.');
+           return new Response(JSON.stringify({ success: true, message: 'Source folder not found, nothing to rename' }), {
+             headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+           });
+        }
+        throw new Error(`Dropbox Move Error: ${JSON.stringify(result.error)}`);
+      }
+
+      return new Response(JSON.stringify({ success: true, data: result.metadata }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
     }
 
-    console.log('[CreateClientFolder] Success!');
-    return new Response(JSON.stringify({ success: true, path: result.metadata?.path_display || folderPath }), {
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-    });
+    // === אפשרות ב' (ברירת מחדל): יצירת תיקייה (Create) ===
+    else {
+      const { client_name, client_number } = requestData;
+
+      if (!client_name || !client_number) {
+        throw new Error('Create requires: client_name and client_number');
+      }
+
+      const safeNumber = sanitizeFolderName(client_number);
+      const safeName = sanitizeFolderName(client_name);
+      const folderPath = `/DWO/לקוחות - משרד/${safeNumber} - ${safeName}`;
+
+      console.log('[DropboxHandler] Creating folder:', folderPath);
+
+      const response = await fetch('https://api.dropboxapi.com/2/files/create_folder_v2', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${accessToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ path: folderPath, autorename: false })
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        if (result.error?.['.tag'] === 'path' && result.error?.path?.['.tag'] === 'conflict') {
+          console.log('[DropboxHandler] Folder already exists');
+          return new Response(JSON.stringify({ success: true, message: 'Folder already exists', path: folderPath }), {
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+          });
+        }
+        throw new Error(`Dropbox Create Error: ${JSON.stringify(result.error)}`);
+      }
+
+      console.log('[DropboxHandler] Create Success!');
+      return new Response(JSON.stringify({ success: true, path: result.metadata?.path_display || folderPath }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
+    }
 
   } catch (error) {
-    console.error('[CreateClientFolder] Error:', error);
+    console.error('[DropboxHandler] Error:', error);
     return new Response(JSON.stringify({ success: false, error: error.message }), {
       status: 500,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' }
