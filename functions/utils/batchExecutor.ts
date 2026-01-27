@@ -53,15 +53,18 @@ export async function executeBatchActions(base44, batch, context) {
     if (!action.idempotency_key) {
       const errorMessage = `Missing idempotency_key for action type: ${action.action_type}`;
       console.error(`[BatchExecutor] ❌ ${action.action_type} failed: ${errorMessage}`);
+      results.push({
+        action_type: action.action_type,
+        status: 'failed',
+        error: errorMessage,
+        details: { reason: 'missing_idempotency_key' }
+      });
       
-      // Rollback any completed actions before throwing
-      if (rollbackStack.length > 0) {
-        console.log(`[BatchExecutor] 🔄 Missing idempotency_key - initiating rollback`);
-        await performRollback(base44, rollbackStack);
-      }
-      
-      // Throw to ensure consistent error handling by caller
-      throw new Error(errorMessage);
+      // Treat as revertible failure - rollback and stop
+      hasRevertibleFailure = true;
+      console.log(`[BatchExecutor] 🔄 Missing idempotency_key - initiating rollback`);
+      await performRollback(base44, rollbackStack);
+      break;
     }
     
     // RESERVE-FIRST: Try to create ExecutionLog with status='pending'
@@ -100,27 +103,10 @@ export async function executeBatchActions(base44, batch, context) {
         });
         continue;
       }
-      
-      // Default: if reserved is false but status doesn't match known values, skip
-      console.warn(`[BatchExecutor] ⚠️ Unknown existingStatus '${reserveResult.existingStatus}' for ${action.idempotency_key}, skipping`);
-      results.push({
-        action_type: action.action_type,
-        idempotency_key: action.idempotency_key,
-        status: 'skipped',
-        details: { reason: 'unknown_existing_status', existing_status: reserveResult.existingStatus }
-      });
-      continue;
     }
     
     // Reserve succeeded - now execute the action
     const executionLogId = reserveResult.executionLogId;
-    
-    // Safety check: executionLogId must exist after successful reserve
-    if (!executionLogId) {
-      const errorMessage = `Missing executionLogId after successful reserve for ${action.idempotency_key}`;
-      console.error(`[BatchExecutor] ❌ ${errorMessage}`);
-      throw new Error(errorMessage);
-    }
     
     try {
       const result = await executeAction(base44, action, batch, context);
