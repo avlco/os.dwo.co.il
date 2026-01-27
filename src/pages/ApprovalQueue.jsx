@@ -258,14 +258,19 @@ export default function ApprovalQueue() {
     },
     {
       header: 'סוג פעולה',
-      render: (row) => (
-        <div className="flex items-center gap-2">
-          <AlertCircle className="w-4 h-4 text-blue-600" />
-          <span className="font-medium dark:text-slate-200">
-            {getActionTypeLabel(row.metadata?.action_type)}
-          </span>
-        </div>
-      ),
+      render: (row) => {
+        const label = row.activity_type === 'automation_log'
+          ? (row.metadata?.rule_name || row.title || 'לוג אוטומציה')
+          : getActionTypeLabel(row.metadata?.action_type);
+        return (
+          <div className="flex items-center gap-2">
+            <AlertCircle className="w-4 h-4 text-blue-600" />
+            <span className="font-medium dark:text-slate-200">
+              {label}
+            </span>
+          </div>
+        );
+      },
     },
     {
       header: 'תיק',
@@ -308,11 +313,16 @@ export default function ApprovalQueue() {
     },
     {
       header: 'תאריך',
-      render: (row) => (
-        <span className="text-sm dark:text-slate-400">
-          {format(new Date(row.created_date), 'dd/MM/yyyy HH:mm')}
-        </span>
-      ),
+      render: (row) => {
+        const dateToShow = row.activity_type === 'automation_log' && row.metadata?.logged_at
+          ? row.metadata.logged_at
+          : row.created_date;
+        return (
+          <span className="text-sm dark:text-slate-400">
+            {dateToShow ? format(new Date(dateToShow), 'dd/MM/yyyy HH:mm') : '-'}
+          </span>
+        );
+      },
     },
     {
       header: 'פעולות',
@@ -501,14 +511,14 @@ export default function ApprovalQueue() {
                             </span>
                           </div>
                           
-                          <h3 className="font-medium text-slate-800 dark:text-slate-200">
-                            {batch.automation_rule_name}
+                          <h3 className="font-medium text-slate-800 dark:text-slate-200 truncate">
+                            {batch.automation_rule_name || '-'}
                           </h3>
                           
                           <div className="flex items-center gap-4 text-sm text-slate-600 dark:text-slate-400">
-                            <span className="flex items-center gap-1">
-                              <Mail className="w-4 h-4" />
-                              {batch.mail_subject?.substring(0, 50) || '-'}
+                            <span className="flex items-center gap-1 truncate">
+                              <Mail className="w-4 h-4 flex-shrink-0" />
+                              <span className="truncate">{batch.mail_subject?.substring(0, 50) || '-'}</span>
                             </span>
                             <span className="flex items-center gap-1">
                               <User className="w-4 h-4" />
@@ -604,7 +614,9 @@ export default function ApprovalQueue() {
                 <div>
                   <Label className="text-sm text-slate-600 dark:text-slate-400">סוג פעולה</Label>
                   <p className="font-medium dark:text-slate-200">
-                    {getActionTypeLabel(selectedApproval.metadata?.action_type)}
+                    {selectedApproval.activity_type === 'automation_log'
+                      ? (selectedApproval.metadata?.rule_name || selectedApproval.title || 'לוג אוטומציה')
+                      : getActionTypeLabel(selectedApproval.metadata?.action_type)}
                   </p>
                 </div>
                 <div>
@@ -623,20 +635,29 @@ export default function ApprovalQueue() {
                 </div>
               </div>
 
-              <div>
-                <Label className="text-sm text-slate-600 dark:text-slate-400">מייל מקורי</Label>
-                <p className="dark:text-slate-200">{selectedApproval.metadata?.mail_subject || '-'}</p>
-                <p className="text-sm text-slate-500">
-                  מאת: {selectedApproval.metadata?.mail_from || '-'}
-                </p>
-              </div>
+              {selectedApproval.activity_type !== 'automation_log' ? (
+                <div>
+                  <Label className="text-sm text-slate-600 dark:text-slate-400">מייל מקורי</Label>
+                  <p className="dark:text-slate-200">{selectedApproval.metadata?.mail_subject || '-'}</p>
+                  <p className="text-sm text-slate-500">
+                    מאת: {selectedApproval.metadata?.mail_from || '-'}
+                  </p>
+                </div>
+              ) : (
+                <div>
+                  <Label className="text-sm text-slate-600 dark:text-slate-400">סוג</Label>
+                  <p className="dark:text-slate-200">פעילות אוטומציה</p>
+                </div>
+              )}
 
               <div>
-                <Label className="text-sm text-slate-600 dark:text-slate-400">תאריך יצירה</Label>
+                <Label className="text-sm text-slate-600 dark:text-slate-400">תאריך</Label>
                 <p className="dark:text-slate-200">
-                  {selectedApproval.created_date 
-                    ? format(new Date(selectedApproval.created_date), 'dd/MM/yyyy HH:mm')
-                    : '-'
+                  {selectedApproval.activity_type === 'automation_log' && selectedApproval.metadata?.logged_at
+                    ? format(new Date(selectedApproval.metadata.logged_at), 'dd/MM/yyyy HH:mm')
+                    : selectedApproval.created_date 
+                      ? format(new Date(selectedApproval.created_date), 'dd/MM/yyyy HH:mm')
+                      : '-'
                   }
                 </p>
               </div>
