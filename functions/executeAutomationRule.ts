@@ -627,46 +627,43 @@ Deno.serve(async (req) => {
     console.log(`[MAP] Case ID: ${caseId || 'N/A'}, Client ID: ${clientId || 'N/A'}`);
 
     // --- APPROVAL BATCH CHECK ---
-    // If rule requires approval, create a batch and send approval email instead of executing
+    // If rule requires approval, return actions to be aggregated by processIncomingMail
     if (rule.require_approval && !testMode) {
-      console.log('[AutoRule] 📋 Rule requires approval - creating ApprovalBatch');
-      
+      console.log('[AutoRule] 📋 Rule requires approval - returning actions for aggregation');
+
       // Build actions array from action_bundle
       const actionsToApprove = await buildActionsArray(rule.action_bundle || {}, {
         mail, caseId, clientId, mailId, base44, userEmail
       });
-      
+
       if (actionsToApprove.length > 0) {
-        try {
-          const batch = await createApprovalBatch(base44, {
-            rule,
-            mail,
-            caseId,
-            clientId,
-            actions: actionsToApprove,
-            extractedInfo,
-            userEmail
-          });
-          
-          console.log(`[AutoRule] ✅ ApprovalBatch created: ${batch.id}`);
-          
-          return new Response(
-            JSON.stringify({
-              success: true,
-              status: 'pending_approval',
-              batch_id: batch.id,
-              message: 'Approval batch created and email sent',
-              actions_count: actionsToApprove.length
-            }),
-            { 
-              headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-              status: 200
-            }
-          );
-        } catch (batchError) {
-          console.error('[AutoRule] ❌ Failed to create ApprovalBatch:', batchError);
-          throw batchError;
-        }
+        // Enrich actions with metadata needed for aggregation
+        const enrichedActions = actionsToApprove.map((action, index) => ({
+          ...action,
+          rule_id: ruleId,
+          rule_name: rule.name,
+          approver_email: rule.approver_email,
+          idempotency_key: `${Date.now()}_${index}_${action.action_type}`,
+          catch_snapshot: rule.catch_config || {},
+          map_snapshot: rule.map_config || []
+        }));
+
+        console.log(`[AutoRule] ✅ Returning ${enrichedActions.length} action(s) for approval aggregation`);
+
+        return new Response(
+          JSON.stringify({
+            success: true,
+            status: 'actions_ready_for_approval',
+            actions: enrichedActions,
+            actions_count: enrichedActions.length,
+            rule_id: ruleId,
+            rule_name: rule.name
+          }),
+          { 
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            status: 200
+          }
+        );
       } else {
         console.log('[AutoRule] ⏭️ No actions to approve');
       }
