@@ -720,31 +720,41 @@ Deno.serve(async (req) => {
               console.log(`[Automation] ▶️ Executing rule "${rule.name}" (ID: ${rule.id}) on mail ${mail.id}`);
               
               // Call execution function
-              const automationResult = await base44.functions.invoke('executeAutomationRule', {
+              // 🔥 FIX: Destructure { data, error } correctly
+              const invokeResponse = await base44.functions.invoke('executeAutomationRule', {
                 mailId: mail.id,
                 ruleId: rule.id,
                 testMode: false
               });
               
+              const invokeError = invokeResponse.error;
+              const resultData = invokeResponse.data || {};
+
               totalRulesExecuted++;
               
-              // Handle results
-              if (automationResult.error) {
-                console.error(`[Automation] ❌ Rule "${rule.name}" failed:`, automationResult.error);
+              // Handle invocation error
+              if (invokeError) {
+                console.error(`[Automation] ❌ Rule "${rule.name}" invocation error:`, invokeError);
+                continue;
+              }
+
+              // Handle logic error inside response
+              if (resultData.error) {
+                console.error(`[Automation] ❌ Rule "${rule.name}" logic error:`, resultData.error);
                 continue;
               }
               
               // Collect extraction info
-              if (automationResult.extracted_info) {
-                Object.assign(aggregatedExtractedInfo, automationResult.extracted_info);
+              if (resultData.extracted_info) {
+                Object.assign(aggregatedExtractedInfo, resultData.extracted_info);
               }
               // Prefer last non-null case/client ID
-              if (automationResult.case_id) aggregatedExtractedInfo.case_id = automationResult.case_id;
-              if (automationResult.client_id) aggregatedExtractedInfo.client_id = automationResult.client_id;
+              if (resultData.case_id) aggregatedExtractedInfo.case_id = resultData.case_id;
+              if (resultData.client_id) aggregatedExtractedInfo.client_id = resultData.client_id;
               
               // Check for actions needing approval
-              if (automationResult.results && Array.isArray(automationResult.results)) {
-                const pendingActions = automationResult.results.filter(r => r.status === 'pending_batch');
+              if (resultData.results && Array.isArray(resultData.results)) {
+                const pendingActions = resultData.results.filter(r => r.status === 'pending_batch');
                 if (pendingActions.length > 0) {
                   console.log(`[Automation] 📥 Collected ${pendingActions.length} pending actions from rule "${rule.name}"`);
                   mailActionsBuffer.push(...pendingActions);
@@ -761,17 +771,21 @@ Deno.serve(async (req) => {
             console.log(`[Automation] 📦 Creating approval batch with ${mailActionsBuffer.length} actions for mail ${mail.id}`);
             
             try {
-              const batchResult = await base44.functions.invoke('aggregateApprovalBatch', {
+              // 🔥 FIX: Destructure { data, error } for aggregateApprovalBatch too
+              const batchInvoke = await base44.functions.invoke('aggregateApprovalBatch', {
                 mailId: mail.id,
                 actionsToApprove: mailActionsBuffer,
                 extractedInfo: aggregatedExtractedInfo
               });
               
-              if (batchResult.success) {
+              const batchData = batchInvoke.data || {};
+              const batchError = batchInvoke.error;
+              
+              if (batchError || !batchData.success) {
+                console.error(`[Automation] ❌ Batch creation failed:`, batchError || batchData);
+              } else {
                 totalBatchesCreated++;
                 console.log(`[Automation] ✅ Batch created successfully for mail ${mail.id}`);
-              } else {
-                console.error(`[Automation] ❌ Batch creation failed:`, batchResult);
               }
             } catch (batchError) {
               console.error(`[Automation] ❌ Exception calling aggregateApprovalBatch:`, batchError);
