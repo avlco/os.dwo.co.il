@@ -279,7 +279,7 @@ export default function ApprovalQueue() {
       header: 'לקוח',
       render: (row) => (
         <span className="text-sm dark:text-slate-300">
-          {getClientName(row.metadata?.client_id)}
+          {getClientName(row.client_id || row.metadata?.client_id)}
         </span>
       ),
     },
@@ -300,7 +300,7 @@ export default function ApprovalQueue() {
         <div className="flex items-center gap-2 text-sm">
           <User className="w-4 h-4 text-slate-500" />
           <span className="dark:text-slate-400">
-            {row.metadata?.requested_by?.split('@')[0] || 'מערכת'}
+            {row.metadata?.requested_by?.split('@')[0] || row.metadata?.approver_email?.split('@')[0] || row.created_by?.split('@')[0] || 'מערכת'}
           </span>
         </div>
       ),

@@ -1,4 +1,6 @@
+import ApprovalBatchEdit from './pages/ApprovalBatchEdit';
 import ApprovalQueue from './pages/ApprovalQueue';
+import ApproveBatch from './pages/ApproveBatch';
 import AutomationDebugger from './pages/AutomationDebugger';
 import AutomationMetrics from './pages/AutomationMetrics';
 import AutomationRules from './pages/AutomationRules';
@@ -15,13 +17,13 @@ import MailView from './pages/MailView';
 import Settings from './pages/Settings';
 import Tasks from './pages/Tasks';
 import Workbench from './pages/Workbench';
-import ApproveBatch from './pages/ApproveBatch';
-import ApprovalBatchEdit from './pages/ApprovalBatchEdit';
 import __Layout from './Layout.jsx';
 
 
 export const PAGES = {
+    "ApprovalBatchEdit": ApprovalBatchEdit,
     "ApprovalQueue": ApprovalQueue,
+    "ApproveBatch": ApproveBatch,
     "AutomationDebugger": AutomationDebugger,
     "AutomationMetrics": AutomationMetrics,
     "AutomationRules": AutomationRules,
@@ -38,8 +40,6 @@ export const PAGES = {
     "Settings": Settings,
     "Tasks": Tasks,
     "Workbench": Workbench,
-    "ApproveBatch": ApproveBatch,
-    "ApprovalBatchEdit": ApprovalBatchEdit,
 }
 
 export const pagesConfig = {
