@@ -734,6 +734,8 @@ Deno.serve(async (req) => {
                 if (automationResult.data?.status === 'actions_ready_for_approval') {
                   console.log(`[Automation] 📦 Rule "${rule.name}" returned ${automationResult.data.actions_count} action(s) for approval`);
                   allActionsToApprove.push(...(automationResult.data.actions || []));
+                } else if (automationResult.data?.status === 'no_actions_for_approval') {
+                  console.log(`[Automation] ℹ️ Rule "${rule.name}" required approval but generated no actions`);
                 } else {
                   console.log(`[Automation] ✅ Rule "${rule.name}" executed successfully`);
                   totalRulesSuccess++;

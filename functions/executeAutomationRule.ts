@@ -666,26 +666,24 @@ Deno.serve(async (req) => {
         );
       } else {
         console.log('[AutoRule] ⏭️ No actions to approve');
+        return new Response(
+          JSON.stringify({
+            success: true,
+            status: 'no_actions_for_approval',
+            actions: [],
+            actions_count: 0,
+            rule_id: ruleId,
+            rule_name: rule.name
+          }),
+          { 
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            status: 200
+          }
+        );
       }
-    }
+      }
 
-    // --- DISPATCH: Execute Actions (ONLY when no approval required or in test mode) ---
-    // If approval is required and we're not in test mode, we should have already returned above
-    // This section only runs for immediate execution scenarios
-    if (rule.require_approval && !testMode) {
-      // This should never happen - we should have returned after creating ApprovalBatch
-      console.error('[AutoRule] ❌ Logic error: reached DISPATCH phase with require_approval=true');
-      return new Response(
-        JSON.stringify({
-          success: false,
-          error: 'Internal logic error: DISPATCH phase reached with approval required'
-        }),
-        { 
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          status: 500
-        }
-      );
-    }
+      // --- DISPATCH: Execute Actions (ONLY when NO approval is required OR in test mode) ---
 
     const results = [];
     const actions = rule.action_bundle || {};

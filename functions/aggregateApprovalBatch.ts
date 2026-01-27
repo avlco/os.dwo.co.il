@@ -6,6 +6,7 @@ const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
+// Redeployment trigger - approvals aggregation v2
 
 /**
  * צבירת פעולות מכל הכללים התואמים למייל יחיד
