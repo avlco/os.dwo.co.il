@@ -17,7 +17,11 @@ import {
   User,
   AlertCircle,
   MessageSquare,
-  ArrowRight
+  ArrowRight,
+  Edit,
+  Play,
+  Package,
+  AlertTriangle
 } from 'lucide-react';
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -38,6 +42,7 @@ import {
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent } from "@/components/ui/card";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 export default function ApprovalQueue() {
   const { t, i18n } = useTranslation();
@@ -48,13 +53,34 @@ export default function ApprovalQueue() {
   const [selectedApproval, setSelectedApproval] = useState(null);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [rejectionReason, setRejectionReason] = useState('');
+  const [activeTab, setActiveTab] = useState('batches');
 
-  // Fetch approval activities
-  const { data: approvals = [], isLoading } = useQuery({
-    queryKey: ['approvals', filterStatus],
+  // Fetch ApprovalBatches (new system)
+  const { data: batches = [], isLoading: batchesLoading } = useQuery({
+    queryKey: ['approval-batches', filterStatus],
     queryFn: async () => {
-      const query = base44.entities.Activity.list('-created_date', 500);
-      const activities = await query;
+      const allBatches = await base44.entities.ApprovalBatch.list('-created_date', 500);
+      
+      // Map status filter
+      const statusMap = {
+        pending: ['pending', 'editing'],
+        completed: ['executed'],
+        cancelled: ['cancelled', 'failed'],
+        all: null
+      };
+      
+      const allowedStatuses = statusMap[filterStatus];
+      if (!allowedStatuses) return allBatches;
+      
+      return allBatches.filter(b => allowedStatuses.includes(b.status));
+    },
+  });
+
+  // Fetch legacy approval activities (for backwards compatibility)
+  const { data: legacyApprovals = [], isLoading: legacyLoading } = useQuery({
+    queryKey: ['legacy-approvals', filterStatus],
+    queryFn: async () => {
+      const activities = await base44.entities.Activity.list('-created_date', 500);
       
       // Filter for approval activities
       return activities.filter(a => 
@@ -63,6 +89,8 @@ export default function ApprovalQueue() {
       );
     },
   });
+
+  const isLoading = batchesLoading || legacyLoading;
 
   // Fetch related data
   const { data: cases = [] } = useQuery({
@@ -322,13 +350,34 @@ export default function ApprovalQueue() {
     },
   ];
 
+  // Batch status badge
+  const getBatchStatusBadge = (status) => {
+    const variants = {
+      pending: { color: 'bg-yellow-50 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-300', label: 'ממתין' },
+      editing: { color: 'bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300', label: 'בעריכה' },
+      approved: { color: 'bg-green-50 text-green-700 dark:bg-green-900/30 dark:text-green-300', label: 'אושר' },
+      executing: { color: 'bg-purple-50 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300', label: 'מבצע' },
+      executed: { color: 'bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-300', label: 'בוצע' },
+      cancelled: { color: 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300', label: 'בוטל' },
+      failed: { color: 'bg-red-50 text-red-700 dark:bg-red-900/30 dark:text-red-300', label: 'נכשל' },
+    };
+    const v = variants[status] || variants.pending;
+    return <Badge className={v.color}>{v.label}</Badge>;
+  };
+
+  // Count stats
+  const pendingBatches = batches.filter(b => ['pending', 'editing'].includes(b.status)).length;
+  const executedBatches = batches.filter(b => b.status === 'executed').length;
+  const failedBatches = batches.filter(b => ['cancelled', 'failed'].includes(b.status)).length;
+  const pendingLegacy = legacyApprovals.filter(a => a.status === 'pending').length;
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-slate-800 dark:text-slate-200">תור אישורים</h1>
           <p className="text-slate-500 dark:text-slate-400 mt-1">
-            {approvals.filter(a => a.status === 'pending').length} בקשות ממתינות
+            {pendingBatches + pendingLegacy} בקשות ממתינות
           </p>
         </div>
         <Button
@@ -350,7 +399,7 @@ export default function ApprovalQueue() {
           <SelectContent className="dark:bg-slate-800 dark:border-slate-700">
             <SelectItem value="pending" className="dark:text-slate-200">ממתינים</SelectItem>
             <SelectItem value="completed" className="dark:text-slate-200">אושרו</SelectItem>
-            <SelectItem value="cancelled" className="dark:text-slate-200">נדחו</SelectItem>
+            <SelectItem value="cancelled" className="dark:text-slate-200">נדחו/נכשלו</SelectItem>
             <SelectItem value="all" className="dark:text-slate-200">הכל</SelectItem>
           </SelectContent>
         </Select>
@@ -364,7 +413,8 @@ export default function ApprovalQueue() {
               <div>
                 <p className="text-sm text-slate-600 dark:text-slate-400">ממתינים</p>
                 <p className="text-2xl font-bold dark:text-slate-200">
-                  {approvals.filter(a => a.status === 'pending').length}
+                  {pendingBatches}
+                  {pendingLegacy > 0 && <span className="text-sm text-slate-400 mr-1">(+{pendingLegacy} ישנים)</span>}
                 </p>
               </div>
               <Clock className="w-8 h-8 text-yellow-600" />
@@ -375,9 +425,9 @@ export default function ApprovalQueue() {
           <CardContent className="pt-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-slate-600 dark:text-slate-400">אושרו</p>
+                <p className="text-sm text-slate-600 dark:text-slate-400">בוצעו</p>
                 <p className="text-2xl font-bold text-green-600">
-                  {approvals.filter(a => a.status === 'completed').length}
+                  {executedBatches}
                 </p>
               </div>
               <CheckCircle className="w-8 h-8 text-green-600" />
@@ -388,9 +438,9 @@ export default function ApprovalQueue() {
           <CardContent className="pt-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-slate-600 dark:text-slate-400">נדחו</p>
+                <p className="text-sm text-slate-600 dark:text-slate-400">בוטלו/נכשלו</p>
                 <p className="text-2xl font-bold text-red-600">
-                  {approvals.filter(a => a.status === 'cancelled').length}
+                  {failedBatches}
                 </p>
               </div>
               <XCircle className="w-8 h-8 text-red-600" />
@@ -399,21 +449,134 @@ export default function ApprovalQueue() {
         </Card>
       </div>
 
-      {/* Table */}
-      {approvals.length === 0 && !isLoading ? (
-        <EmptyState
-          icon={CheckCircle}
-          title="אין בקשות אישור"
-          description="כל הבקשות טופלו"
-        />
-      ) : (
-        <DataTable
-          columns={columns}
-          data={approvals}
-          isLoading={isLoading}
-          emptyMessage="אין תוצאות"
-        />
-      )}
+      {/* Tabs: Batches vs Legacy */}
+      <Tabs value={activeTab} onValueChange={setActiveTab}>
+        <TabsList>
+          <TabsTrigger value="batches" className="gap-2">
+            <Package className="w-4 h-4" />
+            חבילות אישור ({batches.length})
+          </TabsTrigger>
+          {legacyApprovals.length > 0 && (
+            <TabsTrigger value="legacy" className="gap-2">
+              <AlertTriangle className="w-4 h-4" />
+              אישורים ישנים ({legacyApprovals.length})
+            </TabsTrigger>
+          )}
+        </TabsList>
+
+        {/* Batches Tab */}
+        <TabsContent value="batches" className="mt-4">
+          {batches.length === 0 && !batchesLoading ? (
+            <EmptyState
+              icon={CheckCircle}
+              title="אין חבילות אישור"
+              description="כל החבילות טופלו"
+            />
+          ) : (
+            <div className="space-y-3">
+              {batches.map(batch => {
+                const isExpired = batch.expires_at && new Date(batch.expires_at) < new Date();
+                const enabledActions = (batch.actions_current || []).filter(a => a.enabled).length;
+                const totalActions = (batch.actions_current || []).length;
+                
+                return (
+                  <Card key={batch.id} className="hover:shadow-md transition-shadow">
+                    <CardContent className="pt-4">
+                      <div className="flex items-start justify-between">
+                        <div className="flex-1 space-y-2">
+                          <div className="flex items-center gap-2">
+                            {getBatchStatusBadge(batch.status)}
+                            {isExpired && ['pending', 'editing'].includes(batch.status) && (
+                              <Badge className="bg-orange-100 text-orange-700">
+                                <Clock className="w-3 h-3 mr-1" />
+                                פג תוקף
+                              </Badge>
+                            )}
+                            <span className="text-sm text-slate-500">
+                              {enabledActions}/{totalActions} פעולות
+                            </span>
+                          </div>
+                          
+                          <h3 className="font-medium text-slate-800 dark:text-slate-200">
+                            {batch.automation_rule_name}
+                          </h3>
+                          
+                          <div className="flex items-center gap-4 text-sm text-slate-600 dark:text-slate-400">
+                            <span className="flex items-center gap-1">
+                              <Mail className="w-4 h-4" />
+                              {batch.mail_subject?.substring(0, 50) || '-'}
+                            </span>
+                            <span className="flex items-center gap-1">
+                              <User className="w-4 h-4" />
+                              {batch.mail_from?.split('@')[0] || '-'}
+                            </span>
+                          </div>
+                          
+                          <p className="text-xs text-slate-500">
+                            נוצר: {format(new Date(batch.created_date), 'dd/MM/yyyy HH:mm')}
+                            {batch.approved_at && ` | אושר: ${format(new Date(batch.approved_at), 'dd/MM/yyyy HH:mm')}`}
+                          </p>
+                        </div>
+                        
+                        <div className="flex gap-2">
+                          {['pending', 'editing'].includes(batch.status) && (
+                            <>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => navigate(createPageUrl('ApprovalBatchEdit') + `?batchId=${batch.id}`)}
+                                className="gap-1"
+                              >
+                                <Edit className="w-4 h-4" />
+                                עריכה
+                              </Button>
+                            </>
+                          )}
+                          {['executed', 'failed'].includes(batch.status) && (
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => navigate(createPageUrl('ApprovalBatchEdit') + `?batchId=${batch.id}`)}
+                            >
+                              פרטים
+                            </Button>
+                          )}
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                );
+              })}
+            </div>
+          )}
+        </TabsContent>
+
+        {/* Legacy Tab */}
+        <TabsContent value="legacy" className="mt-4">
+          {legacyApprovals.length === 0 ? (
+            <EmptyState
+              icon={CheckCircle}
+              title="אין אישורים ישנים"
+              description="כל האישורים הישנים טופלו"
+            />
+          ) : (
+            <>
+              <div className="bg-amber-50 dark:bg-amber-900/20 p-3 rounded-lg mb-4 flex items-center gap-2">
+                <AlertTriangle className="w-5 h-5 text-amber-600" />
+                <span className="text-amber-700 dark:text-amber-400 text-sm">
+                  אלו אישורים מהמערכת הישנה. אישורים חדשים נוצרים כחבילות.
+                </span>
+              </div>
+              <DataTable
+                columns={columns}
+                data={legacyApprovals}
+                isLoading={legacyLoading}
+                emptyMessage="אין תוצאות"
+              />
+            </>
+          )}
+        </TabsContent>
+      </Tabs>
 
       {/* Details/Rejection Dialog */}
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
