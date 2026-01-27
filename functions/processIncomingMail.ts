@@ -720,7 +720,6 @@ Deno.serve(async (req) => {
               console.log(`[Automation] ▶️ Executing rule "${rule.name}" (ID: ${rule.id}) on mail ${mail.id}`);
               
               // Call execution function
-              // 🔥 FIX: Destructure { data, error } correctly
               const invokeResponse = await base44.functions.invoke('executeAutomationRule', {
                 mailId: mail.id,
                 ruleId: rule.id,
@@ -770,25 +769,48 @@ Deno.serve(async (req) => {
           if (mailActionsBuffer.length > 0) {
             console.log(`[Automation] 📦 Creating approval batch with ${mailActionsBuffer.length} actions for mail ${mail.id}`);
             
+            const batchPayload = {
+              mailId: mail.id,
+              actionsToApprove: mailActionsBuffer,
+              extractedInfo: aggregatedExtractedInfo
+            };
+
+            let batchData = null;
+            let batchError = null;
+
             try {
-              // 🔥 FIX: Destructure { data, error } for aggregateApprovalBatch too
-              const batchInvoke = await base44.functions.invoke('aggregateApprovalBatch', {
-                mailId: mail.id,
-                actionsToApprove: mailActionsBuffer,
-                extractedInfo: aggregatedExtractedInfo
-              });
+              // 🔄 Attempt 1: Try CamelCase (Standard)
+              console.log('[Automation] Trying invoke: aggregateApprovalBatch');
+              const batchInvoke1 = await base44.functions.invoke('aggregateApprovalBatch', batchPayload);
               
-              const batchData = batchInvoke.data || {};
-              const batchError = batchInvoke.error;
-              
-              if (batchError || !batchData.success) {
-                console.error(`[Automation] ❌ Batch creation failed:`, batchError || batchData);
-              } else {
-                totalBatchesCreated++;
-                console.log(`[Automation] ✅ Batch created successfully for mail ${mail.id}`);
+              if (batchInvoke1.error && (batchInvoke1.error.status === 404 || batchInvoke1.error.message?.includes('404'))) {
+                 throw new Error('404 Not Found');
               }
-            } catch (batchError) {
-              console.error(`[Automation] ❌ Exception calling aggregateApprovalBatch:`, batchError);
+              
+              batchData = batchInvoke1.data;
+              batchError = batchInvoke1.error;
+
+            } catch (e1) {
+              // 🔄 Attempt 2: Try Kebab-Case (Fallback for auto-slugified names)
+              console.warn('[Automation] ⚠️ aggregateApprovalBatch failed (404/Error), trying fallback: aggregate-approval-batch');
+              
+              try {
+                const batchInvoke2 = await base44.functions.invoke('aggregate-approval-batch', batchPayload);
+                batchData = batchInvoke2.data;
+                batchError = batchInvoke2.error;
+                console.log('[Automation] ✅ Fallback invocation succeeded');
+              } catch (e2) {
+                console.error('[Automation] ❌ Fallback invocation also failed:', e2);
+                // Give up
+                batchError = e2;
+              }
+            }
+            
+            if (batchError || (batchData && !batchData.success)) {
+              console.error(`[Automation] ❌ Batch creation failed after retries:`, batchError || batchData);
+            } else if (batchData) {
+              totalBatchesCreated++;
+              console.log(`[Automation] ✅ Batch created successfully for mail ${mail.id}`);
             }
           }
           
