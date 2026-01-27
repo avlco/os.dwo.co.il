@@ -711,29 +711,61 @@ Deno.serve(async (req) => {
           
           console.log(`[Automation] 🎯 Found ${matchingRules.length} matching rule(s) for mail ${mail.id}`);
           
+          // Collect all actions requiring approval
+          const allActionsToApprove = [];
+
           for (const rule of matchingRules) {
             try {
               console.log(`[Automation] ▶️ Executing rule "${rule.name}" (ID: ${rule.id}) on mail ${mail.id}`);
-              
+
               const automationResult = await base44.functions.invoke('executeAutomationRule', {
                 mailId: mail.id,
                 ruleId: rule.id,
                 testMode: false
               });
-              
+
               totalRulesExecuted++;
-              
+
               if (automationResult.error) {
                 console.error(`[Automation] ❌ Rule "${rule.name}" failed:`, automationResult.error);
                 totalRulesFailed++;
               } else {
-                console.log(`[Automation] ✅ Rule "${rule.name}" executed successfully`);
-                totalRulesSuccess++;
+                // Check if actions are ready for approval (new aggregation flow)
+                if (automationResult.data?.status === 'actions_ready_for_approval') {
+                  console.log(`[Automation] 📦 Rule "${rule.name}" returned ${automationResult.data.actions_count} action(s) for approval`);
+                  allActionsToApprove.push(...(automationResult.data.actions || []));
+                } else {
+                  console.log(`[Automation] ✅ Rule "${rule.name}" executed successfully`);
+                  totalRulesSuccess++;
+                }
               }
-              
+
             } catch (ruleError) {
               console.error(`[Automation] ❌ Exception executing rule "${rule.name}":`, ruleError);
               totalRulesFailed++;
+            }
+          }
+
+          // If there are actions to approve, aggregate them and send unified approval emails
+          if (allActionsToApprove.length > 0) {
+            try {
+              console.log(`[Automation] 🔄 Aggregating ${allActionsToApprove.length} action(s) for approval`);
+
+              const aggregationResult = await base44.functions.invoke('aggregateApprovalBatch', {
+                mailId: mail.id,
+                actionsToApprove: allActionsToApprove,
+                extractedInfo: {
+                  case_id: mail.inferred_case_id,
+                  client_id: mail.inferred_client_id
+                }
+              });
+
+              if (aggregationResult.data?.success) {
+                console.log(`[Automation] ✅ Created ${aggregationResult.data.batches_created} aggregated approval batch(es)`);
+                totalRulesSuccess += aggregationResult.data.batches_created;
+              }
+            } catch (aggregationError) {
+              console.error(`[Automation] ❌ Failed to aggregate approvals:`, aggregationError);
             }
           }
           
