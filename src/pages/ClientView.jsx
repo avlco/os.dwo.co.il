@@ -178,20 +178,27 @@ export default function ClientView() {
   // --- Update Mutation ---
   const updateMutation = useMutation({
     mutationFn: async (data) => {
-      // 1. שמירה בדאטה-בייס
+      // 1. עדכון הלקוח במסד הנתונים הרגיל
       const response = await base44.entities.Client.update(clientId, data);
       
-      // 2. לוגיקה לשינוי שם תיקייה בדרופבוקס (אם השם השתנה)
+      // 2. בדיקה: האם השם השתנה?
       if (client.name && data.name && client.name !== data.name) {
         try {
-          console.log(`[ClientView] Detected name change. Updating Dropbox folder...`);
-          await base44.functions.invoke('renameClientFolder', {
+          console.log(`[ClientView] Name changed. Updating Dropbox...`);
+          
+          // קריאה לפונקציה שעדכנו בשרת
+          // שים לב: אנחנו משתמשים בשם הפונקציה המקורית 'createClientFolder'
+          // אבל שולחים לה 'action: rename'
+          await base44.functions.invoke('createClientFolder', {
+            action: 'rename',
             oldName: client.name,
             newName: data.name,
             clientNumber: client.client_number
           });
+          
         } catch (e) {
           console.warn('[ClientView] Failed to rename dropbox folder:', e);
+          // לא זורקים שגיאה כדי לא לבטל את השמירה המוצלחת בדאטה-בייס
         }
       }
       return response;
