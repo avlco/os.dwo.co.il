@@ -1,135 +1,141 @@
-/**
- * Rollback Manager
- * Tracks created entities and provides rollback capability
- * for transactional integrity in batch operations
- */
+// @ts-nocheck
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
+const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? '';
+const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
+
+export interface RollbackAction {
+  action_type: string;
+  action_id?: string;
+  rollback_data: Record<string, any>;
+  executed: boolean;
+}
+
+/**
+ * מנהל Rollback - שומר פעולות שבוצעו כדי לבטל במקרה של כישלון
+ */
 export class RollbackManager {
-  constructor(base44) {
-    this.base44 = base44;
-    this.actions = [];
+  private actions: RollbackAction[] = [];
+  private supabase;
+  
+  constructor() {
+    this.supabase = createClient(supabaseUrl, supabaseServiceKey);
   }
   
   /**
-   * Register an action for potential rollback
-   * @param {object} action - { type: string, id: string, metadata?: object }
+   * רישום פעולה שבוצעה
    */
-  register(action) {
+  registerAction(action: RollbackAction) {
     this.actions.push(action);
-    console.log(`[Rollback] Registered: ${action.type} (ID: ${action.id || 'N/A'})`);
+    console.log(`[Rollback] Registered: ${action.action_type} (ID: ${action.action_id || 'N/A'})`);
   }
   
   /**
-   * Rollback all registered actions in reverse order
-   * @returns {Promise<{ success: boolean, errors: object[] }>}
+   * ביטול כל הפעולות שבוצעו
    */
-  async rollbackAll() {
-    if (this.actions.length === 0) {
-      return { success: true, errors: [] };
-    }
+  async rollbackAll(): Promise<void> {
+    console.log(`[Rollback] 🔄 Starting rollback of ${this.actions.length} action(s)`);
     
-    console.log(`[Rollback] 🔄 Rolling back ${this.actions.length} action(s)`);
-    const errors = [];
+    let successCount = 0;
+    let failCount = 0;
     
-    // Rollback in reverse order (LIFO)
+    // בצע rollback בסדר הפוך (LIFO)
     for (let i = this.actions.length - 1; i >= 0; i--) {
       const action = this.actions[i];
+      
+      if (!action.executed) {
+        console.log(`[Rollback] ⏭️ Skipping ${action.action_type} (not executed)`);
+        continue;
+      }
+      
       try {
-        await this.rollbackAction(action);
-        console.log(`[Rollback] ✅ Rolled back: ${action.type} (${action.id})`);
+        await this.rollbackSingleAction(action);
+        successCount++;
+        console.log(`[Rollback] ✅ Rolled back: ${action.action_type}`);
       } catch (error) {
-        console.error(`[Rollback] ❌ Failed: ${action.type}:`, error.message);
-        errors.push({ 
-          action: action.type, 
-          id: action.id, 
-          error: error.message 
-        });
+        failCount++;
+        console.error(`[Rollback] ❌ Failed to rollback ${action.action_type}:`, error);
       }
     }
     
-    // Log rollback errors if any
-    if (errors.length > 0) {
-      try {
-        await this.base44.entities.Activity.create({
-          activity_type: 'automation_log',
-          status: 'failed',
-          title: 'Rollback encountered errors',
-          description: `Failed to rollback ${errors.length} action(s)`,
-          metadata: { 
-            errors, 
-            timestamp: new Date().toISOString(),
-            rollback_attempted: this.actions.length
-          }
-        });
-      } catch (e) {
-        console.error('[Rollback] Failed to log rollback errors:', e);
-      }
-    }
-    
-    return { 
-      success: errors.length === 0, 
-      errors 
-    };
+    console.log(`[Rollback] 🏁 Complete: ${successCount} successful, ${failCount} failed`);
   }
   
   /**
-   * Rollback a single action
-   * @param {object} action - The action to rollback
+   * ביטול פעולה בודדת
    */
-  async rollbackAction(action) {
-    if (!action.id) {
-      console.log(`[Rollback] Skipping ${action.type}: no ID`);
-      return;
-    }
-    
-    switch (action.type) {
+  private async rollbackSingleAction(action: RollbackAction): Promise<void> {
+    switch (action.action_type) {
       case 'create_task':
-        await this.base44.entities.Task.delete(action.id);
+        await this.rollbackTask(action);
         break;
-        
+      
       case 'billing':
-        await this.base44.entities.TimeEntry.delete(action.id);
+        await this.rollbackTimeEntry(action);
         break;
-        
+      
       case 'create_alert':
-      case 'approval':
-        await this.base44.entities.Activity.delete(action.id);
+        await this.rollbackActivity(action);
         break;
-        
-      case 'create_deadline':
-        await this.base44.entities.Deadline.delete(action.id);
-        break;
-        
+      
       case 'calendar_event':
-        // Note: Google Calendar events cannot be easily rolled back
-        // We would need to call the Google Calendar API to delete
-        console.warn(`[Rollback] Calendar event ${action.id} requires manual cleanup`);
+        await this.rollbackCalendarEvent(action);
         break;
-        
-      case 'approval_batch':
-        // Update batch status to 'cancelled' instead of deleting
-        await this.base44.entities.ApprovalBatch.update(action.id, {
-          status: 'cancelled',
-          cancellation_reason: 'Rolled back due to execution failure'
-        });
+      
+      case 'send_email':
+        // לא ניתן לבטל מייל שנשלח - רק לתעד
+        console.log(`[Rollback] ⚠️ Cannot rollback sent email`);
         break;
-        
+      
+      case 'save_file':
+        await this.rollbackDropboxUpload(action);
+        break;
+      
       default:
-        console.warn(`[Rollback] Unknown action type: ${action.type}`);
+        console.log(`[Rollback] ⚠️ Unknown action type: ${action.action_type}`);
     }
   }
   
-  /**
-   * Clear all registered actions (use after successful completion)
-   */
-  clear() {
-    this.actions = [];
+  private async rollbackTask(action: RollbackAction) {
+    if (!action.action_id) return;
+    
+    const { error } = await this.supabase
+      .from('Task')
+      .delete()
+      .eq('id', action.action_id);
+    
+    if (error) throw error;
   }
   
-  /**
-   * Get count of registered actions
-   */
-  get count() {
-    return this.actions.length;
+  private async rollbackTimeEntry(action: RollbackAction) {
+    if (!action.action_id) return;
+    
+    const { error } = await this.supabase
+      .from('TimeEntry')
+      .delete()
+      .eq('id', action.action_id);
+    
+    if (error) throw error;
+  }
+  
+  private async rollbackActivity(action: RollbackAction) {
+    if (!action.action_id) return;
+    
+    const { error } = await this.supabase
+      .from('Activity')
+      .delete()
+      .eq('id', action.action_id);
+    
+    if (error) throw error;
+  }
+  
+  private async rollbackCalendarEvent(action: RollbackAction) {
+    // TODO: מחק אירוע מ-Google Calendar
+    console.log(`[Rollback] TODO: Delete calendar event ${action.action_id}`);
+  }
+  
+  private async rollbackDropboxUpload(action: RollbackAction) {
+    // TODO: מחק קבצים מ-Dropbox
+    console.log(`[Rollback] TODO: Delete Dropbox files at ${action.rollback_data.path}`);
   }
 }
