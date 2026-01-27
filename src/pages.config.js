@@ -15,6 +15,8 @@ import MailView from './pages/MailView';
 import Settings from './pages/Settings';
 import Tasks from './pages/Tasks';
 import Workbench from './pages/Workbench';
+import ApproveBatch from './pages/ApproveBatch';
+import ApprovalBatchEdit from './pages/ApprovalBatchEdit';
 import __Layout from './Layout.jsx';
 
 
@@ -36,6 +38,8 @@ export const PAGES = {
     "Settings": Settings,
     "Tasks": Tasks,
     "Workbench": Workbench,
+    "ApproveBatch": ApproveBatch,
+    "ApprovalBatchEdit": ApprovalBatchEdit,
 }
 
 export const pagesConfig = {
