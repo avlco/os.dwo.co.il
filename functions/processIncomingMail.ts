@@ -727,20 +727,21 @@ Deno.serve(async (req) => {
               totalRulesExecuted++;
 
               if (automationResult.error) {
-                console.error(`[Automation] ❌ Rule "${rule.name}" failed:`, automationResult.error);
-                totalRulesFailed++;
-              } else {
-                // Check if actions are ready for approval (new aggregation flow)
-                if (automationResult.data?.status === 'actions_ready_for_approval') {
-                  console.log(`[Automation] 📦 Rule "${rule.name}" returned ${automationResult.data.actions_count} action(s) for approval`);
-                  allActionsToApprove.push(...(automationResult.data.actions || []));
-                } else if (automationResult.data?.status === 'no_actions_for_approval') {
-                  console.log(`[Automation] ℹ️ Rule "${rule.name}" required approval but generated no actions`);
+                  console.error(`[Automation] ❌ Rule "${rule.name}" failed:`, automationResult.error);
+                  totalRulesFailed++;
                 } else {
-                  console.log(`[Automation] ✅ Rule "${rule.name}" executed successfully`);
-                  totalRulesSuccess++;
+                  console.log(`[Automation] Result from rule "${rule.name}": status=${automationResult.data?.status}, actions_count=${automationResult.data?.actions_count}`);
+                  // Check if actions are ready for approval (new aggregation flow)
+                  if (automationResult.data?.status === 'actions_ready_for_approval') {
+                    console.log(`[Automation] 📦 Rule "${rule.name}" returned ${automationResult.data.actions_count} action(s) for approval`);
+                    allActionsToApprove.push(...(automationResult.data.actions || []));
+                  } else if (automationResult.data?.status === 'no_actions_for_approval') {
+                    console.log(`[Automation] ℹ️ Rule "${rule.name}" required approval but generated no actions`);
+                  } else {
+                    console.log(`[Automation] ✅ Rule "${rule.name}" executed successfully (immediate dispatch)`);
+                    totalRulesSuccess++;
+                  }
                 }
-              }
 
             } catch (ruleError) {
               console.error(`[Automation] ❌ Exception executing rule "${rule.name}":`, ruleError);
@@ -751,7 +752,8 @@ Deno.serve(async (req) => {
           // If there are actions to approve, aggregate them and send unified approval emails
           if (allActionsToApprove.length > 0) {
             try {
-              console.log(`[Automation] 🔄 Aggregating ${allActionsToApprove.length} action(s) for approval`);
+              console.log(`[Automation] 🔄 Aggregating ${allActionsToApprove.length} action(s) for approval for mail ID: ${mail.id}`);
+              console.log(`[Automation] Actions to approve: ${JSON.stringify(allActionsToApprove.map(a => ({type: a.action_type, rule: a.rule_name, approver: a.approver_email})), null, 2)}`);
 
               const aggregationResult = await base44.functions.invoke('aggregateApprovalBatch', {
                 mailId: mail.id,

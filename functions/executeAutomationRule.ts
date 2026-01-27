@@ -579,7 +579,7 @@ Deno.serve(async (req) => {
       throw new Error(`Rule not found: ${ruleId}`);
     }
     ruleData = rule;
-    console.log(`[AutoRule] ✅ Rule found: "${rule.name}"`);
+    console.log(`[AutoRule] ✅ Rule found: "${rule.name}" (require_approval: ${rule.require_approval})`);
 
     // --- MAP: Extract Information ---
     let caseId = null;

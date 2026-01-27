@@ -14,6 +14,7 @@ const corsHeaders = {
  * שליחת מייל אישור מאוחד יחיד
  */
 Deno.serve(async (req) => {
+  console.log(`[AggregateApproval] 🚀 Function invoked`);
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
   }
@@ -21,6 +22,8 @@ Deno.serve(async (req) => {
   try {
     const base44 = createClientFromRequest(req);
     const { mailId, actionsToApprove, extractedInfo } = await req.json();
+    
+    console.log(`[AggregateApproval] 📥 Received: mailId=${mailId}, actionsToApprove.length=${actionsToApprove?.length}, extractedInfo=${JSON.stringify(extractedInfo)}`);
 
     if (!mailId || !Array.isArray(actionsToApprove) || actionsToApprove.length === 0) {
       return new Response(
@@ -46,7 +49,7 @@ Deno.serve(async (req) => {
     for (const action of actionsToApprove) {
       const approverEmail = action.approver_email;
       if (!approverEmail) {
-        console.warn('[AggregateApproval] ⚠️ Action without approver_email:', action);
+        console.warn('[AggregateApproval] ⚠️ Action without approver_email - rule:', action.rule_id, 'action_type:', action.action_type);
         continue;
       }
 
@@ -83,7 +86,7 @@ Deno.serve(async (req) => {
         if (existingBatches && existingBatches.length > 0) {
           // Update existing batch
           batch = existingBatches[0];
-          console.log(`[AggregateApproval] 🔄 Updating existing batch: ${batch.id}`);
+          console.log(`[AggregateApproval] 🔄 Updating existing batch: ${batch.id} for approver ${approverEmail}`);
 
           // Merge actions
           const existingActions = batch.actions_current || [];
@@ -106,8 +109,10 @@ Deno.serve(async (req) => {
           });
 
           batch = await base44.asServiceRole.entities.ApprovalBatch.get(batch.id);
+          console.log(`[AggregateApproval] ✅ Batch updated and refetched: ${batch.id}`);
         } else {
           // Create new batch
+          console.log(`[AggregateApproval] ➕ Creating NEW batch for approver ${approverEmail}`);
           const actionsWithKeys = approverActions.map((action, index) => ({
             ...action,
             idempotency_key: `${Date.now()}_${index}_${action.action_type}`
@@ -196,7 +201,7 @@ Deno.serve(async (req) => {
 
           console.log(`[AggregateApproval] ✅ Approval email sent to ${approverEmail}`);
         } catch (emailError) {
-          console.error('[AggregateApproval] ❌ Failed to send approval email:', emailError.message);
+          console.error('[AggregateApproval] ❌ Failed to send approval email:', emailError.message, emailError.stack);
         }
 
         createdBatches.push({
@@ -222,7 +227,7 @@ Deno.serve(async (req) => {
     );
 
   } catch (error) {
-    console.error('[AggregateApproval] ❌ Error:', error);
+    console.error('[AggregateApproval] ❌ Error:', error.message, 'Stack:', error.stack);
     return new Response(
       JSON.stringify({ error: error.message }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
