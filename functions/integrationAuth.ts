@@ -4,37 +4,18 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.6';
 const APP_BASE_URL = "https://dwo.base44.app"; 
 const REDIRECT_URI = `${APP_BASE_URL}/Settings`; 
 
-// ✅ NEW: Encryption key validation
+// ✅ Encryption key validation
 function validateEncryptionKey() {
   const key = Deno.env.get("ENCRYPTION_KEY");
-  
   if (!key) {
     throw new Error("⚠️ CRITICAL: ENCRYPTION_KEY environment variable is not set!");
   }
-  
   if (key.length < 32) {
-    throw new Error(
-      `⚠️ CRITICAL: ENCRYPTION_KEY must be at least 32 characters. Current length: ${key.length}`
-    );
+    throw new Error(`⚠️ CRITICAL: ENCRYPTION_KEY must be at least 32 characters.`);
   }
-  
-  // בדיקת weak keys
-  const weakKeys = ['12345678901234567890123456789012', 'test', 'development', 'password'];
-  const keyLower = key.toLowerCase().slice(0, 32);
-  if (weakKeys.includes(keyLower)) {
-    console.warn("⚠️ WARNING: Using a weak/default ENCRYPTION_KEY. Please use a strong random key in production!");
-  }
-  
-  console.log("✅ [Encryption] Key validated successfully");
 }
 
-// Run validation on startup
-try {
-  validateEncryptionKey();
-} catch (error) {
-  console.error(error.message);
-  // Don't throw - allow function to start but log prominently
-}
+try { validateEncryptionKey(); } catch (error) { console.error(error.message); }
 
 function getProviderConfig(providerRaw) {
     const provider = providerRaw.toLowerCase().trim();
@@ -73,21 +54,18 @@ async function encrypt(text) {
         return `${ivHex}:${encryptedHex}`;
     } catch (e) {
         console.error("[Encryption] Failed to encrypt token:", e);
-        throw new Error(`Token encryption failed: ${e.message}. Please check ENCRYPTION_KEY configuration.`);
+        throw new Error(`Token encryption failed: ${e.message}`);
     }
 }
 
 async function handleRequest(req) {
-    // שימוש בקליינט משתמש בלבד - הכי יציב
     const base44 = createClientFromRequest(req);
     const user = await base44.auth.me();
     
     if (!user) throw new Error("Unauthorized");
     
-    // בדיקת אדמין קריטית
-    if (user.role !== 'admin') {
-        throw new Error("Access Denied: Only admins can manage integrations.");
-    }
+    // ⚠️ FIXED: Removed Admin check to allow lawyers to connect their own accounts
+    // if (user.role !== 'admin') { throw new Error("Access Denied"); }
 
     let body;
     try { body = await req.json(); } catch (e) { throw new Error("Invalid JSON body"); }
@@ -102,15 +80,14 @@ async function handleRequest(req) {
                 client_id: config.clientId,
                 redirect_uri: REDIRECT_URI,
                 response_type: 'code',
-                // ✅ UPDATED: Minimal scopes (readonly + send + labels)
                 scope: 'https://www.googleapis.com/auth/gmail.readonly ' +
                       'https://www.googleapis.com/auth/gmail.send ' +
                       'https://www.googleapis.com/auth/gmail.labels ' +
                       'https://www.googleapis.com/auth/calendar ' +
-                      'https://www.googleapis.com/auth/spreadsheets ' +  // ⭐ Google Sheets
+                      'https://www.googleapis.com/auth/spreadsheets ' +
                       'https://www.googleapis.com/auth/drive.file',
                 access_type: 'offline',
-                prompt: 'consent',
+                prompt: 'consent', // Forces refresh token on every login
                 state: state,
                 include_granted_scopes: 'true'
             });
@@ -130,7 +107,7 @@ async function handleRequest(req) {
 
     if (action === 'handleCallback') {
         const config = getProviderConfig(provider);
-        console.log(`[DEBUG] Callback for ${provider}`);
+        console.log(`[DEBUG] Callback for ${provider} | User: ${user.id}`);
 
         let tokenRes;
         if (config.type === 'google') {
@@ -168,12 +145,18 @@ async function handleRequest(req) {
         const encryptedRefresh = tokens.refresh_token ? await encrypt(tokens.refresh_token) : null;
         const expiresAt = Date.now() + ((tokens.expires_in || 3600) * 1000);
 
-        // שימוש בקליינט הרגיל לשליפה - זה עובד בוודאות!
-        console.log(`[DEBUG] Fetching existing connections (User Client)...`);
-        const allConnections = await base44.entities.IntegrationConnection.list({ limit: 100 });
-        const items = Array.isArray(allConnections) ? allConnections : (allConnections.data || []);
+        // ⚠️ FIXED: Robust filtering to find existing connection
+        console.log(`[DEBUG] Looking up existing connection for user ${user.id}...`);
         
-        const itemToUpdate = items.find(c => c.provider === config.type);
+        // Use .filter instead of .list for precise lookup
+        const existingConnections = await base44.entities.IntegrationConnection.filter({
+            user_id: user.id,
+            provider: config.type
+        });
+        
+        // Safety check if filter returns object with data or array
+        const items = Array.isArray(existingConnections) ? existingConnections : (existingConnections.data || []);
+        const itemToUpdate = items[0]; // Should be unique per user+provider
 
         const record = {
             user_id: user.id,
@@ -182,23 +165,23 @@ async function handleRequest(req) {
             expires_at: expiresAt,
             metadata: { 
                 last_updated: new Date().toISOString(),
-                // ✅ NEW: Reset gmail_sync on reconnect
-                gmail_sync: null
+                gmail_sync: null // Reset sync state
             },
             is_active: true
         };
 
-        if (encryptedRefresh) {
-            record.refresh_token_encrypted = encryptedRefresh;
-        }
-
-        if (itemToUpdate && itemToUpdate.id) {
-            console.log(`[DEBUG] Updating ID: ${itemToUpdate.id}`);
+        if (itemToUpdate) {
+            console.log(`[DEBUG] Updating existing connection: ${itemToUpdate.id}`);
+            // Only overwrite refresh token if a new one was provided
+            if (encryptedRefresh) {
+                record.refresh_token_encrypted = encryptedRefresh;
+            }
             await base44.entities.IntegrationConnection.update(itemToUpdate.id, record);
         } else {
             console.log(`[DEBUG] Creating NEW connection`);
             await base44.entities.IntegrationConnection.create({
                 ...record,
+                // If create, we must have a refresh token. If missing, we mark it.
                 refresh_token_encrypted: encryptedRefresh || "MISSING"
             });
         }
