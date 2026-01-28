@@ -142,7 +142,7 @@ async function executeBatchActions(base44, batch, context) {
           break;
 
         case 'create_task':
-          result = await base44.entities.Task.create({
+          result = await base44.asServiceRole.entities.Task.create({
             title: config.title,
             description: config.description,
             case_id: batch.case_id,
@@ -153,7 +153,7 @@ async function executeBatchActions(base44, batch, context) {
           break;
 
         case 'billing':
-          result = await base44.entities.TimeEntry.create({
+          result = await base44.asServiceRole.entities.TimeEntry.create({
             case_id: batch.case_id,
             description: config.description || 'Automated billing',
             hours: config.hours,

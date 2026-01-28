@@ -153,16 +153,16 @@ Deno.serve(async (req) => {
         
         if (batch.case_id) {
           try {
-            const caseData = await base44.entities.Case.get(batch.case_id);
+            const caseData = await base44.asServiceRole.entities.Case.get(batch.case_id);
             caseName = caseData?.case_number || caseData?.title;
-          } catch (e) { /* ignore */ }
+          } catch (e) { console.warn('[HandleBatch] Failed to fetch case:', e.message); }
         }
         
         if (batch.client_id) {
           try {
-            const client = await base44.entities.Client.get(batch.client_id);
+            const client = await base44.asServiceRole.entities.Client.get(batch.client_id);
             clientName = client?.name;
-          } catch (e) { /* ignore */ }
+          } catch (e) { console.warn('[HandleBatch] Failed to fetch client:', e.message); }
         }
 
         return Response.json(

@@ -177,8 +177,7 @@ Deno.serve(async (req) => {
         batch_id: batch.id,
         nonce_hash: nonceHash,
         expires_at: new Date(payload.exp).toISOString(),
-        used_at: new Date().toISOString(),
-        action: 'reject'
+        used_at: new Date().toISOString()
       });
     } catch (e) {
       // If nonce exists
