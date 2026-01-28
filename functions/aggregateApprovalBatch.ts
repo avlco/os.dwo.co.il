@@ -328,8 +328,8 @@ Deno.serve(async (req) => {
         const rejectToken = await generateApprovalToken({ batch_id: batch.id, approver_email: approverEmail, action: 'reject' }, secret);
 
         // 🔥 FIX: USING KEBAB-CASE FOR PUBLIC ENDPOINTS
-        const approveUrl = `${functionsBase}/approveAutomationBatchPublic?token=${approveToken}`;
-        const rejectUrl = `${functionsBase}/rejectAutomationBatchPublic?token=${rejectToken}`;
+       const approveUrl = `${functionsBase}/approve-automation-batch-public?token=${approveToken}`;
+       const rejectUrl = `${functionsBase}/reject-automation-batch-public?token=${rejectToken}`;
         const editUrl = `${appUrl}/ApprovalBatchEdit?batchId=${batch.id}`;
 
         // 5. PREPARE EMAIL CONTENT
