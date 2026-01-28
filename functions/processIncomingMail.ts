@@ -131,8 +131,6 @@ async function refreshGoogleToken(refreshToken, connection, base44) {
   const data = await res.json();
   if (data.error) throw new Error(`Token refresh failed: ${JSON.stringify(data)}`);
   
-  // Ideally, save the new token back to DB here if needed, 
-  // but for this flow returning it allows immediate continuation.
   return data.access_token;
 }
 
@@ -165,20 +163,22 @@ async function executeSync(base44, user) {
     
     if (!lastMail) {
       // SCENARIO 1: FIRST SYNC (Last 24 Hours Only)
-      // This prevents the "500 Timeout" by not fetching years of history
       const oneDayAgo = Math.floor((Date.now() - 24 * 60 * 60 * 1000) / 1000);
       query = `after:${oneDayAgo}`;
       console.log(`[Background] 🆕 First Sync detected. Query: ${query} (Last 24h)`);
     } else {
-      // SCENARIO 2: DELTA SYNC
-      // Fetch only what came AFTER the last mail we have (+1 second buffer)
-      const lastTime = Math.floor(new Date(lastMail.received_at).getTime() / 1000) + 1;
+      // SCENARIO 2: DELTA SYNC WITH OVERLAP (Fixing the Blind Spot)
+      // Instead of +1 second, we go BACK 10 minutes to ensure no gaps.
+      // Duplicates will be filtered by the existingIds check later.
+      const bufferMinutes = 10; 
+      const lastTime = Math.floor((new Date(lastMail.received_at).getTime() - (bufferMinutes * 60 * 1000)) / 1000);
+      
       query = `after:${lastTime}`;
-      console.log(`[Background] 🔄 Delta Sync. Query: ${query} (Since last mail)`);
+      console.log(`[Background] 🔄 Delta Sync (Overlap ${bufferMinutes}m). Query: ${query}`);
     }
 
     // C. FETCH LIST FROM GMAIL
-    // Using maxResults=50 to keep execution fast and within limits
+    // Using maxResults=50 to keep execution fast
     let listUrl = `https://gmail.googleapis.com/gmail/v1/users/me/messages?q=${encodeURIComponent(query)}&maxResults=50`;
     
     let listRes = await fetch(listUrl, { headers: { Authorization: `Bearer ${accessToken}` } });
@@ -195,15 +195,16 @@ async function executeSync(base44, user) {
       return;
     }
 
-    console.log(`[Background] 📥 Found ${listData.messages.length} new messages. Fetching details...`);
+    console.log(`[Background] 📥 Found ${listData.messages.length} potential messages. Fetching details...`);
 
     // D. FETCH DETAILS & SAVE
     const savedMails = [];
+    // Increase check range to ensuring we catch duplicates from the overlap
     const existingMailsList = await base44.entities.Mail.list('-received_at', 200); 
     const existingIds = new Set((existingMailsList.data || existingMailsList).map(m => m.external_id));
 
     for (const msg of listData.messages) {
-      if (existingIds.has(msg.id)) continue; // Skip duplicates
+      if (existingIds.has(msg.id)) continue; // Skip duplicates (Handles the overlap)
 
       try {
         const detailRes = await fetch(
@@ -226,7 +227,7 @@ async function executeSync(base44, user) {
       }
     }
 
-    console.log(`[Background] ✅ Saved ${savedMails.length} new mails.`);
+    console.log(`[Background] ✅ Saved ${savedMails.length} actual new mails.`);
 
     // E. TRIGGER AUTOMATION
     // Only run if we actually saved new mails
