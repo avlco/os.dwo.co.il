@@ -43,7 +43,6 @@ async function signData(data, secret) {
  * Generates a secure, signed token for public endpoints
  */
 async function generateApprovalToken(payload, secret) {
-  // Add expiration and nonce to payload
   const tokenPayload = {
     ...payload,
     exp: Date.now() + (60 * 60 * 1000), // 1 hour expiry
@@ -130,7 +129,7 @@ function generateEmailLayout(contentHtml, title, language = 'he') {
 // ==========================================
 // 3. RENDER LOGIC
 // ==========================================
-function renderApprovalEmail({ batch, approveUrl, rejectUrl, editUrl, language = 'he', caseName, clientName }) {
+function renderApprovalEmail({ batch, approveUrl, rejectUrl, editUrl, language = 'he', caseName }) {
   const isHebrew = language === 'he';
   const align = isHebrew ? 'right' : 'left';
   
@@ -243,29 +242,28 @@ Deno.serve(async (req) => {
 
   try {
     const base44 = createClientFromRequest(req);
-    const { mailId, actionsToApprove, extractedInfo } = await req.json();
+    // 1. RECEIVE userId
+    const { mailId, actionsToApprove, extractedInfo, userId } = await req.json();
     
     if (!mailId || !Array.isArray(actionsToApprove) || actionsToApprove.length === 0) {
       return new Response(JSON.stringify({ success: true, message: 'No actions' }), { headers: corsHeaders });
     }
 
-    // 1. DATA NORMALIZATION (Fix the NULL issue)
+    // 2. DATA NORMALIZATION
     const normalizedActions = actionsToApprove.map((action, index) => ({
       ...action,
-      // Map 'action' to 'action_type' if missing
       action_type: action.action_type || action.action || 'unknown',
-      // Ensure idempotency key
       idempotency_key: action.idempotency_key || `${mailId}_${index}_${Date.now()}`
     }));
 
-    // Fetch mail
     const mail = await base44.entities.Mail.get(mailId);
     if (!mail) throw new Error(`Mail not found: ${mailId}`);
 
     // Group by approver
     const actionsByApprover = {};
     for (const action of normalizedActions) {
-      const approverEmail = action.approver_email;
+      // NORMALIZE EMAIL TO LOWERCASE
+      const approverEmail = (action.approver_email || '').toLowerCase();
       if (approverEmail) {
         if (!actionsByApprover[approverEmail]) actionsByApprover[approverEmail] = [];
         actionsByApprover[approverEmail].push(action);
@@ -279,7 +277,7 @@ Deno.serve(async (req) => {
       try {
         const firstAction = approverActions[0];
         
-        // 2. CREATE / UPDATE BATCH
+        // 3. CREATE / UPDATE BATCH
         const existingBatches = await base44.asServiceRole.entities.ApprovalBatch.filter({
           mail_id: mailId,
           approver_email: approverEmail,
@@ -292,10 +290,11 @@ Deno.serve(async (req) => {
         if (existingBatches && existingBatches.length > 0) {
           batch = existingBatches[0];
           await base44.asServiceRole.entities.ApprovalBatch.update(batch.id, {
-            actions_current: approverActions, // Overwrite with newest logic for simplicity in this flow
-            expires_at: expiresAt.toISOString()
+            actions_current: approverActions,
+            expires_at: expiresAt.toISOString(),
+            user_id: userId || batch.user_id // Ensure userId is updated if missing
           });
-          batch.actions_current = approverActions; // update local ref
+          batch.actions_current = approverActions;
         } else {
           batch = await base44.asServiceRole.entities.ApprovalBatch.create({
             status: 'pending',
@@ -306,15 +305,16 @@ Deno.serve(async (req) => {
             mail_from: mail.sender_email,
             case_id: extractedInfo?.case_id || null,
             client_id: extractedInfo?.client_id || null,
-            approver_email: approverEmail, // IMPORTANT: Saves email correctly now
+            approver_email: approverEmail,
             expires_at: expiresAt.toISOString(),
             extracted_info: extractedInfo || {},
             actions_original: approverActions,
-            actions_current: approverActions
+            actions_current: approverActions,
+            user_id: userId // <--- CRITICAL: Saves user ownership
           });
         }
 
-        // 3. GENERATE TOKENS AND LINKS
+        // 4. GENERATE TOKENS AND LINKS (CORRECTED URLs)
         const secret = Deno.env.get('APPROVAL_HMAC_SECRET');
         if (!secret) {
           console.error('CRITICAL: APPROVAL_HMAC_SECRET is missing');
@@ -324,16 +324,15 @@ Deno.serve(async (req) => {
         const appUrl = Deno.env.get('APP_BASE_URL') || 'https://dwo.base44.app';
         const functionsBase = `${appUrl}/functions/v1`;
 
-        // Generate Tokens
         const approveToken = await generateApprovalToken({ batch_id: batch.id, approver_email: approverEmail, action: 'approve' }, secret);
         const rejectToken = await generateApprovalToken({ batch_id: batch.id, approver_email: approverEmail, action: 'reject' }, secret);
 
-        // Generate URLs (GET requests with token in query param)
-        const approveUrl = `${functionsBase}/approveAutomationBatchPublic?token=${approveToken}`;
-        const rejectUrl = `${functionsBase}/rejectAutomationBatchPublic?token=${rejectToken}`;
+        // 🔥 FIX: USING KEBAB-CASE FOR PUBLIC ENDPOINTS
+        const approveUrl = `${functionsBase}/approve-automation-batch-public?token=${approveToken}`;
+        const rejectUrl = `${functionsBase}/reject-automation-batch-public?token=${rejectToken}`;
         const editUrl = `${appUrl}/ApprovalBatchEdit?batchId=${batch.id}`;
 
-        // 4. PREPARE EMAIL CONTENT
+        // 5. PREPARE EMAIL CONTENT
         let caseName = null;
         if (batch.case_id) {
            try { const c = await base44.entities.Case.get(batch.case_id); caseName = c?.case_number; } catch(e){}
@@ -354,7 +353,7 @@ Deno.serve(async (req) => {
           caseName
         });
 
-        // 5. SEND EMAIL
+        // 6. SEND EMAIL
         await base44.functions.invoke('sendEmail', {
           to: approverEmail,
           subject: `אישור נדרש: ${batch.automation_rule_name}`,
