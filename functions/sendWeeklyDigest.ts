@@ -1,5 +1,73 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.6';
 
+// ========================================
+// DWO EMAIL DESIGN SYSTEM (EMBEDDED)
+// ========================================
+
+const BRAND = {
+  colors: {
+    primary: '#b62f12',    // DWO Red
+    secondary: '#545454',  // DWO Dark Gray
+    bg: '#f3f4f6',         // Light Grey Background
+    card: '#ffffff',       // White Card
+    text: '#000000',       // Black Text
+    textLight: '#545454',  // Metadata Text
+    success: '#10b981',    // Green
+    link: '#b62f12'        // Link
+  },
+  logoUrl: 'https://dwo.co.il/wp-content/uploads/2020/04/Drori-Stav-logo-2.png', 
+  appUrl: 'https://os.dwo.co.il'
+};
+
+function generateEmailLayout(contentHtml, title) {
+  return `
+<!DOCTYPE html>
+<html dir="rtl" lang="he">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>${title}</title>
+  <style>
+    body { margin: 0; padding: 0; background-color: ${BRAND.colors.bg}; font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; }
+    .email-wrapper { padding: 20px; }
+    .email-container { max-width: 600px; margin: 0 auto; background-color: ${BRAND.colors.card}; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
+    .header { background-color: ${BRAND.colors.card}; padding: 20px; text-align: center; border-bottom: 3px solid ${BRAND.colors.primary}; }
+    .content { padding: 30px 25px; color: ${BRAND.colors.text}; line-height: 1.6; text-align: right; }
+    .footer { background-color: #f8fafc; padding: 20px; text-align: center; font-size: 12px; color: ${BRAND.colors.textLight}; border-top: 1px solid #e2e8f0; }
+    a { color: ${BRAND.colors.link}; text-decoration: none; }
+    .logo { height: 50px; width: auto; max-width: 200px; object-fit: contain; }
+    
+    /* Stats Cards Styling */
+    .stats-table { width: 100%; border-collapse: separate; border-spacing: 10px; margin-top: 10px; }
+    .stat-cell { background-color: #f8f9fa; border: 1px solid #e2e8f0; border-radius: 8px; padding: 15px; text-align: center; width: 50%; vertical-align: middle; }
+    .stat-value { font-size: 28px; font-weight: bold; color: ${BRAND.colors.primary}; margin-bottom: 5px; }
+    .stat-label { font-size: 14px; color: ${BRAND.colors.textLight}; }
+    .highlight-cell { background-color: #fff1f2; border-color: ${BRAND.colors.primary}; }
+  </style>
+</head>
+<body dir="rtl">
+  <div class="email-wrapper">
+    <div class="email-container">
+      <div class="header">
+         <img src="${BRAND.logoUrl}" alt="DWO Logo" class="logo" />
+      </div>
+      <div class="content">
+        ${contentHtml}
+      </div>
+      <div class="footer">
+        <p style="margin: 0 0 10px 0;">נשלח אוטומטית ממערכת OS.DWO</p>
+        <p style="margin: 0; opacity: 0.7;">DWO - משרד עורכי דין | www.dwo.co.il</p>
+      </div>
+    </div>
+  </div>
+</body>
+</html>`.trim();
+}
+
+// ========================================
+// MAIN HANDLER
+// ========================================
+
 Deno.serve(async (req) => {
   try {
     const base44 = createClientFromRequest(req);
@@ -43,73 +111,59 @@ Deno.serve(async (req) => {
     const totalTimeSaved = filteredTasks.reduce((sum, t) => sum + (t.time_saved_minutes || 0), 0);
     const hoursSaved = Math.round(totalTimeSaved / 60 * 10) / 10;
 
-    // Build HTML email
-    const emailHtml = `
-<!DOCTYPE html>
-<html dir="rtl" lang="he">
-<head>
-  <meta charset="UTF-8">
-  <style>
-    body { font-family: Arial, sans-serif; direction: rtl; background: #f8fafc; margin: 0; padding: 20px; }
-    .container { max-width: 600px; margin: 0 auto; background: white; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
-    .header { background: linear-gradient(135deg, #1e293b 0%, #334155 100%); color: white; padding: 24px; text-align: center; }
-    .header h1 { margin: 0; font-size: 24px; }
-    .header p { margin: 8px 0 0; opacity: 0.9; font-size: 14px; }
-    .content { padding: 24px; }
-    .stat-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; margin-bottom: 24px; }
-    .stat-card { background: #f8fafc; border-radius: 8px; padding: 16px; text-align: center; }
-    .stat-value { font-size: 32px; font-weight: bold; color: #1e293b; }
-    .stat-label { font-size: 14px; color: #64748b; margin-top: 4px; }
-    .stat-card.highlight { background: #ecfdf5; }
-    .stat-card.highlight .stat-value { color: #059669; }
-    .footer { background: #f8fafc; padding: 16px 24px; text-align: center; font-size: 12px; color: #64748b; }
-    .quiet-week { text-align: center; padding: 32px; color: #64748b; }
-    .quiet-week h3 { color: #1e293b; margin-bottom: 8px; }
-  </style>
-</head>
-<body>
-  <div class="container">
-    <div class="header">
-      <h1>📊 סיכום שבועי - IPMS</h1>
-      <p>${weekAgo.toLocaleDateString('he-IL')} - ${now.toLocaleDateString('he-IL')}</p>
-    </div>
-    <div class="content">
-      ${totalMails === 0 ? `
-        <div class="quiet-week">
-          <h3>🌴 שבוע שקט</h3>
-          <p>לא התקבלו מיילים חדשים בשבוע האחרון.</p>
+    // Build Content HTML
+    let innerContent = '';
+    
+    if (totalMails === 0) {
+      innerContent = `
+        <div style="text-align: center; padding: 30px;">
+          <h3 style="color: ${BRAND.colors.secondary}; margin-bottom: 10px;">🌴 שבוע שקט</h3>
+          <p style="color: ${BRAND.colors.textLight};">לא התקבלו מיילים חדשים בשבוע האחרון.</p>
         </div>
-      ` : `
-        <div class="stat-grid">
-          <div class="stat-card">
-            <div class="stat-value">${totalMails}</div>
-            <div class="stat-label">מיילים נכנסים</div>
-          </div>
-          <div class="stat-card">
-            <div class="stat-value">${autoTriageRate}%</div>
-            <div class="stat-label">סיווג אוטומטי</div>
-          </div>
-          <div class="stat-card">
-            <div class="stat-value">${accuracyRate}%</div>
-            <div class="stat-label">מדד דיוק</div>
-          </div>
-          <div class="stat-card highlight">
-            <div class="stat-value">${hoursSaved}</div>
-            <div class="stat-label">שעות נחסכו</div>
-          </div>
-        </div>
-        <p style="text-align: center; color: #64748b; font-size: 14px;">
-          ${completedTasks.length} משימות הושלמו | ${tasksWithOverride.length} תיקונים ידניים
+      `;
+    } else {
+      innerContent = `
+        <h1 style="color: ${BRAND.colors.primary}; font-size: 24px; margin-top: 0; margin-bottom: 5px; text-align: center;">📊 סיכום שבועי - IPMS</h1>
+        <p style="text-align: center; color: ${BRAND.colors.textLight}; margin-bottom: 30px; margin-top: 0; font-size: 14px;">
+          ${weekAgo.toLocaleDateString('he-IL')} - ${now.toLocaleDateString('he-IL')}
         </p>
-      `}
-    </div>
-    <div class="footer">
-      נשלח אוטומטית ממערכת IPMS
-    </div>
-  </div>
-</body>
-</html>
-    `.trim();
+
+        <table class="stats-table" role="presentation">
+          <tr>
+            <td class="stat-cell">
+              <div class="stat-value">${totalMails}</div>
+              <div class="stat-label">מיילים נכנסים</div>
+            </td>
+            <td class="stat-cell">
+              <div class="stat-value">${autoTriageRate}%</div>
+              <div class="stat-label">סיווג אוטומטי</div>
+            </td>
+          </tr>
+          <tr>
+            <td class="stat-cell">
+              <div class="stat-value">${accuracyRate}%</div>
+              <div class="stat-label">מדד דיוק</div>
+            </td>
+            <td class="stat-cell highlight-cell">
+              <div class="stat-value">${hoursSaved}</div>
+              <div class="stat-label">שעות נחסכו</div>
+            </td>
+          </tr>
+        </table>
+
+        <div style="text-align: center; margin-top: 25px; padding: 15px; background-color: #f8f9fa; border-radius: 6px;">
+          <p style="margin: 0; color: ${BRAND.colors.text}; font-size: 14px;">
+            <strong>סטטוס משימות:</strong> 
+            <span style="color: ${BRAND.colors.success}; font-weight: bold;">${completedTasks.length} הושלמו</span> 
+            | 
+            <span style="color: ${BRAND.colors.textLight};">${tasksWithOverride.length} תיקונים ידניים</span>
+          </p>
+        </div>
+      `;
+    }
+
+    // Generate Full HTML using Design System
+    const emailHtml = generateEmailLayout(innerContent, `סיכום שבועי - ${now.toLocaleDateString('he-IL')}`);
 
     // Send to all admins
     const sentTo = [];
