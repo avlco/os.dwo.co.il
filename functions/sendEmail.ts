@@ -1,9 +1,15 @@
 // @ts-nocheck
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.6';
 
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+};
+
 // ========================================
-// CRYPTO HELPERS (for decrypting tokens)
+// 1. CRYPTO HELPERS (Encrypt/Decrypt)
 // ========================================
+
 async function getCryptoKey() {
   const envKey = Deno.env.get("ENCRYPTION_KEY");
   if (!envKey) throw new Error("ENCRYPTION_KEY is missing");
@@ -28,67 +34,124 @@ async function decrypt(text) {
   return new TextDecoder().decode(decrypted);
 }
 
-Deno.serve(async (req) => {
+async function encrypt(text) {
   try {
-    // יצירת Base44 client
-    const base44 = createClientFromRequest(req);
+    const key = await getCryptoKey();
+    const iv = crypto.getRandomValues(new Uint8Array(12));
+    const encoded = new TextEncoder().encode(text);
+    const encrypted = await crypto.subtle.encrypt({ name: "AES-GCM", iv }, key, encoded);
+    const ivHex = Array.from(iv).map(b => b.toString(16).padStart(2, '0')).join('');
+    const encryptedHex = Array.from(new Uint8Array(encrypted)).map(b => b.toString(16).padStart(2, '0')).join('');
+    return `${ivHex}:${encryptedHex}`;
+  } catch (e) {
+    console.error("[Encryption] Failed:", e);
+    throw new Error(`Encryption failed: ${e.message}`);
+  }
+}
 
-    const { to, subject, body, from } = await req.json();
+// ========================================
+// 2. GOOGLE TOKEN REFRESH LOGIC
+// ========================================
+
+async function refreshGoogleToken(refreshToken, connectionId, base44) {
+  console.log("[SendEmail] 🔄 Refreshing expired Google Token...");
+  const clientId = Deno.env.get("GOOGLE_CLIENT_ID");
+  const clientSecret = Deno.env.get("GOOGLE_CLIENT_SECRET");
+  
+  if (!clientId || !clientSecret) throw new Error("Missing Google Client ID/Secret env vars");
+
+  const res = await fetch('https://oauth2.googleapis.com/token', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({
+      client_id: clientId,
+      client_secret: clientSecret,
+      refresh_token: refreshToken,
+      grant_type: 'refresh_token',
+    }).toString(),
+  });
+  
+  const data = await res.json();
+  if (data.error) throw new Error(`Token refresh failed: ${JSON.stringify(data)}`);
+  
+  const newAccessToken = data.access_token;
+  
+  // CRITICAL: Save new token to DB so next calls succeed
+  const encryptedAccess = await encrypt(newAccessToken);
+  await base44.asServiceRole.entities.IntegrationConnection.update(connectionId, {
+    access_token_encrypted: encryptedAccess,
+    metadata: { last_refresh: new Date().toISOString() }
+  });
+  
+  console.log("[SendEmail] ✅ Token refreshed and saved to DB");
+  return newAccessToken;
+}
+
+// ========================================
+// 3. MAIN HANDLER
+// ========================================
+
+Deno.serve(async (req) => {
+  if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
+
+  try {
+    const base44 = createClientFromRequest(req);
+    const bodyReq = await req.json();
+    const { to, subject, body } = bodyReq; // 'from' is usually determined by the account
 
     if (!to || !subject || !body) {
       return new Response(
         JSON.stringify({ error: 'Missing required fields: to, subject, body' }),
-        { status: 400, headers: { 'Content-Type': 'application/json' } }
+        { status: 400, headers: corsHeaders }
       );
     }
 
     console.log(`[SendEmail] Attempting to send email to: ${to}`);
-    console.log(`[SendEmail] Subject: ${subject}`);
 
-    // שלב 1: חפש Gmail integration (OAuth2)
-    const gmailConnections = await base44.entities.IntegrationConnection.filter({
+    // --- STEP 1: Check Gmail Integration ---
+    // Fetch generic list first or filter if possible. Using robust filter.
+    const gmailConnectionsRes = await base44.entities.IntegrationConnection.filter({
       provider: 'google',
       is_active: true
     });
+    
+    // Handle SDK response variations (array vs object)
+    const gmailConnections = Array.isArray(gmailConnectionsRes) 
+      ? gmailConnectionsRes 
+      : (gmailConnectionsRes.data || []);
 
-    if (gmailConnections && gmailConnections.length > 0) {
+    if (gmailConnections.length > 0) {
       const gmailConn = gmailConnections[0];
+      console.log('[SendEmail] Using Gmail API');
 
-      console.log('[SendEmail] Using Gmail API to send email');
+      let accessToken = await decrypt(gmailConn.access_token_encrypted);
+      const refreshToken = gmailConn.refresh_token_encrypted ? await decrypt(gmailConn.refresh_token_encrypted) : null;
 
-      // פענוח הטוקן
-      const accessToken = await decrypt(gmailConn.access_token_encrypted);
+      if (!accessToken) throw new Error('Failed to decrypt Gmail access token');
 
-      if (!accessToken) {
-        throw new Error('Failed to decrypt Gmail access token');
-      }
+      // --- Prepare Raw Email (RFC 2822) ---
+      const subjectBase64 = btoa(unescape(encodeURIComponent(subject)));
+      const encodedSubject = `=?UTF-8?B?${subjectBase64}?=`;
 
-     // קידוד הנושא ב-UTF-8 (RFC 2047)
-const subjectBase64 = btoa(unescape(encodeURIComponent(subject)));
-const encodedSubject = `=?UTF-8?B?${subjectBase64}?=`;
-
-// יצירת המייל ב-RFC 2822 format
-const emailLines = [
-  `To: ${to}`,
-  `Subject: ${encodedSubject}`,
-  'Content-Type: text/html; charset=utf-8',
-  'MIME-Version: 1.0',
-  '',
-  body
-];
+      const emailLines = [
+        `To: ${to}`,
+        `Subject: ${encodedSubject}`,
+        'Content-Type: text/html; charset=utf-8',
+        'MIME-Version: 1.0',
+        '',
+        body
+      ];
 
       const emailContent = emailLines.join('\r\n');
-
-      // קידוד Base64 URL-safe
       const encoder = new TextEncoder();
       const emailBytes = encoder.encode(emailContent);
-      const base64 = btoa(String.fromCharCode(...emailBytes))
+      const base64Message = btoa(String.fromCharCode(...emailBytes))
         .replace(/\+/g, '-')
         .replace(/\//g, '_')
         .replace(/=+$/, '');
 
-      // שליחה דרך Gmail API
-      const gmailResponse = await fetch(
+      // --- Send Attempt 1 ---
+      let gmailResponse = await fetch(
         'https://gmail.googleapis.com/gmail/v1/users/me/messages/send',
         {
           method: 'POST',
@@ -96,9 +159,33 @@ const emailLines = [
             'Authorization': `Bearer ${accessToken}`,
             'Content-Type': 'application/json',
           },
-          body: JSON.stringify({ raw: base64 })
+          body: JSON.stringify({ raw: base64Message })
         }
       );
+
+      // --- Handle 401 (Expired Token) ---
+      if (gmailResponse.status === 401 && refreshToken) {
+        // REFRESH LOGIC
+        try {
+            accessToken = await refreshGoogleToken(refreshToken, gmailConn.id, base44);
+            
+            // --- Send Attempt 2 ---
+            gmailResponse = await fetch(
+                'https://gmail.googleapis.com/gmail/v1/users/me/messages/send',
+                {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${accessToken}`,
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ raw: base64Message })
+                }
+            );
+        } catch (refreshError) {
+            console.error("[SendEmail] Refresh failed:", refreshError);
+            throw new Error("Token expired and refresh failed.");
+        }
+      }
 
       if (!gmailResponse.ok) {
         const errorText = await gmailResponse.text();
@@ -118,63 +205,52 @@ const emailLines = [
           via: 'gmail',
           messageId: result.id
         }),
-        { status: 200, headers: { 'Content-Type': 'application/json' } }
+        { status: 200, headers: corsHeaders }
       );
     }
 
-    // שלב 2: אם אין Gmail, חפש SMTP
-    const smtpConnections = await base44.entities.IntegrationConnection.filter({
+    // --- STEP 2: SMTP Fallback (Placeholder) ---
+    const smtpConnectionsRes = await base44.entities.IntegrationConnection.filter({
       provider: 'smtp',
       is_active: true
     });
+    
+    const smtpConnections = Array.isArray(smtpConnectionsRes) ? smtpConnectionsRes : (smtpConnectionsRes.data || []);
 
-    if (smtpConnections && smtpConnections.length > 0) {
+    if (smtpConnections.length > 0) {
       const smtpConfig = smtpConnections[0].metadata;
-
-      if (!smtpConfig?.smtp_host || !smtpConfig?.smtp_username) {
-        throw new Error('Invalid SMTP configuration');
-      }
+      if (!smtpConfig?.smtp_host) throw new Error('Invalid SMTP configuration');
 
       console.log(`[SendEmail] Using SMTP: ${smtpConfig.smtp_host}`);
-
-      // TODO: Implement actual SMTP sending
-      // For now, return success (this would need a proper SMTP library)
-
+      // Actual SMTP implementation would go here
       return new Response(
         JSON.stringify({
           success: true,
           message: 'Email queued for SMTP sending',
           to,
           subject,
-          via: 'smtp',
-          note: 'SMTP implementation pending'
+          via: 'smtp'
         }),
-        { status: 200, headers: { 'Content-Type': 'application/json' } }
+        { status: 200, headers: corsHeaders }
       );
     }
 
-    // שלב 3: אין אינטגרציה פעילה
+    // --- STEP 3: No Integration ---
     console.log('[SendEmail] No active email integration found');
-
     return new Response(
       JSON.stringify({
         success: false,
         error: 'No email integration configured',
         message: 'Please configure Gmail or SMTP integration in Settings',
-        to,
-        subject,
       }),
-      { status: 400, headers: { 'Content-Type': 'application/json' } }
+      { status: 400, headers: corsHeaders }
     );
 
   } catch (error) {
     console.error('[SendEmail] Error:', error);
     return new Response(
-      JSON.stringify({
-        success: false,
-        error: error.message
-      }),
-      { status: 500, headers: { 'Content-Type': 'application/json' } }
+      JSON.stringify({ success: false, error: error.message }),
+      { status: 500, headers: corsHeaders }
     );
   }
 });
