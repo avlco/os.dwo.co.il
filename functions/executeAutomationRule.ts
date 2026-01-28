@@ -7,7 +7,7 @@ const corsHeaders = {
 };
 
 // ========================================
-// DWO EMAIL DESIGN SYSTEM (EMBEDDED)
+// DWO EMAIL DESIGN SYSTEM (INLINE CSS)
 // ========================================
 
 const BRAND = {
@@ -24,10 +24,25 @@ const BRAND = {
   appUrl: 'https://os.dwo.co.il'
 };
 
+/**
+ * Generates HTML with INLINE styles for maximum compatibility (Outlook, Gmail)
+ */
 function generateEmailLayout(contentHtml, title) {
   const t = {
     footer_contact: 'DWO - משרד עורכי דין | www.dwo.co.il',
     footer_disclaimer: 'הודעה זו מכילה מידע סודי ומוגן. אם קיבלת הודעה זו בטעות, אנא מחק אותה ודווח לשולח.'
+  };
+
+  // Define styles as strings for reusability and cleanness
+  const s = {
+    body: `margin: 0; padding: 0; background-color: ${BRAND.colors.bg}; font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;`,
+    wrapper: `padding: 20px; background-color: ${BRAND.colors.bg};`,
+    container: `max-width: 600px; margin: 0 auto; background-color: ${BRAND.colors.card}; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 6px rgba(0,0,0,0.05);`,
+    header: `background-color: ${BRAND.colors.card}; padding: 20px; text-align: center; border-bottom: 3px solid ${BRAND.colors.primary};`,
+    logo: `height: 50px; width: auto; max-width: 200px; object-fit: contain; display: block; margin: 0 auto;`,
+    content: `padding: 30px 25px; color: ${BRAND.colors.text}; line-height: 1.6; text-align: right; direction: rtl; font-size: 16px;`,
+    footer: `background-color: #f8fafc; padding: 20px; text-align: center; font-size: 12px; color: ${BRAND.colors.textLight}; border-top: 1px solid #e2e8f0; direction: rtl;`,
+    link: `color: ${BRAND.colors.link}; text-decoration: none; font-weight: bold;`
   };
 
   return `
@@ -37,31 +52,31 @@ function generateEmailLayout(contentHtml, title) {
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>${title}</title>
-  <style>
-    body { margin: 0; padding: 0; background-color: ${BRAND.colors.bg}; font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; }
-    .email-wrapper { padding: 20px; }
-    .email-container { max-width: 600px; margin: 0 auto; background-color: ${BRAND.colors.card}; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
-    .header { background-color: ${BRAND.colors.card}; padding: 20px; text-align: center; border-bottom: 3px solid ${BRAND.colors.primary}; }
-    .content { padding: 30px 25px; color: ${BRAND.colors.text}; line-height: 1.6; text-align: right; font-size: 16px; }
-    .footer { background-color: #f8fafc; padding: 20px; text-align: center; font-size: 12px; color: ${BRAND.colors.textLight}; border-top: 1px solid #e2e8f0; }
-    a { color: ${BRAND.colors.link}; text-decoration: none; }
-    .logo { height: 50px; width: auto; max-width: 200px; object-fit: contain; }
-  </style>
 </head>
-<body dir="rtl">
-  <div class="email-wrapper">
-    <div class="email-container">
-      <div class="header">
-         <img src="${BRAND.logoUrl}" alt="DWO Logo" class="logo" />
-      </div>
-      <div class="content">
-        ${contentHtml}
-      </div>
-      <div class="footer">
-        <p style="margin: 0 0 10px 0;">${t.footer_contact}</p>
-        <p style="margin: 0; opacity: 0.7;">${t.footer_disclaimer}</p>
-      </div>
-    </div>
+<body style="${s.body}">
+  <div style="${s.wrapper}">
+    <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%" style="${s.container}">
+      
+      <tr>
+        <td style="${s.header}">
+           <img src="${BRAND.logoUrl}" alt="DWO Logo" style="${s.logo}" width="200" height="50" />
+        </td>
+      </tr>
+
+      <tr>
+        <td style="${s.content}">
+          ${contentHtml}
+        </td>
+      </tr>
+
+      <tr>
+        <td style="${s.footer}">
+          <p style="margin: 0 0 10px 0;">${t.footer_contact}</p>
+          <p style="margin: 0; opacity: 0.7;">${t.footer_disclaimer}</p>
+        </td>
+      </tr>
+
+    </table>
   </div>
 </body>
 </html>`.trim();
@@ -200,6 +215,37 @@ async function logAutomationExecution(base44, logData) {
   }
 }
 
+async function updateRuleStats(base44, ruleId, success) {
+  try {
+    const rule = await base44.entities.AutomationRule.get(ruleId);
+    if (!rule) return;
+    
+    const metadata = rule.metadata || {};
+    const stats = metadata.stats || { 
+      total_executions: 0, 
+      successful_executions: 0, 
+      failed_executions: 0, 
+      success_rate: 0 
+    };
+    
+    stats.total_executions += 1;
+    if (success) {
+      stats.successful_executions += 1;
+    } else {
+      stats.failed_executions += 1;
+    }
+    stats.success_rate = (stats.successful_executions / stats.total_executions) * 100;
+    stats.last_execution = new Date().toISOString();
+    
+    await base44.entities.AutomationRule.update(ruleId, { 
+      metadata: { ...metadata, stats } 
+    });
+    
+  } catch (error) {
+    console.error('[Stats] ❌ Failed to update stats:', error.message);
+  }
+}
+
 // ========================================
 // MAIN HANDLER
 // ========================================
@@ -281,9 +327,9 @@ Deno.serve(async (req) => {
         return;
       }
       
-      // RESTORED BATCHING LOGIC:
+      // BATCHING LOGIC:
       // If approval is required, return "pending_batch" and DO NOT execute.
-      // This tells processIncomingMail to aggregate this action into a batch.
+      // This allows processIncomingMail to aggregate all actions.
       if (rule.require_approval) {
         results.push({ 
           action: actionType, 
@@ -311,10 +357,10 @@ Deno.serve(async (req) => {
         };
         
         await handleAction('send_email', emailConfig, async () => {
-          // BRANDING FIX FOR DIRECT SEND:
-          // Wrap the raw body with the Design System layout
+          // 🔥 BRANDING FIX FOR DIRECT SEND + OUTLOOK SUPPORT:
+          // Wrap the raw body with the Inline CSS Design System
           const formattedBody = `
-            <div style="white-space: pre-wrap; font-family: 'Segoe UI', Arial, sans-serif; color: ${BRAND.colors.text};">
+            <div style="font-family: 'Segoe UI', Arial, sans-serif; color: ${BRAND.colors.text}; white-space: pre-wrap;">
               ${emailConfig.body}
             </div>
           `;
@@ -323,7 +369,7 @@ Deno.serve(async (req) => {
           const emailResult = await base44.functions.invoke('sendEmail', {
             to: emailConfig.to,
             subject: emailConfig.subject,
-            body: finalHtml // Send styled HTML
+            body: finalHtml // Send styled HTML with Inline CSS
           });
           
           if (emailResult.error) throw new Error(`sendEmail failed: ${emailResult.error}`);
@@ -396,8 +442,6 @@ Deno.serve(async (req) => {
       } else {
         const folderPath = await replaceTokens(actions.save_file.path_template, { mail, caseId, clientId }, base44);
         
-        // Save file is usually best-effort / implicit approval in many flows, 
-        // but if strictly requiring approval, it follows the same logic.
         if (testMode) {
           results.push({ action: 'save_file', status: 'test_skipped', data: { path: folderPath } });
         } else {
