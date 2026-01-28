@@ -391,48 +391,33 @@ async function executeBatchActions(base44, batch, context) {
       const config = action.config || {};
       let result = null;
 
-      // --- Execute based on type ---
       switch (type) {
         case 'send_email':
           result = await base44.functions.invoke('sendEmail', {
-            to: config.to,
-            subject: config.subject,
-            body: config.body
+            to: config.to, subject: config.subject, body: config.body
           });
           if (result.error) throw new Error(result.error);
           break;
-
         case 'create_task':
           result = await base44.entities.Task.create({
-            title: config.title,
-            description: config.description,
-            case_id: batch.case_id,
-            client_id: batch.client_id,
-            status: 'pending',
-            due_date: config.due_date
+            title: config.title, description: config.description, case_id: batch.case_id,
+            client_id: batch.client_id, status: 'pending', due_date: config.due_date
           });
           break;
-
         case 'billing':
           result = await base44.entities.TimeEntry.create({
-            case_id: batch.case_id,
-            description: config.description || 'Automated billing',
-            hours: config.hours,
-            rate: config.rate || config.hourly_rate || 0,
-            date_worked: new Date().toISOString().split('T')[0],
-            is_billable: true
+            case_id: batch.case_id, description: config.description || 'Automated billing',
+            hours: config.hours, rate: config.rate || config.hourly_rate || 0,
+            date_worked: new Date().toISOString().split('T')[0], is_billable: true
           });
           break;
-          
         case 'calendar_event':
            result = await base44.functions.invoke('createCalendarEvent', {
-             ...config,
-             case_id: batch.case_id
+             ...config, case_id: batch.case_id
            });
            if (result.error) throw new Error(result.error);
            break;
       }
-
       results.push({ id: action.idempotency_key, status: 'success', data: result });
       successCount++;
     } catch (error) {
@@ -441,12 +426,5 @@ async function executeBatchActions(base44, batch, context) {
       failCount++;
     }
   }
-
-  return {
-    success: successCount,
-    failed: failCount,
-    total: actions.length,
-    results,
-    executed_at: new Date().toISOString()
-  };
+  return { success: successCount, failed: failCount, total: actions.length, results, executed_at: new Date().toISOString() };
 }
