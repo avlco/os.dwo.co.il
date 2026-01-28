@@ -18,40 +18,18 @@ const BRAND = {
     card: '#ffffff',       // White Card
     text: '#000000',       // Black Text
     textLight: '#545454',  // Metadata Text
-    success: '#10b981',    // Green
     link: '#b62f12'        // Link
   },
   logoUrl: 'https://dwo.co.il/wp-content/uploads/2020/04/Drori-Stav-logo-2.png', 
-  appUrl: 'https://os.dwo.co.il' // URL of your application
-};
-
-const translations = {
-  he: {
-    title: 'בקשת אישור אוטומציה',
-    rule: 'כלל אוטומציה',
-    mail: 'נושא המייל',
-    from: 'מאת',
-    case: 'תיק',
-    client: 'לקוח',
-    actions: 'פעולות לביצוע',
-    approveBtn: '✅ אשר אוטומציה',
-    editBtn: '✏️ ערוך או דחה',
-    expiry: 'הקישור תקף ל-7 ימים.',
-    footer_disclaimer: 'הודעה זו נשלחה אוטומטית ממערכת OS.DWO.',
-    footer_contact: 'DWO - משרד עורכי דין | www.dwo.co.il',
-    actionLabels: {
-      send_email: 'שליחת מייל',
-      create_task: 'יצירת משימה',
-      billing: 'חיוב שעות',
-      calendar_event: 'אירוע ביומן',
-      save_file: 'שמירת קבצים',
-      create_alert: 'יצירת התרעה'
-    }
-  }
+  appUrl: 'https://os.dwo.co.il'
 };
 
 function generateEmailLayout(contentHtml, title) {
-  const t = translations.he;
+  const t = {
+    footer_contact: 'DWO - משרד עורכי דין | www.dwo.co.il',
+    footer_disclaimer: 'הודעה זו מכילה מידע סודי ומוגן. אם קיבלת הודעה זו בטעות, אנא מחק אותה ודווח לשולח.'
+  };
+
   return `
 <!DOCTYPE html>
 <html dir="rtl" lang="he">
@@ -64,16 +42,10 @@ function generateEmailLayout(contentHtml, title) {
     .email-wrapper { padding: 20px; }
     .email-container { max-width: 600px; margin: 0 auto; background-color: ${BRAND.colors.card}; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
     .header { background-color: ${BRAND.colors.card}; padding: 20px; text-align: center; border-bottom: 3px solid ${BRAND.colors.primary}; }
-    .content { padding: 30px 25px; color: ${BRAND.colors.text}; line-height: 1.6; text-align: right; }
+    .content { padding: 30px 25px; color: ${BRAND.colors.text}; line-height: 1.6; text-align: right; font-size: 16px; }
     .footer { background-color: #f8fafc; padding: 20px; text-align: center; font-size: 12px; color: ${BRAND.colors.textLight}; border-top: 1px solid #e2e8f0; }
     a { color: ${BRAND.colors.link}; text-decoration: none; }
     .logo { height: 50px; width: auto; max-width: 200px; object-fit: contain; }
-    .info-box { background-color: #f8f9fa; border: 1px solid #e2e8f0; border-radius: 6px; padding: 15px; margin-bottom: 25px; }
-    .info-row { margin-bottom: 8px; font-size: 14px; }
-    .label { color: ${BRAND.colors.textLight}; font-weight: normal; }
-    .value { color: ${BRAND.colors.text}; font-weight: 600; }
-    .btn-primary { display: inline-block; background-color: ${BRAND.colors.primary}; color: #ffffff !important; padding: 12px 32px; border-radius: 6px; font-weight: bold; text-decoration: none; margin: 5px; }
-    .btn-secondary { display: inline-block; color: ${BRAND.colors.secondary}; font-size: 14px; text-decoration: underline; margin-top: 10px; }
   </style>
 </head>
 <body dir="rtl">
@@ -95,120 +67,110 @@ function generateEmailLayout(contentHtml, title) {
 </html>`.trim();
 }
 
-function renderApprovalEmail(data) {
-  const t = translations.he;
-  const label = t.actionLabels[data.action_type] || data.action_type;
+// ========================================
+// HELPER FUNCTIONS
+// ========================================
+
+function extractFromMail(mail, config) {
+  if (!config) return null;
+  const source = config.source || 'subject';
+  const text = source === 'body' 
+    ? (mail.body_plain || mail.body_html || '') 
+    : mail.subject;
   
-  const innerContent = `
-    <h1 style="color: ${BRAND.colors.primary}; font-size: 22px; margin-top: 0; margin-bottom: 20px; text-align: center;">${t.title}</h1>
-    
-    <div class="info-box">
-      <div class="info-row"><span class="label">${t.rule}:</span> <span class="value">${data.rule_name || '-'}</span></div>
-      <div class="info-row"><span class="label">${t.mail}:</span> <span class="value">${data.mail_subject || '-'}</span></div>
-      <div class="info-row"><span class="label">${t.from}:</span> <span class="value">${data.mail_from || '-'}</span></div>
-      ${data.case_id ? `<div class="info-row"><span class="label">${t.case}:</span> <span class="value">${data.case_id}</span></div>` : ''}
-    </div>
-
-    <div style="margin-bottom: 25px; text-align: center;">
-      <h3 style="color: ${BRAND.colors.secondary}; font-size: 18px; margin-bottom: 10px;">
-        ${t.actions}: <span style="color: ${BRAND.colors.primary}">${label}</span>
-      </h3>
-    </div>
-
-    <div style="text-align: center; margin-top: 30px; margin-bottom: 20px;">
-      <a href="${data.approveUrl}" class="btn-primary">${t.approveBtn}</a>
-      <br>
-      <a href="${data.editUrl}" class="btn-secondary">${t.editBtn}</a>
-    </div>
-
-    <p style="text-align: center; font-size: 13px; color: ${BRAND.colors.textLight}; margin-top: 20px;">
-      ⏳ ${t.expiry}
-    </p>
-  `;
-
-  return generateEmailLayout(innerContent, t.title);
+  if (!text) return null;
+  
+  if (config.regex) {
+    try {
+      const regex = new RegExp(config.regex, 'i');
+      const match = text.match(regex);
+      return match ? (match[1] || match[0]) : null;
+    } catch (e) { return null; }
+  }
+  
+  if (config.anchor_text) {
+    const index = text.indexOf(config.anchor_text);
+    if (index === -1) return null;
+    const afterAnchor = text.substring(index + config.anchor_text.length).trim();
+    return afterAnchor.split(/[\s,;]+/)[0] || null;
+  }
+  
+  return null;
 }
 
-// ========================================
-// ROLLBACK MANAGER
-// ========================================
-class RollbackManager {
-  constructor(base44) {
-    this.base44 = base44;
-    this.actions = [];
+async function replaceTokens(template, context, base44) {
+  if (!template) return '';
+  let result = template;
+  
+  result = result.replace(/{Mail_Subject}/g, context.mail?.subject || '');
+  result = result.replace(/{Mail_From}/g, context.mail?.sender_email || '');
+  result = result.replace(/{Mail_Body}/g, context.mail?.body_plain || '');
+  
+  if (context.caseId) {
+    try {
+      const caseData = await base44.entities.Case.get(context.caseId);
+      if (caseData) {
+        result = result.replace(/{Case_No}/g, caseData.case_number || '');
+        result = result.replace(/{Case_Title}/g, caseData.title || '');
+        result = result.replace(/{Official_No}/g, caseData.application_number || '');
+      }
+    } catch (e) {}
   }
   
-  register(action) {
-    this.actions.push(action);
-    console.log(`[Rollback] Registered: ${action.type} (ID: ${action.id || 'N/A'})`);
+  if (context.clientId) {
+    try {
+      const client = await base44.entities.Client.get(context.clientId);
+      if (client) {
+        result = result.replace(/{Client_Name}/g, client.name || '');
+      }
+    } catch (e) {}
   }
   
-  async rollbackAll() {
-    if (this.actions.length === 0) return;
-    
-    console.log(`[Rollback] 🔄 Rolling back ${this.actions.length} action(s)`);
-    const errors = [];
-    
-    for (let i = this.actions.length - 1; i >= 0; i--) {
-      const action = this.actions[i];
-      try {
-        switch (action.type) {
-          case 'create_task':
-            if (action.id) await this.base44.entities.Task.delete(action.id);
-            console.log(`[Rollback] ✅ Deleted task ${action.id}`);
-            break;
-          case 'billing':
-            if (action.id) await this.base44.entities.TimeEntry.delete(action.id);
-            console.log(`[Rollback] ✅ Deleted time entry ${action.id}`);
-            break;
-          case 'create_alert':
-            if (action.id) await this.base44.entities.Activity.delete(action.id);
-            console.log(`[Rollback] ✅ Deleted activity ${action.id}`);
-            break;
-          case 'approval':
-            if (action.id) await this.base44.entities.Activity.delete(action.id);
-            console.log(`[Rollback] ✅ Deleted approval ${action.id}`);
-            break;
+  return result.replace(/{[^}]+}/g, '');
+}
+
+function calculateDueDate(offsetDays) {
+  const date = new Date();
+  date.setDate(date.getDate() + (offsetDays || 0));
+  return date.toISOString().split('T')[0];
+}
+
+async function resolveRecipients(recipients, context, base44) {
+  if (!Array.isArray(recipients)) return [];
+  const emails = [];
+  
+  for (const recipient of recipients) {
+    try {
+      if (recipient === 'client' && context.clientId) {
+        const client = await base44.entities.Client.get(context.clientId);
+        if (client?.email) emails.push(client.email);
+      }
+      else if (recipient === 'lawyer' && context.caseId) {
+        const caseData = await base44.entities.Case.get(context.caseId);
+        if (caseData?.assigned_lawyer_id) {
+          const lawyer = await base44.entities.User.get(caseData.assigned_lawyer_id);
+          if (lawyer?.email) emails.push(lawyer.email);
         }
-      } catch (error) {
-        console.error(`[Rollback] ❌ Failed to rollback ${action.type}:`, error.message);
-        errors.push({ action: action.type, id: action.id, error: error.message });
       }
-    }
-    
-    if (errors.length > 0) {
-      try {
-        await this.base44.entities.Activity.create({
-          activity_type: 'rollback_failed',
-          status: 'failed',
-          description: 'Rollback encountered errors',
-          metadata: { errors, timestamp: new Date().toISOString() }
-        });
-      } catch (e) {
-        console.error('[Rollback] Failed to log rollback errors:', e);
+      else if (recipient && recipient.includes('@')) {
+        emails.push(recipient);
       }
-    }
+    } catch (e) {}
   }
+  
+  return [...new Set(emails)];
 }
 
 // ========================================
-// LOGGING HELPERS
+// LOGGING HELPER
 // ========================================
 async function logAutomationExecution(base44, logData) {
   try {
     const actionsSummaryStrings = (logData.actions_summary || []).map(action => {
-      if (typeof action === 'string') return action;
       const status = action.status === 'success' ? '✅' :
                      action.status === 'failed' ? '❌' :
-                     action.status === 'pending_approval' ? '⏸️' : '⏭️';
-      let detail = '';
-      if (action.sent_to) detail = ` (${action.sent_to.join(', ')})`;
-      if (action.id) detail = ` (ID: ${action.id})`;
-      if (action.amount) detail += ` ₪${action.amount}`;
-      if (action.hours) detail = ` ${action.hours}h${detail}`;
-      if (action.error) detail = `: ${action.error}`;
-      if (action.reason) detail = ` (${action.reason})`;
-      return `${action.action}: ${status}${detail}`;
+                     action.status === 'pending_batch' ? '⏸️ (Batch)' : '⏭️';
+      return `${action.action}: ${status}`;
     });
 
     await base44.entities.Activity.create({
@@ -228,202 +190,14 @@ async function logAutomationExecution(base44, logData) {
         execution_status: logData.execution_status,
         actions_summary: actionsSummaryStrings,
         execution_time_ms: logData.execution_time_ms,
-        error_message: logData.error_message,
         case_id_ref: logData.metadata?.case_id,
         client_id_ref: logData.metadata?.client_id,
         logged_at: new Date().toISOString()
       }
     });
-
-    console.log('[Logger] ✅ Execution logged successfully');
   } catch (error) {
     console.error('[Logger] ❌ Failed to log execution:', error.message);
   }
-}
-
-async function updateRuleStats(base44, ruleId, success) {
-  try {
-    const rule = await base44.entities.AutomationRule.get(ruleId);
-    if (!rule) return;
-    
-    const metadata = rule.metadata || {};
-    const stats = metadata.stats || { 
-      total_executions: 0, 
-      successful_executions: 0, 
-      failed_executions: 0, 
-      success_rate: 0 
-    };
-    
-    stats.total_executions += 1;
-    if (success) {
-      stats.successful_executions += 1;
-    } else {
-      stats.failed_executions += 1;
-    }
-    stats.success_rate = (stats.successful_executions / stats.total_executions) * 100;
-    stats.last_execution = new Date().toISOString();
-    
-    await base44.entities.AutomationRule.update(ruleId, { 
-      metadata: { ...metadata, stats } 
-    });
-    
-    console.log(`[Stats] Updated: ${stats.total_executions} total, ${stats.success_rate.toFixed(1)}% success`);
-  } catch (error) {
-    console.error('[Stats] ❌ Failed to update stats:', error.message);
-  }
-}
-
-// ========================================
-// RECIPIENT RESOLUTION
-// ========================================
-async function resolveRecipients(recipients, context, base44) {
-  if (!Array.isArray(recipients)) return [];
-  const emails = [];
-  
-  for (const recipient of recipients) {
-    try {
-      if (recipient === 'client' && context.clientId) {
-        const client = await base44.entities.Client.get(context.clientId);
-        if (client?.email) {
-          emails.push(client.email);
-        }
-      }
-      else if (recipient === 'lawyer' && context.caseId) {
-        const caseData = await base44.entities.Case.get(context.caseId);
-        if (caseData?.assigned_lawyer_id) {
-          const lawyer = await base44.entities.User.get(caseData.assigned_lawyer_id);
-          if (lawyer?.email) {
-            emails.push(lawyer.email);
-          }
-        }
-      }
-      else if (recipient && recipient.includes('@')) {
-        emails.push(recipient);
-      }
-    } catch (e) { 
-      console.error(`[Recipient] Error resolving ${recipient}:`, e.message); 
-    }
-  }
-  
-  return [...new Set(emails)];
-}
-
-// ========================================
-// HELPER FUNCTIONS
-// ========================================
-function extractFromMail(mail, config) {
-  if (!config) return null;
-  const source = config.source || 'subject';
-  const text = source === 'body' ? (mail.body_plain || mail.body_html || '') : mail.subject;
-  if (!text) return null;
-  
-  if (config.regex) {
-    try {
-      const regex = new RegExp(config.regex, 'i');
-      const match = text.match(regex);
-      return match ? (match[1] || match[0]) : null;
-    } catch (e) { return null; }
-  }
-  
-  if (config.anchor_text) {
-    const index = text.indexOf(config.anchor_text);
-    if (index === -1) return null;
-    const afterAnchor = text.substring(index + config.anchor_text.length).trim();
-    return afterAnchor.split(/[\s,;]+/)[0] || null;
-  }
-  return null;
-}
-
-async function replaceTokens(template, context, base44) {
-  if (!template) return '';
-  let result = template;
-  result = result.replace(/{Mail_Subject}/g, context.mail?.subject || '');
-  result = result.replace(/{Mail_From}/g, context.mail?.sender_email || '');
-  result = result.replace(/{Mail_Body}/g, context.mail?.body_plain || '');
-  
-  if (context.caseId) {
-    try {
-      const caseData = await base44.entities.Case.get(context.caseId);
-      if (caseData) {
-        result = result.replace(/{Case_No}/g, caseData.case_number || '');
-        result = result.replace(/{Case_Title}/g, caseData.title || '');
-        result = result.replace(/{Official_No}/g, caseData.application_number || '');
-      }
-    } catch (e) {}
-  }
-  
-  if (context.clientId) {
-    try {
-      const client = await base44.entities.Client.get(context.clientId);
-      if (client) result = result.replace(/{Client_Name}/g, client.name || '');
-    } catch (e) {}
-  }
-  return result.replace(/{[^}]+}/g, '');
-}
-
-function calculateDueDate(offsetDays) {
-  const date = new Date();
-  date.setDate(date.getDate() + (offsetDays || 0));
-  return date.toISOString().split('T')[0];
-}
-
-async function createApprovalActivity(base44, data) {
-  const expiresAt = new Date();
-  expiresAt.setDate(expiresAt.getDate() + 7);
-
-  // 1. Create the Activity in DB
-  const activity = await base44.entities.Activity.create({
-    activity_type: 'approval_request',
-    title: `אישור: ${data.action_type} - ${data.mail_subject || 'ללא נושא'}`,
-    case_id: data.case_id || null,
-    client_id: data.client_id || null,
-    status: 'pending',
-    description: `בקשת אישור: ${data.action_type}`,
-    metadata: {
-      automation_rule_id: data.automation_rule_id,
-      mail_id: data.mail_id,
-      action_type: data.action_type,
-      action_config: data.action_config,
-      approver_email: data.approver_email,
-      mail_subject: data.mail_subject,
-      mail_from: data.mail_from,
-      expires_at: expiresAt.toISOString(),
-      rule_name: data.rule_name // Add rule name for the template
-    }
-  });
-
-  console.log(`[Approval] Created approval request: ${activity.id}`);
-  
-  // 2. Generate Designed Email
-  if (data.approver_email) {
-    try {
-      // Construct URLs
-      const approveUrl = `${BRAND.appUrl}/approve-batch/${activity.id}`;
-      const editUrl = `${BRAND.appUrl}/approval-queue`;
-
-      // Render HTML using embedded Design System
-      const htmlBody = renderApprovalEmail({
-        action_type: data.action_type,
-        rule_name: data.rule_name || 'אוטומציה',
-        mail_subject: data.mail_subject,
-        mail_from: data.mail_from,
-        case_id: data.case_id,
-        approveUrl: approveUrl,
-        editUrl: editUrl
-      });
-
-      await base44.functions.invoke('sendEmail', {
-        to: data.approver_email,
-        subject: `אישור נדרש: ${data.action_type} - ${data.mail_subject}`,
-        body: htmlBody, // Use the designed HTML
-      });
-      console.log(`[Approval] ✅ Designed Email sent to ${data.approver_email}`);
-    } catch (emailError) {
-      console.error('[Approval] ❌ Failed to send email:', emailError.message);
-    }
-  }
-  
-  return activity;
 }
 
 // ========================================
@@ -435,14 +209,12 @@ Deno.serve(async (req) => {
   }
 
   const startTime = Date.now();
-  let rollbackManager = null;
   let mailData = null;
   let ruleData = null;
   let userEmail = null;
   
   try {
     const base44 = createClientFromRequest(req);
-    rollbackManager = new RollbackManager(base44);
     
     const rawBody = await req.json();
     const params = rawBody.body || rawBody;
@@ -502,29 +274,28 @@ Deno.serve(async (req) => {
     const results = [];
     const actions = rule.action_bundle || {};
 
-    // Helper for approval flow
-    const handleApprovalOrExecute = async (actionType, config, executeFn) => {
+    // Helper: Check approval or execute
+    const handleAction = async (actionType, config, executeFn) => {
       if (testMode) {
         results.push({ action: actionType, status: 'test_skipped', data: config });
         return;
       }
       
+      // RESTORED BATCHING LOGIC:
+      // If approval is required, return "pending_batch" and DO NOT execute.
+      // This tells processIncomingMail to aggregate this action into a batch.
       if (rule.require_approval) {
-        const approvalActivity = await createApprovalActivity(base44, { 
-          automation_rule_id: ruleId, 
-          rule_name: rule.name, // Pass rule name for email
-          mail_id: mailId, 
-          case_id: caseId, 
-          client_id: clientId, 
-          action_type: actionType, 
-          action_config: config, 
-          approver_email: rule.approver_email, 
-          mail_subject: mail.subject, 
-          mail_from: mail.sender_email 
+        results.push({ 
+          action: actionType, 
+          status: 'pending_batch', 
+          config: config,
+          approver_email: rule.approver_email,
+          rule_id: rule.id,
+          rule_name: rule.name
         });
-        rollbackManager.register({ type: 'approval', id: approvalActivity.id });
-        results.push({ action: actionType, status: 'pending_approval', approval_id: approvalActivity.id });
+        console.log(`[AutoRule] ⏸️ Action ${actionType} pending batch approval`);
       } else {
+        // Direct execution (No Approval Needed)
         await executeFn();
       }
     };
@@ -539,10 +310,25 @@ Deno.serve(async (req) => {
           body: await replaceTokens(actions.send_email.body_template, { mail, caseId, clientId }, base44)
         };
         
-        await handleApprovalOrExecute('send_email', emailConfig, async () => {
-          const emailResult = await base44.functions.invoke('sendEmail', emailConfig);
+        await handleAction('send_email', emailConfig, async () => {
+          // BRANDING FIX FOR DIRECT SEND:
+          // Wrap the raw body with the Design System layout
+          const formattedBody = `
+            <div style="white-space: pre-wrap; font-family: 'Segoe UI', Arial, sans-serif; color: ${BRAND.colors.text};">
+              ${emailConfig.body}
+            </div>
+          `;
+          const finalHtml = generateEmailLayout(formattedBody, emailConfig.subject);
+
+          const emailResult = await base44.functions.invoke('sendEmail', {
+            to: emailConfig.to,
+            subject: emailConfig.subject,
+            body: finalHtml // Send styled HTML
+          });
+          
           if (emailResult.error) throw new Error(`sendEmail failed: ${emailResult.error}`);
           results.push({ action: 'send_email', status: 'success', sent_to: to });
+          console.log('[AutoRule] ✅ Branded email sent directly');
         });
       } else {
         results.push({ action: 'send_email', status: 'skipped', reason: 'no_recipients' });
@@ -561,9 +347,8 @@ Deno.serve(async (req) => {
         due_date: calculateDueDate(actions.create_task.due_offset_days)
       };
       
-      await handleApprovalOrExecute('create_task', taskData, async () => {
+      await handleAction('create_task', taskData, async () => {
         const task = await base44.entities.Task.create(taskData);
-        rollbackManager.register({ type: 'create_task', id: task.id });
         results.push({ action: 'create_task', status: 'success', id: task.id });
       });
     }
@@ -595,14 +380,12 @@ Deno.serve(async (req) => {
         task_id: null
       };
       
-      await handleApprovalOrExecute('billing', billingData, async () => {
+      await handleAction('billing', billingData, async () => {
         const timeEntry = await base44.entities.TimeEntry.create(billingData);
         try {
           await base44.functions.invoke('syncBillingToSheets', { timeEntryId: timeEntry.id });
         } catch (e) {}
-
-        rollbackManager.register({ type: 'billing', id: timeEntry.id });
-        results.push({ action: 'billing', status: 'success', id: timeEntry.id, hours: billingData.hours, amount: billingData.hours * rate });
+        results.push({ action: 'billing', status: 'success', id: timeEntry.id });
       });
     }
 
@@ -613,10 +396,10 @@ Deno.serve(async (req) => {
       } else {
         const folderPath = await replaceTokens(actions.save_file.path_template, { mail, caseId, clientId }, base44);
         
-        // Save File doesn't usually require approval in the same way, or it's implicitly approved
-        // Assuming testMode check is enough for now based on original code
+        // Save file is usually best-effort / implicit approval in many flows, 
+        // but if strictly requiring approval, it follows the same logic.
         if (testMode) {
-          results.push({ action: 'save_file', status: 'test_skipped', data: { path: folderPath, files: mail.attachments.length } });
+          results.push({ action: 'save_file', status: 'test_skipped', data: { path: folderPath } });
         } else {
            try {
               const supabaseUrl = Deno.env.get('SUPABASE_URL');
@@ -649,13 +432,12 @@ Deno.serve(async (req) => {
         attendees: actions.calendar_event.attendees || []
       };
       
-      await handleApprovalOrExecute('calendar_event', eventData, async () => {
+      await handleAction('calendar_event', eventData, async () => {
          const calendarResult = await base44.functions.invoke('createCalendarEvent', eventData);
          if (calendarResult?.error) {
             results.push({ action: 'calendar_event', status: 'failed', error: calendarResult.error });
          } else {
             results.push({ action: 'calendar_event', status: 'success', google_event_id: calendarResult?.google_event_id });
-            rollbackManager.register({ type: 'calendar_event', id: calendarResult?.google_event_id });
          }
       });
     }
@@ -674,21 +456,21 @@ Deno.serve(async (req) => {
         user_email: userEmail,
         metadata: { case_id: caseId, client_id: clientId, extracted: extractedInfo }
       });
+      // Stats updated only on full completion
       await updateRuleStats(base44, ruleId, true);
     }
 
     return new Response(JSON.stringify({ 
       success: true, 
       results, 
+      extracted_info: extractedInfo,
+      case_id: caseId,
+      client_id: clientId,
       execution_time_ms: executionTime 
     }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
 
   } catch (error) {
     console.error('[AutoRule] ❌ Error:', error);
-    if (rollbackManager && !testMode && params && params.ruleId) {
-        // Attempt rollback only if we have context
-        try { await rollbackManager.rollbackAll(); } catch (e) {}
-    }
     return new Response(JSON.stringify({ error: error.message }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
   }
 });
