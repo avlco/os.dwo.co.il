@@ -6,6 +6,86 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+// ========================================
+// DWO EMAIL DESIGN SYSTEM (INLINE CSS)
+// ========================================
+
+const BRAND = {
+  colors: {
+    primary: '#b62f12',    // DWO Red
+    secondary: '#545454',  // DWO Dark Gray
+    bg: '#f3f4f6',         // Light Grey Background
+    card: '#ffffff',       // White Card
+    text: '#000000',       // Black Text
+    textLight: '#545454',  // Metadata Text
+    link: '#b62f12'        // Link
+  },
+  logoUrl: 'https://dwo.co.il/wp-content/uploads/2020/04/Drori-Stav-logo-2.png', 
+  appUrl: 'https://os.dwo.co.il'
+};
+
+/**
+ * Generates HTML with INLINE styles for maximum compatibility (Outlook, Gmail)
+ */
+function generateEmailLayout(contentHtml, title) {
+  const t = {
+    footer_contact: 'DWO - משרד עורכי דין | www.dwo.co.il',
+    footer_disclaimer: 'הודעה זו מכילה מידע סודי ומוגן. אם קיבלת הודעה זו בטעות, אנא מחק אותה ודווח לשולח.'
+  };
+
+  // Define styles as strings for reusability and cleanness
+  const s = {
+    body: `margin: 0; padding: 0; background-color: ${BRAND.colors.bg}; font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;`,
+    wrapper: `padding: 20px; background-color: ${BRAND.colors.bg};`,
+    container: `max-width: 600px; margin: 0 auto; background-color: ${BRAND.colors.card}; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 6px rgba(0,0,0,0.05);`,
+    header: `background-color: ${BRAND.colors.card}; padding: 20px; text-align: center; border-bottom: 3px solid ${BRAND.colors.primary};`,
+    logo: `height: 50px; width: auto; max-width: 200px; object-fit: contain; display: block; margin: 0 auto;`,
+    content: `padding: 30px 25px; color: ${BRAND.colors.text}; line-height: 1.6; text-align: right; direction: rtl; font-size: 16px;`,
+    footer: `background-color: #f8fafc; padding: 20px; text-align: center; font-size: 12px; color: ${BRAND.colors.textLight}; border-top: 1px solid #e2e8f0; direction: rtl;`,
+    link: `color: ${BRAND.colors.link}; text-decoration: none; font-weight: bold;`
+  };
+
+  return `
+<!DOCTYPE html>
+<html dir="rtl" lang="he">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>${title}</title>
+</head>
+<body style="${s.body}">
+  <div style="${s.wrapper}">
+    <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%" style="${s.container}">
+      
+      <tr>
+        <td style="${s.header}">
+           <img src="${BRAND.logoUrl}" alt="DWO Logo" style="${s.logo}" width="200" height="50" />
+        </td>
+      </tr>
+
+      <tr>
+        <td style="${s.content}">
+          ${contentHtml}
+        </td>
+      </tr>
+
+      <tr>
+        <td style="${s.footer}">
+          <p style="margin: 0 0 10px 0;">${t.footer_contact}</p>
+          <p style="margin: 0; opacity: 0.7;">${t.footer_disclaimer}</p>
+        </td>
+      </tr>
+
+    </table>
+  </div>
+</body>
+</html>`.trim();
+}
+
+// ========================================
+// MAIN HANDLER
+// ========================================
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
@@ -158,11 +238,25 @@ serve(async (req) => {
 // Execute send email action
 async function executeSendEmail(supabase, config, metadata) {
   try {
+    // 1. Prepare Content (Wrap raw body with styling support)
+    const rawBody = config.body || '';
+    
+    // Using Inline CSS for text wrapper
+    const formattedBody = `
+      <div style="font-family: 'Segoe UI', Arial, sans-serif; color: ${BRAND.colors.text}; white-space: pre-wrap;">
+        ${rawBody}
+      </div>
+    `;
+
+    // 2. Wrap with DWO Design System (Inline CSS Version)
+    const finalHtml = generateEmailLayout(formattedBody, config.subject || 'הודעה מ-DWO');
+
+    // 3. Send using the custom email function (Gmail/SMTP)
     const { error } = await supabase.functions.invoke('sendEmail', {
       body: {
         to: config.to,
         subject: config.subject,
-        body: config.body,
+        body: finalHtml, // Sending the branded HTML
         case_id: metadata.case_id,
         mail_id: metadata.mail_id,
       },
