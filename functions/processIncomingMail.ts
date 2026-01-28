@@ -56,9 +56,7 @@ function parseGmailMessage(gmailMsg) {
   let bodyHtml = '';
   const attachments = [];
   
-  // Recursive function to extract parts deeply
   function extractParts(payload, messageId) {
-    // 1. Handle Attachments
     if (payload.filename && payload.body?.attachmentId) {
       attachments.push({
         filename: payload.filename,
@@ -68,8 +66,6 @@ function parseGmailMessage(gmailMsg) {
         messageId: messageId
       });
     }
-    
-    // 2. Handle Body Content
     if (payload.body?.data) {
       const decoded = decodeBase64Utf8(payload.body.data);
       if (decoded) {
@@ -77,8 +73,6 @@ function parseGmailMessage(gmailMsg) {
         else if (payload.mimeType === 'text/plain') bodyText = decoded;
       }
     }
-    
-    // 3. Recurse into sub-parts (multipart)
     if (payload.parts && Array.isArray(payload.parts)) {
       payload.parts.forEach(p => extractParts(p, messageId));
     }
@@ -86,7 +80,6 @@ function parseGmailMessage(gmailMsg) {
   
   extractParts(gmailMsg.payload, gmailMsg.id);
   
-  // Create snippet from text or html
   let snippet = bodyText || '';
   if (!snippet && bodyHtml) snippet = bodyHtml.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
   
@@ -142,48 +135,52 @@ async function executeSync(base44, user) {
   console.log(`[Background] 🚀 Starting Sync for user ${user.id}`);
 
   try {
-    // A. GET CONNECTION
-    const connections = await base44.entities.IntegrationConnection.list('-created_at', 10);
-    const connection = (connections.data || connections).find(c => c.provider === 'google' && c.is_active !== false);
+    // A. GET CONNECTION (IMPROVED ROBUST LOOKUP)
+    // Fetch more items to avoid missing the connection if list is cluttered
+    const connectionsRes = await base44.entities.IntegrationConnection.list('-created_at', 50);
+    const connections = connectionsRes.data || connectionsRes;
+    
+    // Debug log to see what we actually found
+    const providersFound = connections.map(c => `${c.provider}(active:${c.is_active})`).join(', ');
+    console.log(`[Background] Found ${connections.length} connections: ${providersFound}`);
+
+    // Robust finding: Case insensitive check
+    const connection = connections.find(c => 
+      c.provider && 
+      c.provider.toLowerCase() === 'google' && 
+      c.is_active !== false
+    );
     
     if (!connection) {
-      console.log("[Background] No active Google connection found.");
+      console.log("[Background] ❌ No active Google connection found (checked top 50).");
       return;
     }
 
     let accessToken = await decrypt(connection.access_token_encrypted);
     const refreshToken = connection.refresh_token_encrypted ? await decrypt(connection.refresh_token_encrypted) : null;
 
-    // B. DETERMINE QUERY (The "Smart Sync")
-    // Get the absolute latest mail to determine Delta
+    // B. DETERMINE QUERY
     const lastMails = await base44.entities.Mail.list('-received_at', 1);
     const lastMail = (lastMails.data || lastMails)[0];
 
     let query = '';
     
     if (!lastMail) {
-      // SCENARIO 1: FIRST SYNC (Last 24 Hours Only)
       const oneDayAgo = Math.floor((Date.now() - 24 * 60 * 60 * 1000) / 1000);
       query = `after:${oneDayAgo}`;
       console.log(`[Background] 🆕 First Sync detected. Query: ${query} (Last 24h)`);
     } else {
-      // SCENARIO 2: DELTA SYNC WITH OVERLAP (Fixing the Blind Spot)
-      // Instead of +1 second, we go BACK 10 minutes to ensure no gaps.
-      // Duplicates will be filtered by the existingIds check later.
       const bufferMinutes = 10; 
       const lastTime = Math.floor((new Date(lastMail.received_at).getTime() - (bufferMinutes * 60 * 1000)) / 1000);
-      
       query = `after:${lastTime}`;
       console.log(`[Background] 🔄 Delta Sync (Overlap ${bufferMinutes}m). Query: ${query}`);
     }
 
     // C. FETCH LIST FROM GMAIL
-    // Using maxResults=50 to keep execution fast
     let listUrl = `https://gmail.googleapis.com/gmail/v1/users/me/messages?q=${encodeURIComponent(query)}&maxResults=50`;
     
     let listRes = await fetch(listUrl, { headers: { Authorization: `Bearer ${accessToken}` } });
     
-    // Handle Token Expiry
     if (listRes.status === 401 && refreshToken) {
       accessToken = await refreshGoogleToken(refreshToken, connection, base44);
       listRes = await fetch(listUrl, { headers: { Authorization: `Bearer ${accessToken}` } });
@@ -199,12 +196,11 @@ async function executeSync(base44, user) {
 
     // D. FETCH DETAILS & SAVE
     const savedMails = [];
-    // Increase check range to ensuring we catch duplicates from the overlap
     const existingMailsList = await base44.entities.Mail.list('-received_at', 200); 
     const existingIds = new Set((existingMailsList.data || existingMailsList).map(m => m.external_id));
 
     for (const msg of listData.messages) {
-      if (existingIds.has(msg.id)) continue; // Skip duplicates (Handles the overlap)
+      if (existingIds.has(msg.id)) continue; 
 
       try {
         const detailRes = await fetch(
@@ -212,10 +208,7 @@ async function executeSync(base44, user) {
           { headers: { Authorization: `Bearer ${accessToken}` } }
         );
         
-        if (!detailRes.ok) {
-           console.warn(`[Background] Failed to fetch details for msg ${msg.id}`);
-           continue;
-        }
+        if (!detailRes.ok) continue;
 
         const detailData = await detailRes.json();
         const parsed = parseGmailMessage(detailData);
@@ -230,7 +223,6 @@ async function executeSync(base44, user) {
     console.log(`[Background] ✅ Saved ${savedMails.length} actual new mails.`);
 
     // E. TRIGGER AUTOMATION
-    // Only run if we actually saved new mails
     if (savedMails.length > 0) {
       await runAutomation(base44, savedMails);
     }
@@ -241,13 +233,12 @@ async function executeSync(base44, user) {
 }
 
 // ========================================
-// 4. AUTOMATION LOGIC (MATCH & EXECUTE)
+// 4. AUTOMATION LOGIC
 // ========================================
 
 async function runAutomation(base44, mails) {
   console.log(`[Automation] 🤖 Processing ${mails.length} mails for rules...`);
   
-  // Fetch active rules
   const rulesRaw = await base44.entities.AutomationRule.list('-created_date', 100);
   const rules = (rulesRaw.data || rulesRaw).filter(r => r.is_active);
   
@@ -255,37 +246,30 @@ async function runAutomation(base44, mails) {
 
   for (const mail of mails) {
     try {
-      // Find matches locally to save API calls
       const matchingRules = rules.filter(rule => {
         const config = rule.catch_config || {};
         let match = true;
         
-        // Sender check
         if (config.senders?.length > 0) {
             const sender = (mail.sender_email || '').toLowerCase();
             if (!config.senders.some(s => sender.includes(s.toLowerCase()))) match = false;
         }
-        // Subject check
         if (match && config.subject_contains) {
             if (!mail.subject?.toLowerCase().includes(config.subject_contains.toLowerCase())) match = false;
         }
-        // Body check
         if (match && config.body_contains) {
             const body = (mail.body_plain || mail.body_html || '').toLowerCase();
             if (!body.includes(config.body_contains.toLowerCase())) match = false;
         }
-        
         return match;
       });
 
       if (matchingRules.length === 0) continue;
 
-      // Buffers for Batching
       const actionsBuffer = [];
       const extractedBuffer = {};
 
       for (const rule of matchingRules) {
-        // Execute Rule 
         const res = await base44.functions.invoke('executeAutomationRule', {
           mailId: mail.id,
           ruleId: rule.id
@@ -298,19 +282,16 @@ async function runAutomation(base44, mails) {
 
         const data = res.data || {};
         
-        // Collect Info
         if (data.extracted_info) Object.assign(extractedBuffer, data.extracted_info);
         if (data.case_id) extractedBuffer.case_id = data.case_id;
         if (data.client_id) extractedBuffer.client_id = data.client_id;
 
-        // Collect Pending Actions (The critical Batch Logic)
         if (data.results) {
             const pending = data.results.filter(r => r.status === 'pending_batch');
             actionsBuffer.push(...pending);
         }
       }
 
-      // Create Batch if needed
       if (actionsBuffer.length > 0) {
         console.log(`[Automation] 📦 Creating approval batch with ${actionsBuffer.length} actions.`);
         await base44.functions.invoke('aggregateApprovalBatch', {
@@ -327,34 +308,26 @@ async function runAutomation(base44, mails) {
 }
 
 // ========================================
-// 5. MAIN ENTRY POINT (ASYNC SERVER)
+// 5. MAIN ENTRY POINT
 // ========================================
 
 Deno.serve(async (req) => {
-  // Always handle OPTIONS for CORS
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   try {
-    // 1. Auth Check
     const base44 = createClientFromRequest(req);
     const user = await base44.auth.me();
     
-    // Explicitly handle unauthorized access
     if (!user) {
         return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: corsHeaders });
     }
 
-    // 2. TRIGGER BACKGROUND WORK (The 500 Fix)
-    // This allows the response to return immediately while the sync happens in background
     if (typeof EdgeRuntime !== 'undefined') {
         EdgeRuntime.waitUntil(executeSync(base44, user));
     } else {
-        // Fallback for non-edge environments (Promise doesn't block response)
         executeSync(base44, user);
     }
 
-    // 3. IMMEDIATE RESPONSE (200 OK)
-    // The browser gets this immediately, solving the Timeout issue
     return new Response(JSON.stringify({ 
       success: true, 
       status: 'queued', 
