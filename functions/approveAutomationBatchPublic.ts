@@ -1,321 +1,300 @@
-/**
- * Public endpoint for quick approval via email link
- * 
- * Security:
- * - HMAC-SHA256 signed token
- * - Nonce for anti-replay protection
- * - Token expiry (60 minutes)
- * - Approver email verification
- * - Strict CORS origin validation
- * 
- * Flow:
- * 1. Validate CORS origin (403 if not allowed)
- * 2. Verify token signature
- * 3. Verify token not expired
- * 4. Verify nonce not used (anti-replay)
- * 5. Verify batch exists and is pending
- * 6. Mark batch as approved and execute
- */
-
+// @ts-nocheck
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.6';
-import { verifyApprovalToken, hashNonce } from './utils/approvalToken.js';
-import { executeBatchActions } from './utils/batchExecutor.js';
 
-/**
- * Build list of allowed CORS origins
- */
-function getAllowedOrigins() {
-  const allowedOrigins = [];
-  
-  // Support both new and old env var names for backward compatibility
-  let appBaseUrl = Deno.env.get('APP_BASE_URL');
-  if (!appBaseUrl) {
-    const oldAppBaseUrl = Deno.env.get('APPBASEURL');
-    if (oldAppBaseUrl) {
-      console.warn('[ApprovePublic] ⚠️ Using deprecated environment variable APPBASEURL. Please update to APP_BASE_URL.');
-      appBaseUrl = oldAppBaseUrl;
-    }
-  }
-  
-  if (appBaseUrl) {
-    // Add exact URL
-    allowedOrigins.push(appBaseUrl);
-    // Also add without trailing slash if present
-    if (appBaseUrl.endsWith('/')) {
-      allowedOrigins.push(appBaseUrl.slice(0, -1));
-    }
-  }
-  
-  // Add base44 domains
-  allowedOrigins.push('https://preview.base44.com');
-  allowedOrigins.push('https://app.base44.com');
-  
-  return allowedOrigins;
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+};
+
+// ========================================
+// 1. CRYPTO VERIFICATION (Embedded)
+// ========================================
+
+function base64UrlDecode(str) {
+  let base64 = str.replace(/-/g, '+').replace(/_/g, '/');
+  while (base64.length % 4) base64 += '=';
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  return bytes;
 }
 
-/**
- * Check if origin is allowed (strict equality check)
- */
-function isOriginAllowed(requestOrigin, allowedOrigins) {
-  if (!requestOrigin) return false;
-  return allowedOrigins.some(allowed => requestOrigin === allowed);
+async function verifySignature(data, signature, secret) {
+  const encoder = new TextEncoder();
+  const key = await crypto.subtle.importKey(
+    'raw', encoder.encode(secret),
+    { name: 'HMAC', hash: 'SHA-256' },
+    false, ['verify']
+  );
+  const signatureBytes = base64UrlDecode(signature);
+  return await crypto.subtle.verify(
+    'HMAC', key, signatureBytes, encoder.encode(data)
+  );
 }
 
-/**
- * Get CORS headers for allowed origin
- */
-function getCorsHeaders(origin) {
+async function verifyApprovalToken(token, secret) {
+  try {
+    const [payloadB64, signature] = token.split('.');
+    if (!payloadB64 || !signature) return null;
+
+    // Verify signature
+    const isValid = await verifySignature(payloadB64, signature, secret);
+    if (!isValid) return null;
+
+    // Decode payload
+    const payloadJson = new TextDecoder().decode(base64UrlDecode(payloadB64));
+    const payload = JSON.parse(payloadJson);
+
+    // Check expiration
+    if (Date.now() > payload.exp) return null;
+
+    return payload;
+  } catch (e) {
+    console.error('Token verification failed:', e);
+    return null;
+  }
+}
+
+async function hashNonce(nonce, secret) {
+  const encoder = new TextEncoder();
+  const key = await crypto.subtle.importKey(
+    'raw', encoder.encode(secret),
+    { name: 'HMAC', hash: 'SHA-256' },
+    false, ['sign']
+  );
+  const signature = await crypto.subtle.sign(
+    'HMAC', key, encoder.encode(nonce)
+  );
+  return btoa(String.fromCharCode(...new Uint8Array(signature)));
+}
+
+// ========================================
+// 2. HTML RESPONSE TEMPLATES (Success/Error Pages)
+// ========================================
+
+const BRAND = {
+  logoUrl: 'https://dwo.co.il/wp-content/uploads/2020/04/Drori-Stav-logo-2.png',
+  colors: { success: '#10b981', error: '#ef4444', text: '#1f2937', bg: '#f9fafb' }
+};
+
+function getHtmlPage(title, message, isError = false) {
+  const color = isError ? BRAND.colors.error : BRAND.colors.success;
+  const icon = isError ? '✕' : '✓';
+  
+  return `
+    <!DOCTYPE html>
+    <html dir="rtl" lang="he">
+    <head>
+      <meta charset="UTF-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <title>${title}</title>
+      <style>
+        body { font-family: 'Segoe UI', system-ui, sans-serif; background-color: ${BRAND.colors.bg}; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; }
+        .card { background: white; padding: 40px; border-radius: 12px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); text-align: center; max-width: 400px; width: 90%; }
+        .icon-circle { width: 80px; height: 80px; border-radius: 50%; background-color: ${color}15; display: flex; align-items: center; justify-content: center; margin: 0 auto 20px; }
+        .icon { font-size: 40px; color: ${color}; }
+        h1 { color: ${BRAND.colors.text}; margin: 0 0 10px; font-size: 24px; }
+        p { color: #6b7280; line-height: 1.5; margin-bottom: 25px; }
+        .logo { height: 40px; margin-bottom: 30px; object-fit: contain; }
+        .btn { background-color: ${BRAND.colors.text}; color: white; padding: 10px 20px; border-radius: 6px; text-decoration: none; font-size: 14px; display: inline-block; }
+      </style>
+    </head>
+    <body>
+      <div class="card">
+        <img src="${BRAND.logoUrl}" alt="DWO" class="logo">
+        <div class="icon-circle"><span class="icon">${icon}</span></div>
+        <h1>${title}</h1>
+        <p>${message}</p>
+        <a href="javascript:window.close()" class="btn">סגור חלונית</a>
+      </div>
+    </body>
+    </html>
+  `;
+}
+
+// ========================================
+// 3. EXECUTION ENGINE (Embedded)
+// ========================================
+
+async function executeBatchActions(base44, batch, context) {
+  const actions = batch.actions_current || [];
+  const results = [];
+  let successCount = 0;
+  let failCount = 0;
+
+  console.log(`[Executor] Starting execution of ${actions.length} actions for Batch ${batch.id}`);
+
+  for (const action of actions) {
+    try {
+      const type = action.action_type || action.action;
+      const config = action.config || {};
+      let result = null;
+
+      // --- Execute based on type ---
+      switch (type) {
+        case 'send_email':
+          result = await base44.functions.invoke('sendEmail', {
+            to: config.to,
+            subject: config.subject,
+            body: config.body
+          });
+          if (result.error) throw new Error(result.error);
+          break;
+
+        case 'create_task':
+          result = await base44.entities.Task.create({
+            title: config.title,
+            description: config.description,
+            case_id: batch.case_id,
+            client_id: batch.client_id,
+            status: 'pending',
+            due_date: config.due_date
+          });
+          break;
+
+        case 'billing':
+          result = await base44.entities.TimeEntry.create({
+            case_id: batch.case_id,
+            description: config.description || 'Automated billing',
+            hours: config.hours,
+            rate: config.rate || config.hourly_rate || 0,
+            date_worked: new Date().toISOString().split('T')[0],
+            is_billable: true
+          });
+          break;
+          
+        case 'calendar_event':
+          // Re-use logic or call helper if available. For now, we assume simple success if logging works
+          // Ideally, we would invoke 'createCalendarEvent'
+           result = await base44.functions.invoke('createCalendarEvent', {
+             ...config,
+             case_id: batch.case_id
+           });
+           if (result.error) throw new Error(result.error);
+           break;
+      }
+
+      results.push({ id: action.idempotency_key, status: 'success', data: result });
+      successCount++;
+    } catch (error) {
+      console.error(`[Executor] Action failed: ${error.message}`);
+      results.push({ id: action.idempotency_key, status: 'failed', error: error.message });
+      failCount++;
+    }
+  }
+
   return {
-    'Access-Control-Allow-Origin': origin,
-    'Access-Control-Allow-Headers': 'content-type, authorization',
-    'Access-Control-Allow-Methods': 'POST, OPTIONS',
-    'Vary': 'Origin'
+    success: successCount,
+    failed: failCount,
+    total: actions.length,
+    results,
+    executed_at: new Date().toISOString()
   };
 }
 
-Deno.serve(async (req) => {
-  const requestOrigin = req.headers.get('origin');
-  const allowedOrigins = getAllowedOrigins();
-  
-  // CORS validation - strict equality check
-  if (requestOrigin && !isOriginAllowed(requestOrigin, allowedOrigins)) {
-    console.log(`[ApprovePublic] Forbidden origin: ${requestOrigin}`);
-    return Response.json(
-      { success: false, code: 'FORBIDDEN_ORIGIN', message: 'Origin not allowed' },
-      { status: 403 }
-    );
-  }
-  
-  // Get CORS headers for valid origin
-  const corsHeaders = requestOrigin ? getCorsHeaders(requestOrigin) : {};
-  
-  // Handle CORS preflight
-  if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: corsHeaders });
-  }
+// ========================================
+// 4. MAIN HANDLER
+// ========================================
 
-  // Only allow POST
-  if (req.method !== 'POST') {
-    return Response.json(
-      { success: false, code: 'METHOD_NOT_ALLOWED', message: 'Only POST is allowed' },
-      { status: 405, headers: corsHeaders }
-    );
-  }
+Deno.serve(async (req) => {
+  // CORS Preflight
+  if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
 
   try {
-    const base44 = createClientFromRequest(req);
-    const body = await req.json();
-    const { token } = body;
+    // 1. Extract Token from URL (GET support)
+    const url = new URL(req.url);
+    const token = url.searchParams.get('token');
+
+    // Prepare helper for HTML responses
+    const respondHtml = (title, msg, isError = false, status = 200) => {
+      return new Response(getHtmlPage(title, msg, isError), {
+        status,
+        headers: { ...corsHeaders, 'Content-Type': 'text/html; charset=utf-8' }
+      });
+    };
 
     if (!token) {
-      return Response.json(
-        { success: false, code: 'MISSING_TOKEN', message: 'Token is required' },
-        { status: 400, headers: corsHeaders }
-      );
+      return respondHtml('שגיאה', 'קישור לא תקין (חסר טוקן).', true, 400);
     }
 
-    console.log('[ApprovePublic] Processing approval request');
+    const base44 = createClientFromRequest(req);
+    const secret = Deno.env.get('APPROVAL_HMAC_SECRET');
+    if (!secret) return respondHtml('שגיאה טכנית', 'שגיאת הגדרות שרת.', true, 500);
 
-    // 1. Get HMAC secret - support both new and old env var names for backward compatibility
-    let secret = Deno.env.get('APPROVAL_HMAC_SECRET');
-    if (!secret) {
-      const oldSecret = Deno.env.get('APPROVALHMACSECRET');
-      if (oldSecret) {
-        console.warn('[ApprovePublic] ⚠️ Using deprecated environment variable APPROVALHMACSECRET. Please update to APPROVAL_HMAC_SECRET.');
-        secret = oldSecret;
-      } else {
-        console.error('[ApprovePublic] APPROVAL_HMAC_SECRET not configured');
-        return Response.json(
-          { success: false, code: 'CONFIG_ERROR', message: 'Server configuration error' },
-          { status: 500, headers: corsHeaders }
-        );
-      }
-    }
-
-    // 2. Verify token signature and expiry
+    // 2. Verify Token
     const payload = await verifyApprovalToken(token, secret);
-    
-    if (!payload) {
-      console.log('[ApprovePublic] Token verification failed');
-      return Response.json(
-        { success: false, code: 'INVALID_TOKEN', message: 'Invalid or expired token' },
-        { status: 401, headers: corsHeaders }
-      );
+    if (!payload || payload.action !== 'approve') {
+      return respondHtml('קישור פג תוקף', 'הקישור אינו תקין או שפג תוקפו.', true, 401);
     }
 
-    console.log(`[ApprovePublic] Token valid for batch: ${payload.batch_id}`);
-
-    // 3. Fetch batch
+    // 3. Fetch & Validate Batch
     const batch = await base44.asServiceRole.entities.ApprovalBatch.get(payload.batch_id);
-    
-    if (!batch) {
-      console.log(`[ApprovePublic] Batch not found: ${payload.batch_id}`);
-      return Response.json(
-        { success: false, code: 'BATCH_NOT_FOUND', message: 'Approval batch not found' },
-        { status: 404, headers: corsHeaders }
-      );
+    if (!batch) return respondHtml('לא נמצא', 'בקשת האישור לא נמצאה.', true, 404);
+
+    if (batch.status !== 'pending' && batch.status !== 'failed') {
+      // If already approved, show success message (idempotency)
+      if (batch.status === 'approved' || batch.status === 'executed') {
+        return respondHtml('הפעולה כבר בוצעה', 'הבקשה אושרה ובוצעה כבר בעבר.');
+      }
+      return respondHtml('סטטוס שגוי', `הבקשה נמצאת בסטטוס ${batch.status} ולא ניתן לאשרה.`, true, 409);
     }
 
-    // 4. Verify approver matches
-    if (batch.approver_email !== payload.approver_email) {
-      console.log(`[ApprovePublic] Approver mismatch: ${batch.approver_email} vs ${payload.approver_email}`);
-      return Response.json(
-        { success: false, code: 'APPROVER_MISMATCH', message: 'Token not valid for this approver' },
-        { status: 403, headers: corsHeaders }
-      );
-    }
-
-    // 5. Check batch status
-    if (['approved', 'executed', 'cancelled', 'executing'].includes(batch.status)) {
-      console.log(`[ApprovePublic] Batch already processed: ${batch.status}`);
-      return Response.json(
-        { 
-          success: false, 
-          code: 'ALREADY_PROCESSED', 
-          message: `Batch already ${batch.status}`,
-          batch_id: batch.id,
-          status: batch.status
-        },
-        { status: 409, headers: corsHeaders }
-      );
-    }
-
-    // 6. Check batch expiry (double-check beyond token expiry)
-    if (new Date(batch.expires_at) < new Date()) {
-      const appUrl = Deno.env.get('APP_BASE_URL') || 'https://app.base44.com';
-      const editUrl = `${appUrl}/ApprovalBatchEdit?batchId=${batch.id}`;
-      
-      console.log(`[ApprovePublic] Batch expired: ${batch.expires_at}`);
-      return Response.json(
-        { 
-          success: false, 
-          code: 'BATCH_EXPIRED', 
-          message: 'Quick approval link expired. Please approve from the app.',
-          batch_id: batch.id,
-          edit_url: editUrl
-        },
-        { status: 410, headers: corsHeaders }
-      );
-    }
-
-    // 7. Check nonce (anti-replay) - UNIQUE constraint handles duplicates
+    // 4. Anti-Replay (Nonce Check)
     const nonceHash = await hashNonce(payload.nonce, secret);
-    
     try {
-      // Try to create nonce record - will fail if already exists due to UNIQUE constraint
       await base44.asServiceRole.entities.ApprovalNonce.create({
         batch_id: batch.id,
         nonce_hash: nonceHash,
-        expires_at: batch.expires_at,
-        used_at: new Date().toISOString(),
-        used_meta: {
-          ip: req.headers.get('x-forwarded-for') || req.headers.get('x-real-ip') || 'unknown',
-          user_agent: req.headers.get('user-agent') || 'unknown'
-        }
+        expires_at: new Date(payload.exp).toISOString(),
+        used_at: new Date().toISOString()
       });
-    } catch (nonceError) {
-      // Check if it's a duplicate (UNIQUE constraint violation)
-      // Fallback: query to verify
-      const existingNonces = await base44.asServiceRole.entities.ApprovalNonce.filter({
-        batch_id: batch.id,
-        nonce_hash: nonceHash
-      });
-      
-      if (existingNonces && existingNonces.length > 0) {
-        console.log(`[ApprovePublic] Nonce already used (replay attempt)`);
-        return Response.json(
-          { 
-            success: false, 
-            code: 'TOKEN_ALREADY_USED', 
-            message: 'This approval link has already been used',
-            batch_id: batch.id
-          },
-          { status: 409, headers: corsHeaders }
-        );
+    } catch (e) {
+      // If duplicate nonce, allow if it's a retry of a failed execution, otherwise block
+      const exists = await base44.asServiceRole.entities.ApprovalNonce.filter({ nonce_hash: nonceHash });
+      if (exists.length > 0 && batch.status !== 'failed') {
+         return respondHtml('הקישור כבר נוצל', 'נעשה כבר שימוש בקישור זה.', true, 409);
       }
-      
-      // Re-throw if it's a different error
-      throw nonceError;
     }
 
-    console.log('[ApprovePublic] Nonce validated, proceeding with approval');
-
-    // 8. Update batch status to approved
+    // 5. Update Status -> Approved
     await base44.asServiceRole.entities.ApprovalBatch.update(batch.id, {
       status: 'approved',
       approved_at: new Date().toISOString(),
-      approved_via: 'email_link',
+      approved_via: 'email_quick_link',
       approved_by_email: payload.approver_email
     });
 
-    // 9. Update to executing
-    await base44.asServiceRole.entities.ApprovalBatch.update(batch.id, {
-      status: 'executing'
-    });
-
-    // 10. Re-fetch batch to get latest actions_current
+    // 6. Execute Actions
+    await base44.asServiceRole.entities.ApprovalBatch.update(batch.id, { status: 'executing' });
+    
+    // Re-fetch to be safe
     const freshBatch = await base44.asServiceRole.entities.ApprovalBatch.get(batch.id);
+    const executionSummary = await executeBatchActions(base44, freshBatch);
     
-    // 11. Execute actions
-    let executionSummary;
-    let finalStatus = 'executed';
+    const finalStatus = executionSummary.failed > 0 ? 'executed_with_errors' : 'executed';
     
-    try {
-      executionSummary = await executeBatchActions(base44, freshBatch, {
-        executedBy: 'email_link',
-        userEmail: payload.approver_email
-      });
-      
-      // If any action failed, status is failed
-      if (executionSummary.failed > 0) {
-        finalStatus = 'failed';
-      }
-    } catch (execError) {
-      console.error('[ApprovePublic] Execution error:', execError);
-      finalStatus = 'failed';
-      executionSummary = {
-        total: batch.actions_current.length,
-        success: 0,
-        failed: batch.actions_current.length,
-        skipped: 0,
-        results: [],
-        error: execError.message,
-        executed_at: new Date().toISOString()
-      };
-    }
-
-    // 12. Update batch with final status
+    // 7. Final Update
     await base44.asServiceRole.entities.ApprovalBatch.update(batch.id, {
       status: finalStatus,
-      execution_summary: executionSummary,
-      error_message: finalStatus === 'failed' ? (executionSummary.error || 'Execution failed') : null
+      execution_summary: executionSummary
     });
 
-    console.log(`[ApprovePublic] Batch ${batch.id} completed with status: ${finalStatus}`);
+    // 8. Return Success Page
+    if (executionSummary.failed > 0) {
+      return respondHtml(
+        'בוצע עם שגיאות', 
+        `הפעולה אושרה, אך ${executionSummary.failed} מתוך ${executionSummary.total} פעולות נכשלו. אנא בדוק במערכת.`, 
+        true // Show as warning/error style
+      );
+    }
 
-    // Return success response
-    return Response.json(
-      {
-        success: finalStatus === 'executed',
-        batch_id: batch.id,
-        status: finalStatus,
-        execution_summary: executionSummary,
-        message: finalStatus === 'executed' 
-          ? `Successfully executed ${executionSummary.success} action(s)` 
-          : `Execution completed with ${executionSummary.failed} failure(s)`
-      },
-      { status: finalStatus === 'executed' ? 200 : 207, headers: corsHeaders }
-    );
+    return respondHtml('בוצע בהצלחה', 'כל הפעולות אושרו ובוצעו בהצלחה!');
 
   } catch (error) {
-    console.error('[ApprovePublic] Unexpected error:', error);
-    return Response.json(
-      { 
-        success: false, 
-        code: 'INTERNAL_ERROR', 
-        message: error.message 
-      },
-      { status: 500, headers: corsHeaders }
+    console.error('Critical Public Approval Error:', error);
+    return new Response(
+      getHtmlPage('שגיאה בלתי צפויה', 'אירעה שגיאה בעיבוד הבקשה. אנא נסה שנית.', true),
+      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'text/html; charset=utf-8' } }
     );
   }
 });
