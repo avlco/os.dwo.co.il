@@ -7,7 +7,58 @@ const corsHeaders = {
 };
 
 // ========================================
-// DWO EMAIL DESIGN SYSTEM (EMBEDDED)
+// 1. CRYPTO ENGINE (Internal Implementation)
+// ========================================
+
+function base64UrlEncode(buffer) {
+  return btoa(String.fromCharCode(...new Uint8Array(buffer)))
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=+$/, '');
+}
+
+function base64UrlEncodeString(str) {
+  const encoder = new TextEncoder();
+  return base64UrlEncode(encoder.encode(str));
+}
+
+async function signData(data, secret) {
+  const encoder = new TextEncoder();
+  const key = await crypto.subtle.importKey(
+    'raw',
+    encoder.encode(secret),
+    { name: 'HMAC', hash: 'SHA-256' },
+    false,
+    ['sign']
+  );
+  const signature = await crypto.subtle.sign(
+    'HMAC',
+    key,
+    encoder.encode(data)
+  );
+  return base64UrlEncode(signature);
+}
+
+/**
+ * Generates a secure, signed token for public endpoints
+ */
+async function generateApprovalToken(payload, secret) {
+  // Add expiration and nonce to payload
+  const tokenPayload = {
+    ...payload,
+    exp: Date.now() + (60 * 60 * 1000), // 1 hour expiry
+    nonce: crypto.randomUUID()
+  };
+  
+  const payloadString = JSON.stringify(tokenPayload);
+  const encodedPayload = base64UrlEncodeString(payloadString);
+  const signature = await signData(encodedPayload, secret);
+  
+  return `${encodedPayload}.${signature}`;
+}
+
+// ========================================
+// 2. DWO EMAIL DESIGN SYSTEM (INLINE CSS)
 // ========================================
 
 const BRAND = {
@@ -18,7 +69,9 @@ const BRAND = {
     card: '#ffffff',       // White Card
     text: '#000000',       // Black Text
     textLight: '#545454',  // Metadata Text
-    link: '#b62f12'        // Link
+    link: '#b62f12',       // Link
+    success: '#10b981',    // Green
+    danger: '#ef4444'      // Red
   },
   logoUrl: 'https://dwo.co.il/wp-content/uploads/2020/04/Drori-Stav-logo-2.png', 
   appUrl: 'https://os.dwo.co.il'
@@ -31,6 +84,16 @@ function generateEmailLayout(contentHtml, title, language = 'he') {
     footer_disclaimer: 'הודעה זו מכילה מידע סודי ומוגן. אם קיבלת הודעה זו בטעות, אנא מחק אותה ודווח לשולח.'
   };
 
+  const s = {
+    body: `margin: 0; padding: 0; background-color: ${BRAND.colors.bg}; font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;`,
+    wrapper: `padding: 20px; background-color: ${BRAND.colors.bg};`,
+    container: `max-width: 600px; margin: 0 auto; background-color: ${BRAND.colors.card}; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 6px rgba(0,0,0,0.05);`,
+    header: `background-color: ${BRAND.colors.card}; padding: 20px; text-align: center; border-bottom: 3px solid ${BRAND.colors.primary};`,
+    logo: `height: 50px; width: auto; max-width: 200px; object-fit: contain; display: block; margin: 0 auto;`,
+    content: `padding: 30px 25px; color: ${BRAND.colors.text}; line-height: 1.6; font-size: 16px;`,
+    footer: `background-color: #f8fafc; padding: 20px; text-align: center; font-size: 12px; color: ${BRAND.colors.textLight}; border-top: 1px solid #e2e8f0;`,
+  };
+
   return `
 <!DOCTYPE html>
 <html dir="${dir}" lang="${language}">
@@ -38,45 +101,36 @@ function generateEmailLayout(contentHtml, title, language = 'he') {
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>${title}</title>
-  <style>
-    body { margin: 0; padding: 0; background-color: ${BRAND.colors.bg}; font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; }
-    .email-wrapper { padding: 20px; }
-    .email-container { max-width: 600px; margin: 0 auto; background-color: ${BRAND.colors.card}; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
-    .header { background-color: ${BRAND.colors.card}; padding: 20px; text-align: center; border-bottom: 3px solid ${BRAND.colors.primary}; }
-    .content { padding: 30px 25px; color: ${BRAND.colors.text}; line-height: 1.6; }
-    .footer { background-color: #f8fafc; padding: 20px; text-align: center; font-size: 12px; color: ${BRAND.colors.textLight}; border-top: 1px solid #e2e8f0; }
-    a { color: ${BRAND.colors.link}; text-decoration: none; }
-    .logo { height: 50px; width: auto; max-width: 200px; object-fit: contain; }
-    .btn { display: inline-block; padding: 12px 30px; background-color: ${BRAND.colors.primary}; color: #ffffff !important; text-decoration: none; border-radius: 6px; font-weight: bold; margin-top: 20px; }
-    .meta-table { width: 100%; border-collapse: collapse; margin-bottom: 20px; font-size: 14px; }
-    .meta-table td { padding: 5px 0; border-bottom: 1px solid #f0f0f0; }
-    .meta-label { color: ${BRAND.colors.textLight}; width: 100px; }
-    .meta-value { font-weight: 600; color: ${BRAND.colors.text}; }
-  </style>
 </head>
-<body dir="${dir}">
-  <div class="email-wrapper">
-    <div class="email-container">
-      <div class="header">
-         <img src="${BRAND.logoUrl}" alt="DWO Logo" class="logo" />
-      </div>
-      <div class="content">
-        ${contentHtml}
-      </div>
-      <div class="footer">
-        <p style="margin: 0 0 10px 0;">${t.footer_contact}</p>
-        <p style="margin: 0; opacity: 0.7;">${t.footer_disclaimer}</p>
-      </div>
-    </div>
+<body style="${s.body}">
+  <div style="${s.wrapper}">
+    <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%" style="${s.container}">
+      <tr>
+        <td style="${s.header}">
+           <img src="${BRAND.logoUrl}" alt="DWO Logo" style="${s.logo}" width="200" height="50" />
+        </td>
+      </tr>
+      <tr>
+        <td style="${s.content}" dir="${dir}">
+          ${contentHtml}
+        </td>
+      </tr>
+      <tr>
+        <td style="${s.footer}" dir="${dir}">
+          <p style="margin: 0 0 10px 0;">${t.footer_contact}</p>
+          <p style="margin: 0; opacity: 0.7;">${t.footer_disclaimer}</p>
+        </td>
+      </tr>
+    </table>
   </div>
 </body>
 </html>`.trim();
 }
 
 // ==========================================
-// INTERNAL HELPER: EMAIL TEMPLATE RENDERER
+// 3. RENDER LOGIC
 // ==========================================
-function renderApprovalEmail({ batch, approveUrl, editUrl, language = 'he', caseName, clientName }) {
+function renderApprovalEmail({ batch, approveUrl, rejectUrl, editUrl, language = 'he', caseName, clientName }) {
   const isHebrew = language === 'he';
   const align = isHebrew ? 'right' : 'left';
   
@@ -84,15 +138,17 @@ function renderApprovalEmail({ batch, approveUrl, editUrl, language = 'he', case
     ? `אישור נדרש: ${batch.automation_rule_name}`
     : `Approval Required: ${batch.automation_rule_name}`;
   
-  // Build actions list with new branding
+  // Build actions list
   const actionsList = (batch.actions_current || []).map(action => {
     let icon = '⚡';
-    let desc = action.action_type;
+    // Fix: Use normalized action_type
+    const type = action.action_type || action.action || 'unknown';
+    let desc = type;
     let details = '';
     
     const config = action.config || {};
     
-    switch(action.action_type) {
+    switch(type) {
       case 'send_email':
         icon = '📧';
         desc = isHebrew ? 'שליחת מייל' : 'Send Email';
@@ -128,29 +184,30 @@ function renderApprovalEmail({ batch, approveUrl, editUrl, language = 'he', case
     `;
   }).join('');
 
+  // Styles for buttons
+  const btnBase = `display: inline-block; padding: 12px 24px; color: #ffffff !important; text-decoration: none; border-radius: 6px; font-weight: bold; margin: 5px; font-size: 14px;`;
+  const btnApprove = `${btnBase} background-color: ${BRAND.colors.success};`;
+  const btnEdit = `${btnBase} background-color: #3b82f6;`; // Blue
+  const btnReject = `${btnBase} background-color: ${BRAND.colors.secondary};`; // Gray/Red equivalent
+
   // Build Inner Content
   const innerContent = `
     <h2 style="color: ${BRAND.colors.primary}; margin-top: 0; text-align: center; margin-bottom: 25px;">${title}</h2>
     
     <div style="background-color: #ffffff; padding: 5px;">
-      <table class="meta-table" role="presentation">
+      <table style="width: 100%; border-collapse: collapse; margin-bottom: 20px; font-size: 14px;">
         <tr>
-          <td class="meta-label">${isHebrew ? 'נושא המייל' : 'Subject'}:</td>
-          <td class="meta-value">${batch.mail_subject || '-'}</td>
+          <td style="color: ${BRAND.colors.textLight}; width: 100px; padding: 5px 0; border-bottom: 1px solid #f0f0f0;">${isHebrew ? 'נושא המייל' : 'Subject'}:</td>
+          <td style="font-weight: 600; color: ${BRAND.colors.text}; padding: 5px 0; border-bottom: 1px solid #f0f0f0;">${batch.mail_subject || '-'}</td>
         </tr>
         <tr>
-          <td class="meta-label">${isHebrew ? 'מאת' : 'From'}:</td>
-          <td class="meta-value">${batch.mail_from || '-'}</td>
+          <td style="color: ${BRAND.colors.textLight}; padding: 5px 0; border-bottom: 1px solid #f0f0f0;">${isHebrew ? 'מאת' : 'From'}:</td>
+          <td style="font-weight: 600; color: ${BRAND.colors.text}; padding: 5px 0; border-bottom: 1px solid #f0f0f0;">${batch.mail_from || '-'}</td>
         </tr>
         ${caseName ? `
         <tr>
-          <td class="meta-label">${isHebrew ? 'תיק' : 'Case'}:</td>
-          <td class="meta-value">${caseName}</td>
-        </tr>` : ''}
-        ${clientName ? `
-        <tr>
-          <td class="meta-label">${isHebrew ? 'לקוח' : 'Client'}:</td>
-          <td class="meta-value">${clientName}</td>
+          <td style="color: ${BRAND.colors.textLight}; padding: 5px 0; border-bottom: 1px solid #f0f0f0;">${isHebrew ? 'תיק' : 'Case'}:</td>
+          <td style="font-weight: 600; color: ${BRAND.colors.text}; padding: 5px 0; border-bottom: 1px solid #f0f0f0;">${caseName}</td>
         </tr>` : ''}
       </table>
       
@@ -161,9 +218,12 @@ function renderApprovalEmail({ batch, approveUrl, editUrl, language = 'he', case
       ${actionsList}
       
       <div style="text-align: center; margin-top: 35px; margin-bottom: 20px;">
-        <a href="${editUrl}" class="btn">${isHebrew ? 'סקירה ואישור במערכת' : 'Review & Approve'}</a>
-        <p style="font-size: 13px; color: ${BRAND.colors.textLight}; margin-top: 15px;">
-          ${isHebrew ? 'לחיצה תוביל למסך עריכה ואישור מרוכז' : 'Link leads to batch review screen'}
+        <a href="${approveUrl}" style="${btnApprove}">✅ אישור</a>
+        <a href="${editUrl}" style="${btnEdit}">✏️ עריכה</a>
+        <a href="${rejectUrl}" style="${btnReject}">🛑 ביטול</a>
+        
+        <p style="font-size: 12px; color: ${BRAND.colors.textLight}; margin-top: 15px;">
+          * אישור וביטול הם פעולות מיידיות. עריכה דורשת כניסה למערכת.
         </p>
       </div>
     </div>
@@ -173,7 +233,7 @@ function renderApprovalEmail({ batch, approveUrl, editUrl, language = 'he', case
 }
 
 // ==========================================
-// MAIN FUNCTION LOGIC
+// 4. MAIN FUNCTION LOGIC
 // ==========================================
 Deno.serve(async (req) => {
   console.log(`[AggregateApproval] 🚀 Function invoked`);
@@ -185,52 +245,41 @@ Deno.serve(async (req) => {
     const base44 = createClientFromRequest(req);
     const { mailId, actionsToApprove, extractedInfo } = await req.json();
     
-    console.log(`[AggregateApproval] 📥 Received: mailId=${mailId}, actions=${actionsToApprove?.length}`);
-
     if (!mailId || !Array.isArray(actionsToApprove) || actionsToApprove.length === 0) {
-      return new Response(
-        JSON.stringify({
-          success: true,
-          batches_created: 0,
-          message: 'No actions to approve'
-        }),
-        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+      return new Response(JSON.stringify({ success: true, message: 'No actions' }), { headers: corsHeaders });
     }
 
-    // Fetch mail details
+    // 1. DATA NORMALIZATION (Fix the NULL issue)
+    const normalizedActions = actionsToApprove.map((action, index) => ({
+      ...action,
+      // Map 'action' to 'action_type' if missing
+      action_type: action.action_type || action.action || 'unknown',
+      // Ensure idempotency key
+      idempotency_key: action.idempotency_key || `${mailId}_${index}_${Date.now()}`
+    }));
+
+    // Fetch mail
     const mail = await base44.entities.Mail.get(mailId);
-    if (!mail) {
-      throw new Error(`Mail not found: ${mailId}`);
-    }
+    if (!mail) throw new Error(`Mail not found: ${mailId}`);
 
-    // Group actions by approver_email
+    // Group by approver
     const actionsByApprover = {};
-    for (const action of actionsToApprove) {
+    for (const action of normalizedActions) {
       const approverEmail = action.approver_email;
-      if (!approverEmail) {
-        console.warn('[AggregateApproval] ⚠️ Action without approver_email - skipping');
-        continue;
+      if (approverEmail) {
+        if (!actionsByApprover[approverEmail]) actionsByApprover[approverEmail] = [];
+        actionsByApprover[approverEmail].push(action);
       }
-
-      if (!actionsByApprover[approverEmail]) {
-        actionsByApprover[approverEmail] = [];
-      }
-      actionsByApprover[approverEmail].push(action);
     }
 
     const createdBatches = [];
 
-    // Create/Update batch for each approver
+    // Process each approver
     for (const [approverEmail, approverActions] of Object.entries(actionsByApprover)) {
       try {
-        console.log(`[AggregateApproval] ✉️ Processing for approver: ${approverEmail}`);
-
         const firstAction = approverActions[0];
-        const ruleId = firstAction.rule_id;
-        const ruleName = firstAction.rule_name;
-
-        // Check if batch already exists
+        
+        // 2. CREATE / UPDATE BATCH
         const existingBatches = await base44.asServiceRole.entities.ApprovalBatch.filter({
           mail_id: mailId,
           approver_email: approverEmail,
@@ -238,134 +287,91 @@ Deno.serve(async (req) => {
         });
 
         let batch;
-        const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 60 minutes
-
-        let mapSnapshotDict = {};
-        if (Array.isArray(firstAction.map_snapshot)) {
-            mapSnapshotDict = { rules: firstAction.map_snapshot };
-        } else if (firstAction.map_snapshot && typeof firstAction.map_snapshot === 'object') {
-            mapSnapshotDict = firstAction.map_snapshot;
-        }
+        const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
 
         if (existingBatches && existingBatches.length > 0) {
-          // Update existing
           batch = existingBatches[0];
-          console.log(`[AggregateApproval] 🔄 Updating existing batch: ${batch.id}`);
-
-          const existingActions = batch.actions_current || [];
-          const mergedActions = [...existingActions];
-
-          for (const newAction of approverActions) {
-            const exists = mergedActions.some(a => a.idempotency_key === newAction.idempotency_key);
-            if (!exists) mergedActions.push(newAction);
-          }
-
           await base44.asServiceRole.entities.ApprovalBatch.update(batch.id, {
-            actions_current: mergedActions,
+            actions_current: approverActions, // Overwrite with newest logic for simplicity in this flow
             expires_at: expiresAt.toISOString()
           });
-          
-          batch = await base44.asServiceRole.entities.ApprovalBatch.get(batch.id);
+          batch.actions_current = approverActions; // update local ref
         } else {
-          // Create new
-          console.log(`[AggregateApproval] ➕ Creating NEW batch`);
-          const actionsWithKeys = approverActions.map((action, index) => ({
-            ...action,
-            idempotency_key: action.idempotency_key || `${Date.now()}_${index}_${action.action_type}`
-          }));
-
           batch = await base44.asServiceRole.entities.ApprovalBatch.create({
             status: 'pending',
-            automation_rule_id: ruleId,
-            automation_rule_name: ruleName,
+            automation_rule_id: firstAction.rule_id,
+            automation_rule_name: firstAction.rule_name,
             mail_id: mailId,
             mail_subject: mail.subject,
             mail_from: mail.sender_email,
             case_id: extractedInfo?.case_id || null,
             client_id: extractedInfo?.client_id || null,
-            approver_email: approverEmail,
+            approver_email: approverEmail, // IMPORTANT: Saves email correctly now
             expires_at: expiresAt.toISOString(),
-            catch_snapshot: firstAction.catch_snapshot || {},
-            map_snapshot: mapSnapshotDict,
             extracted_info: extractedInfo || {},
-            actions_original: actionsWithKeys,
-            actions_current: JSON.parse(JSON.stringify(actionsWithKeys))
+            actions_original: approverActions,
+            actions_current: approverActions
           });
         }
 
-        // Send Email
-        try {
-          const appUrl = Deno.env.get('APP_BASE_URL') || 'https://app.base44.com';
-          const editUrl = `${appUrl}/ApprovalBatchEdit?batchId=${batch.id}`;
-
-          let language = 'he';
-          let caseName = null;
-          let clientName = null;
-          
-          if (batch.case_id) {
-             try {
-                const c = await base44.entities.Case.get(batch.case_id);
-                caseName = c?.case_number || c?.title;
-             } catch(e) {}
-          }
-          if (batch.client_id) {
-             try {
-                const c = await base44.entities.Client.get(batch.client_id);
-                clientName = c?.name;
-             } catch(e) {}
-          }
-
-          // Use the embedded render function with new design
-          const emailHtml = renderApprovalEmail({
-            batch: {
-              id: batch.id,
-              automation_rule_name: batch.automation_rule_name,
-              mail_subject: batch.mail_subject,
-              mail_from: batch.mail_from,
-              actions_current: batch.actions_current
-            },
-            approveUrl: null,
-            editUrl,
-            language,
-            caseName,
-            clientName
-          });
-
-          const subject = `אישור נדרש: ${batch.automation_rule_name} (${batch.actions_current.length} פעולות)`;
-
-          // Using invoke 'sendEmail' ensures we use the proper Gmail integration
-          await base44.functions.invoke('sendEmail', {
-            to: approverEmail,
-            subject,
-            body: emailHtml
-          });
-
-          console.log(`[AggregateApproval] ✅ Email sent to ${approverEmail}`);
-        } catch (emailError) {
-          console.error('[AggregateApproval] ❌ Failed to send email:', emailError);
+        // 3. GENERATE TOKENS AND LINKS
+        const secret = Deno.env.get('APPROVAL_HMAC_SECRET');
+        if (!secret) {
+          console.error('CRITICAL: APPROVAL_HMAC_SECRET is missing');
+          throw new Error('Server configuration error');
         }
+
+        const appUrl = Deno.env.get('APP_BASE_URL') || 'https://dwo.base44.app';
+        const functionsBase = `${appUrl}/functions/v1`;
+
+        // Generate Tokens
+        const approveToken = await generateApprovalToken({ batch_id: batch.id, approver_email: approverEmail, action: 'approve' }, secret);
+        const rejectToken = await generateApprovalToken({ batch_id: batch.id, approver_email: approverEmail, action: 'reject' }, secret);
+
+        // Generate URLs (GET requests with token in query param)
+        const approveUrl = `${functionsBase}/approveAutomationBatchPublic?token=${approveToken}`;
+        const rejectUrl = `${functionsBase}/rejectAutomationBatchPublic?token=${rejectToken}`;
+        const editUrl = `${appUrl}/ApprovalBatchEdit?batchId=${batch.id}`;
+
+        // 4. PREPARE EMAIL CONTENT
+        let caseName = null;
+        if (batch.case_id) {
+           try { const c = await base44.entities.Case.get(batch.case_id); caseName = c?.case_number; } catch(e){}
+        }
+
+        const emailHtml = renderApprovalEmail({
+          batch: {
+            id: batch.id,
+            automation_rule_name: batch.automation_rule_name,
+            mail_subject: batch.mail_subject,
+            mail_from: batch.mail_from,
+            actions_current: batch.actions_current
+          },
+          approveUrl,
+          rejectUrl,
+          editUrl,
+          language: 'he',
+          caseName
+        });
+
+        // 5. SEND EMAIL
+        await base44.functions.invoke('sendEmail', {
+          to: approverEmail,
+          subject: `אישור נדרש: ${batch.automation_rule_name}`,
+          body: emailHtml
+        });
 
         createdBatches.push({ batch_id: batch.id, approver: approverEmail });
 
       } catch (e) {
-        console.error(`[AggregateApproval] ❌ Error processing approver ${approverEmail}:`, e);
+        console.error(`Error processing batch for ${approverEmail}:`, e);
       }
     }
 
-    return new Response(
-      JSON.stringify({
-        success: createdBatches.length > 0,
-        batches_created: createdBatches.length,
-        batches: createdBatches
-      }),
-      { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    );
+    return new Response(JSON.stringify({ success: true, batches: createdBatches }), { headers: corsHeaders });
 
   } catch (error) {
-    console.error('[AggregateApproval] ❌ Critical Error:', error);
-    return new Response(
-      JSON.stringify({ error: error.message }),
-      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    );
+    console.error('Critical Error:', error);
+    return new Response(JSON.stringify({ error: error.message }), { status: 500, headers: corsHeaders });
   }
 });
