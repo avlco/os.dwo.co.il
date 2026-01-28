@@ -1,255 +1,14 @@
 // @ts-nocheck
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.6';
 
-const supabaseUrl = Deno.env.get('SUPABASE_URL');
-const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+};
 
 // ========================================
-// HELPER FUNCTIONS
+// 1. HELPER FUNCTIONS (Crypto & Parsing)
 // ========================================
-
-function getOneWeekAgo() {
-  const date = new Date();
-  date.setDate(date.getDate() - 7);
-  return date.toISOString();
-}
-
-function formatDateForGmail(isoDate) {
-  const date = new Date(isoDate);
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
-  return `${year}/${month}/${day}`;
-}
-
-function buildDateQuery(afterDate) {
-  const gmailDate = formatDateForGmail(afterDate);
-  return `after:${gmailDate}`;
-}
-
-async function updateSyncMetadata(connection, userBase44, updates) {
-  const currentSync = connection.metadata?.gmail_sync || {};
-  const updatedSync = { ...currentSync, ...updates };
-  
-  await userBase44.entities.IntegrationConnection.update(connection.id, {
-    metadata: {
-      ...connection.metadata,
-      gmail_sync: updatedSync
-    }
-  });
-}
-
-async function getLatestHistoryId(accessToken) {
-  try {
-    const res = await fetch(
-      'https://gmail.googleapis.com/gmail/v1/users/me/profile',
-      { headers: { Authorization: `Bearer ${accessToken}` } }
-    );
-    
-    if (!res.ok) return null;
-    
-    const data = await res.json();
-    return data.historyId || null;
-  } catch (error) {
-    console.error('[Helper] Failed to get historyId:', error);
-    return null;
-  }
-}
-
-function decodeBase64Utf8(base64String) {
-  try {
-    const normalized = base64String.replace(/-/g, '+').replace(/_/g, '/');
-    const binaryString = atob(normalized);
-    const bytes = new Uint8Array(binaryString.length);
-    for (let i = 0; i < binaryString.length; i++) {
-      bytes[i] = binaryString.charCodeAt(i);
-    }
-    return new TextDecoder('utf-8').decode(bytes);
-  } catch (error) {
-    console.error('[Decode] Failed:', error);
-    return null;
-  }
-}
-
-function parseGmailMessage(gmailMsg) {
-  const headers = gmailMsg.payload?.headers || [];
-  
-  const getHeader = (name) => {
-    const header = headers.find(h => h.name.toLowerCase() === name.toLowerCase());
-    return header?.value || '';
-  };
-  
-  let bodyText = '';
-  let bodyHtml = '';
-  const attachments = [];
-  
-  function extractParts(payload, messageId) {
-    if (payload.filename && payload.filename.length > 0) {
-      if (payload.body?.attachmentId) {
-        attachments.push({
-          filename: payload.filename,
-          mimeType: payload.mimeType || 'application/octet-stream',
-          size: payload.body.size || 0,
-          attachmentId: payload.body.attachmentId,
-          messageId: messageId
-        });
-      }
-    }
-    
-    if (payload.body?.data) {
-      const decoded = decodeBase64Utf8(payload.body.data);
-      
-      if (decoded) {
-        if (payload.mimeType === 'text/html') {
-          bodyHtml = decoded;
-        } else if (payload.mimeType === 'text/plain') {
-          bodyText = decoded;
-        }
-      }
-    }
-    
-    if (payload.parts && Array.isArray(payload.parts)) {
-      for (const part of payload.parts) {
-        extractParts(part, messageId);
-      }
-    }
-  }
-  
-  extractParts(gmailMsg.payload, gmailMsg.id);
-  
-  let snippet = bodyText || '';
-  if (!snippet && bodyHtml) {
-    snippet = bodyHtml.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
-  }
-  snippet = snippet.substring(0, 150);
-  
-  const toHeader = getHeader('To');
-  const recipients = toHeader 
-    ? toHeader.split(',').map(r => ({ email: r.trim() }))
-    : [];
-  
-  const labels = gmailMsg.labelIds || [];
-  
-  return {
-    external_id: gmailMsg.id,
-    subject: getHeader('Subject'),
-    sender_email: getHeader('From'),
-    sender_name: getHeader('From').split('<')[0].trim(),
-    recipients: recipients,
-    received_at: new Date(parseInt(gmailMsg.internalDate)).toISOString(),
-    content_snippet: snippet || null,
-    body_plain: bodyText || null,
-    body_html: bodyHtml || null,
-    processing_status: 'pending',
-    source: 'gmail',
-    attachments: attachments,
-    metadata: {
-      labels: labels,
-      thread_id: gmailMsg.threadId,
-      is_read: !labels.includes('UNREAD'),
-      raw_headers: JSON.stringify(headers)
-    },
-    thread_id: gmailMsg.threadId,
-    has_attachments: attachments.length > 0
-  };
-}
-
-// ========================================
-// RULE MATCHING LOGIC
-// ========================================
-
-async function findMatchingRules(mail, base44) {
-  console.log(`[RuleMatcher] 🔍 Checking rules for mail: ${mail.subject}`);
-  
-  try {
-    const allRules = await base44.entities.AutomationRule.list('-created_date', 100);
-    const rulesArray = Array.isArray(allRules) ? allRules : (allRules.data || []);
-    const activeRules = rulesArray.filter(rule => rule.is_active === true);
-    
-    console.log(`[RuleMatcher] 📋 Found ${activeRules.length} active rules to check`);
-    
-    if (activeRules.length === 0) {
-      console.log('[RuleMatcher] ⚠️ No active rules found in system');
-      return [];
-    }
-    
-    const matchingRules = [];
-    
-    for (const rule of activeRules) {
-      const config = rule.catch_config || {};
-      let isMatch = true;
-      const reasons = [];
-      
-      // Check 1: Sender
-      if (config.senders && Array.isArray(config.senders) && config.senders.length > 0) {
-        const senderMatches = config.senders.some(sender => {
-          const senderLower = sender.toLowerCase().trim();
-          const mailSenderLower = (mail.sender_email || '').toLowerCase();
-          return mailSenderLower.includes(senderLower) || senderLower.includes(mailSenderLower);
-        });
-        
-        if (!senderMatches) {
-          isMatch = false;
-          reasons.push(`sender mismatch`);
-        } else {
-          reasons.push('✓ sender match');
-        }
-      }
-      
-      // Check 2: Subject
-      if (config.subject_contains && config.subject_contains.trim().length > 0) {
-        const subjectKeyword = config.subject_contains.toLowerCase().trim();
-        const mailSubject = (mail.subject || '').toLowerCase();
-        
-        if (!mailSubject.includes(subjectKeyword)) {
-          isMatch = false;
-          reasons.push(`subject mismatch`);
-        } else {
-          reasons.push('✓ subject match');
-        }
-      }
-      
-      // Check 3: Body
-      if (config.body_contains && config.body_contains.trim().length > 0) {
-        const bodyKeyword = config.body_contains.toLowerCase().trim();
-        const mailBody = (mail.body_plain || mail.body_html || '').toLowerCase();
-        
-        if (!mailBody.includes(bodyKeyword)) {
-          isMatch = false;
-          reasons.push(`body mismatch`);
-        } else {
-          reasons.push('✓ body match');
-        }
-      }
-      
-      if (isMatch) {
-        console.log(`[RuleMatcher] ✅ Rule "${rule.name}" MATCHED`);
-        matchingRules.push(rule);
-      }
-    }
-    
-    return matchingRules;
-    
-  } catch (error) {
-    console.error('[RuleMatcher] ❌ Error finding matching rules:', error);
-    return [];
-  }
-}
-
-// ========================================
-// CRYPTO FUNCTIONS
-// ========================================
-
-function getProviderConfig(providerRaw) {
-    const provider = providerRaw.toLowerCase().trim();
-    if (provider === 'google') {
-        const clientId = Deno.env.get("GOOGLE_CLIENT_ID");
-        const clientSecret = Deno.env.get("GOOGLE_CLIENT_SECRET");
-        if (!clientId || !clientSecret) throw new Error("Missing GOOGLE env vars");
-        return { clientId, clientSecret, type: 'google' };
-    }
-    throw new Error(`Unknown provider: ${providerRaw}`);
-}
 
 async function getCryptoKey() {
   const envKey = Deno.env.get("ENCRYPTION_KEY");
@@ -275,450 +34,337 @@ async function decrypt(text) {
   return new TextDecoder().decode(decrypted);
 }
 
-async function encrypt(text) {
-    try {
-        const key = await getCryptoKey();
-        const iv = crypto.getRandomValues(new Uint8Array(12));
-        const encoded = new TextEncoder().encode(text);
-        const encrypted = await crypto.subtle.encrypt({ name: "AES-GCM", iv }, key, encoded);
-        const ivHex = Array.from(iv).map(b => b.toString(16).padStart(2, '0')).join('');
-        const encryptedHex = Array.from(new Uint8Array(encrypted)).map(b => b.toString(16).padStart(2, '0')).join('');
-        return `${ivHex}:${encryptedHex}`;
-    } catch (e) {
-        console.error("[Encryption] Failed:", e);
-        throw new Error(`Encryption failed: ${e.message}`);
+function decodeBase64Utf8(base64String) {
+  try {
+    const normalized = base64String.replace(/-/g, '+').replace(/_/g, '/');
+    const binaryString = atob(normalized);
+    const bytes = new Uint8Array(binaryString.length);
+    for (let i = 0; i < binaryString.length; i++) {
+      bytes[i] = binaryString.charCodeAt(i);
     }
+    return new TextDecoder('utf-8').decode(bytes);
+  } catch (error) {
+    return null; 
+  }
 }
 
-async function refreshGoogleToken(refreshToken, connection, userBase44) {
-  const config = getProviderConfig('google');
+function parseGmailMessage(gmailMsg) {
+  const headers = gmailMsg.payload?.headers || [];
+  const getHeader = (name) => headers.find(h => h.name.toLowerCase() === name.toLowerCase())?.value || '';
   
-  console.log("[Refresh] Refreshing access token...");
+  let bodyText = '';
+  let bodyHtml = '';
+  const attachments = [];
+  
+  // Recursive function to extract parts deeply
+  function extractParts(payload, messageId) {
+    // 1. Handle Attachments
+    if (payload.filename && payload.body?.attachmentId) {
+      attachments.push({
+        filename: payload.filename,
+        mimeType: payload.mimeType || 'application/octet-stream',
+        size: payload.body.size || 0,
+        attachmentId: payload.body.attachmentId,
+        messageId: messageId
+      });
+    }
+    
+    // 2. Handle Body Content
+    if (payload.body?.data) {
+      const decoded = decodeBase64Utf8(payload.body.data);
+      if (decoded) {
+        if (payload.mimeType === 'text/html') bodyHtml = decoded;
+        else if (payload.mimeType === 'text/plain') bodyText = decoded;
+      }
+    }
+    
+    // 3. Recurse into sub-parts (multipart)
+    if (payload.parts && Array.isArray(payload.parts)) {
+      payload.parts.forEach(p => extractParts(p, messageId));
+    }
+  }
+  
+  extractParts(gmailMsg.payload, gmailMsg.id);
+  
+  // Create snippet from text or html
+  let snippet = bodyText || '';
+  if (!snippet && bodyHtml) snippet = bodyHtml.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+  
+  return {
+    external_id: gmailMsg.id,
+    subject: getHeader('Subject'),
+    sender_email: getHeader('From'),
+    sender_name: getHeader('From').split('<')[0].trim(),
+    recipients: (getHeader('To') || '').split(',').map(r => ({ email: r.trim() })),
+    received_at: new Date(parseInt(gmailMsg.internalDate)).toISOString(),
+    content_snippet: snippet.substring(0, 150),
+    body_plain: bodyText || null,
+    body_html: bodyHtml || null,
+    processing_status: 'pending',
+    source: 'gmail',
+    attachments: attachments,
+    thread_id: gmailMsg.threadId,
+    has_attachments: attachments.length > 0
+  };
+}
+
+// ========================================
+// 2. GMAIL API INTERACTIONS
+// ========================================
+
+async function refreshGoogleToken(refreshToken, connection, base44) {
+  console.log("[Sync] 🔄 Refreshing Google Token...");
+  const clientId = Deno.env.get("GOOGLE_CLIENT_ID");
+  const clientSecret = Deno.env.get("GOOGLE_CLIENT_SECRET");
   
   const res = await fetch('https://oauth2.googleapis.com/token', {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams({
-      client_id: config.clientId,
-      client_secret: config.clientSecret,
+      client_id: clientId,
+      client_secret: clientSecret,
       refresh_token: refreshToken,
       grant_type: 'refresh_token',
     }).toString(),
   });
   
   const data = await res.json();
-  if (data.error) {
-    console.error("[Refresh] Failed:", JSON.stringify(data));
-    throw new Error(`Token refresh failed: ${JSON.stringify(data)}`);
-  }
+  if (data.error) throw new Error(`Token refresh failed: ${JSON.stringify(data)}`);
   
-  const newAccessToken = data.access_token;
-  const encryptedAccess = await encrypt(newAccessToken);
-  const expiresAt = Date.now() + ((data.expires_in || 3600) * 1000);
-  
-  await userBase44.entities.IntegrationConnection.update(connection.id, {
-    access_token_encrypted: encryptedAccess,
-    expires_at: expiresAt,
-    is_active: true,
-    metadata: { 
-      ...connection.metadata,
-      last_updated: new Date().toISOString(), 
-      last_refresh: "success" 
-    }
-  });
-  
-  console.log("[Refresh] ✅ Token refreshed successfully");
-  return newAccessToken;
+  // Ideally, save the new token back to DB here if needed, 
+  // but for this flow returning it allows immediate continuation.
+  return data.access_token;
 }
 
 // ========================================
-// SYNC FUNCTIONS
+// 3. CORE SYNC LOGIC (BACKGROUND TASK)
 // ========================================
 
-async function fetchFirstWeekMessages(accessToken, refreshToken, connection, userBase44) {
-  console.log('[Sync] 🎯 FIRST SYNC - Fetching messages from last 7 days');
-  
-  const oneWeekAgo = getOneWeekAgo();
-  const query = buildDateQuery(oneWeekAgo);
-  
-  console.log(`[Sync] Query: "${query}" (from ${oneWeekAgo})`);
-  
-  const listUrl = `https://gmail.googleapis.com/gmail/v1/users/me/messages?q=${encodeURIComponent(query)}&maxResults=500`;
-  
-  let currentToken = accessToken;
-  let listRes = await fetch(listUrl, {
-    headers: { Authorization: `Bearer ${currentToken}` }
-  });
-  
-  if (listRes.status === 401) {
-    if (!refreshToken || refreshToken === "MISSING") {
-      throw new Error("Token expired and no refresh token available");
-    }
-    
-    console.log("[Gmail] Token expired during first sync, refreshing...");
-    currentToken = await refreshGoogleToken(refreshToken, connection, userBase44);
-    
-    listRes = await fetch(listUrl, {
-      headers: { Authorization: `Bearer ${currentToken}` }
-    });
-  }
-  
-  const listData = await listRes.json();
-  
-  if (!listData.messages || listData.messages.length === 0) {
-    console.log('[Sync] ℹ️ No messages found in last 7 days');
-    
-    const latestHistoryId = await getLatestHistoryId(currentToken);
-    if (latestHistoryId) {
-      await updateSyncMetadata(connection, userBase44, {
-        history_id: latestHistoryId,
-        last_sync_timestamp: Date.now(),
-        total_synced: 0,
-        sync_mode: 'first_week_empty'
-      });
-    }
-    
-    return [];
-  }
-  
-  console.log(`[Sync] 📧 Found ${listData.messages.length} messages in last 7 days`);
-  
-  const emails = [];
-  for (let i = 0; i < listData.messages.length; i++) {
-    const msg = listData.messages[i];
-    
-    try {
-      const detailRes = await fetch(
-        `https://gmail.googleapis.com/gmail/v1/users/me/messages/${msg.id}?format=full`,
-        { headers: { Authorization: `Bearer ${currentToken}` } }
-      );
-      
-      if (!detailRes.ok) continue;
-      
-      const detailData = await detailRes.json();
-      const parsedMail = parseGmailMessage(detailData);
-      emails.push(parsedMail);
-      
-    } catch (error) {
-      console.error(`[Sync] ❌ Error processing message ${msg.id}:`, error);
-    }
-  }
-  
-  const latestHistoryId = await getLatestHistoryId(currentToken);
-  if (latestHistoryId) {
-    await updateSyncMetadata(connection, userBase44, {
-      history_id: latestHistoryId,
-      last_sync_timestamp: Date.now(),
-      total_synced: emails.length,
-      sync_mode: 'first_week_complete'
-    });
-  }
-  
-  console.log(`[Sync] ✅ First sync complete: ${emails.length} messages`);
-  return emails;
-}
+async function executeSync(base44, user) {
+  console.log(`[Background] 🚀 Starting Sync for user ${user.id}`);
 
-async function fetchIncrementalMessages(accessToken, refreshToken, connection, userBase44) {
-  const gmailSync = connection.metadata?.gmail_sync;
-  const startHistoryId = gmailSync?.history_id;
-  
-  if (!startHistoryId) {
-    console.log('[Sync] ⚠️ No historyId found - falling back to first sync');
-    return await fetchFirstWeekMessages(accessToken, refreshToken, connection, userBase44);
-  }
-  
-  console.log(`[Sync] 🔄 INCREMENTAL SYNC - starting from historyId: ${startHistoryId}`);
-  
   try {
-    const historyUrl = `https://gmail.googleapis.com/gmail/v1/users/me/history?startHistoryId=${startHistoryId}&historyTypes=messageAdded&maxResults=100`;
+    // A. GET CONNECTION
+    const connections = await base44.entities.IntegrationConnection.list('-created_at', 10);
+    const connection = (connections.data || connections).find(c => c.provider === 'google' && c.is_active !== false);
     
-    let currentToken = accessToken;
-    let historyRes = await fetch(historyUrl, {
-      headers: { Authorization: `Bearer ${currentToken}` }
-    });
-    
-    if (historyRes.status === 401) {
-      console.log("[Sync] Token expired, refreshing...");
-      currentToken = await refreshGoogleToken(refreshToken, connection, userBase44);
-      historyRes = await fetch(historyUrl, {
-        headers: { Authorization: `Bearer ${currentToken}` }
-      });
+    if (!connection) {
+      console.log("[Background] No active Google connection found.");
+      return;
     }
+
+    let accessToken = await decrypt(connection.access_token_encrypted);
+    const refreshToken = connection.refresh_token_encrypted ? await decrypt(connection.refresh_token_encrypted) : null;
+
+    // B. DETERMINE QUERY (The "Smart Sync")
+    // Get the absolute latest mail to determine Delta
+    const lastMails = await base44.entities.Mail.list('-received_at', 1);
+    const lastMail = (lastMails.data || lastMails)[0];
+
+    let query = '';
     
-    if (historyRes.status === 404) {
-      console.warn('[Sync] ⚠️ HistoryId expired (404) - falling back to recent messages');
-      return await fetchFallbackMessages(accessToken, refreshToken, connection, userBase44, 100);
+    if (!lastMail) {
+      // SCENARIO 1: FIRST SYNC (Last 24 Hours Only)
+      // This prevents the "500 Timeout" by not fetching years of history
+      const oneDayAgo = Math.floor((Date.now() - 24 * 60 * 60 * 1000) / 1000);
+      query = `after:${oneDayAgo}`;
+      console.log(`[Background] 🆕 First Sync detected. Query: ${query} (Last 24h)`);
+    } else {
+      // SCENARIO 2: DELTA SYNC
+      // Fetch only what came AFTER the last mail we have (+1 second buffer)
+      const lastTime = Math.floor(new Date(lastMail.received_at).getTime() / 1000) + 1;
+      query = `after:${lastTime}`;
+      console.log(`[Background] 🔄 Delta Sync. Query: ${query} (Since last mail)`);
     }
+
+    // C. FETCH LIST FROM GMAIL
+    // Using maxResults=50 to keep execution fast and within limits
+    let listUrl = `https://gmail.googleapis.com/gmail/v1/users/me/messages?q=${encodeURIComponent(query)}&maxResults=50`;
     
-    const historyData = await historyRes.json();
+    let listRes = await fetch(listUrl, { headers: { Authorization: `Bearer ${accessToken}` } });
     
-    if (!historyData.history || historyData.history.length === 0) {
-      console.log('[Sync] ✨ No new messages since last sync');
-      await updateSyncMetadata(connection, userBase44, {
-        last_sync_timestamp: Date.now(),
-        sync_mode: 'incremental_no_changes'
-      });
-      return [];
+    // Handle Token Expiry
+    if (listRes.status === 401 && refreshToken) {
+      accessToken = await refreshGoogleToken(refreshToken, connection, base44);
+      listRes = await fetch(listUrl, { headers: { Authorization: `Bearer ${accessToken}` } });
     }
-    
-    const newMessageIds = [];
-    for (const record of historyData.history) {
-      if (record.messagesAdded) {
-        for (const added of record.messagesAdded) {
-          newMessageIds.push(added.message.id);
-        }
-      }
+
+    const listData = await listRes.json();
+    if (!listData.messages || listData.messages.length === 0) {
+      console.log("[Background] ✨ No new messages found.");
+      return;
     }
-    
-    const newMessages = [];
-    for (const messageId of newMessageIds) {
+
+    console.log(`[Background] 📥 Found ${listData.messages.length} new messages. Fetching details...`);
+
+    // D. FETCH DETAILS & SAVE
+    const savedMails = [];
+    const existingMailsList = await base44.entities.Mail.list('-received_at', 200); 
+    const existingIds = new Set((existingMailsList.data || existingMailsList).map(m => m.external_id));
+
+    for (const msg of listData.messages) {
+      if (existingIds.has(msg.id)) continue; // Skip duplicates
+
       try {
         const detailRes = await fetch(
-          `https://gmail.googleapis.com/gmail/v1/users/me/messages/${messageId}?format=full`,
-          { headers: { Authorization: `Bearer ${currentToken}` } }
+          `https://gmail.googleapis.com/gmail/v1/users/me/messages/${msg.id}?format=full`,
+          { headers: { Authorization: `Bearer ${accessToken}` } }
         );
         
-        if (!detailRes.ok) continue;
-        
+        if (!detailRes.ok) {
+           console.warn(`[Background] Failed to fetch details for msg ${msg.id}`);
+           continue;
+        }
+
         const detailData = await detailRes.json();
-        const parsedMail = parseGmailMessage(detailData);
-        newMessages.push(parsedMail);
+        const parsed = parseGmailMessage(detailData);
         
-      } catch (error) {
-        console.error(`[Sync] ❌ Error processing message ${messageId}:`, error);
+        const created = await base44.entities.Mail.create({ ...parsed, user_id: user.id });
+        savedMails.push(created);
+      } catch (e) {
+        console.error(`[Background] Error saving mail ${msg.id}:`, e);
       }
     }
-    
-    const latestHistoryId = historyData.historyId;
-    await updateSyncMetadata(connection, userBase44, {
-      history_id: latestHistoryId,
-      last_sync_timestamp: Date.now(),
-      total_synced: (gmailSync?.total_synced || 0) + newMessages.length,
-      sync_mode: 'incremental_success'
-    });
-    
-    console.log(`[Sync] ✅ Incremental sync complete: ${newMessages.length} new message(s)`);
-    return newMessages;
-    
-  } catch (error) {
-    console.error('[Sync] ❌ Incremental sync failed:', error);
-    return await fetchFallbackMessages(accessToken, refreshToken, connection, userBase44, 100);
-  }
-}
 
-async function fetchFallbackMessages(accessToken, refreshToken, connection, userBase44, maxResults = 100) {
-  console.log(`[Sync] 🔄 FALLBACK - Fetching last ${maxResults} messages`);
-  
-  const listUrl = `https://gmail.googleapis.com/gmail/v1/users/me/messages?maxResults=${maxResults}`;
-  
-  let currentToken = accessToken;
-  let listRes = await fetch(listUrl, {
-    headers: { Authorization: `Bearer ${currentToken}` }
-  });
-  
-  if (listRes.status === 401) {
-    currentToken = await refreshGoogleToken(refreshToken, connection, userBase44);
-    listRes = await fetch(listUrl, {
-      headers: { Authorization: `Bearer ${currentToken}` }
-    });
-  }
-  
-  const listData = await listRes.json();
-  
-  if (!listData.messages || listData.messages.length === 0) return [];
-  
-  const emails = [];
-  for (const msg of listData.messages) {
-    try {
-      const detailRes = await fetch(
-        `https://gmail.googleapis.com/gmail/v1/users/me/messages/${msg.id}?format=full`,
-        { headers: { Authorization: `Bearer ${currentToken}` } }
-      );
-      if (!detailRes.ok) continue;
-      const detailData = await detailRes.json();
-      emails.push(parseGmailMessage(detailData));
-    } catch (e) {
-      console.error(e);
+    console.log(`[Background] ✅ Saved ${savedMails.length} new mails.`);
+
+    // E. TRIGGER AUTOMATION
+    // Only run if we actually saved new mails
+    if (savedMails.length > 0) {
+      await runAutomation(base44, savedMails);
     }
+
+  } catch (error) {
+    console.error("[Background] ❌ Critical Sync Error:", error);
   }
-  
-  const latestHistoryId = await getLatestHistoryId(currentToken);
-  if (latestHistoryId) {
-    await updateSyncMetadata(connection, userBase44, {
-      history_id: latestHistoryId,
-      last_sync_timestamp: Date.now(),
-      total_synced: emails.length,
-      sync_mode: 'fallback_complete'
-    });
-  }
-  
-  return emails;
 }
 
 // ========================================
-// MAIN HANDLER & ORCHESTRATOR
+// 4. AUTOMATION LOGIC (MATCH & EXECUTE)
+// ========================================
+
+async function runAutomation(base44, mails) {
+  console.log(`[Automation] 🤖 Processing ${mails.length} mails for rules...`);
+  
+  // Fetch active rules
+  const rulesRaw = await base44.entities.AutomationRule.list('-created_date', 100);
+  const rules = (rulesRaw.data || rulesRaw).filter(r => r.is_active);
+  
+  if (rules.length === 0) return;
+
+  for (const mail of mails) {
+    try {
+      // Find matches locally to save API calls
+      const matchingRules = rules.filter(rule => {
+        const config = rule.catch_config || {};
+        let match = true;
+        
+        // Sender check
+        if (config.senders?.length > 0) {
+            const sender = (mail.sender_email || '').toLowerCase();
+            if (!config.senders.some(s => sender.includes(s.toLowerCase()))) match = false;
+        }
+        // Subject check
+        if (match && config.subject_contains) {
+            if (!mail.subject?.toLowerCase().includes(config.subject_contains.toLowerCase())) match = false;
+        }
+        // Body check
+        if (match && config.body_contains) {
+            const body = (mail.body_plain || mail.body_html || '').toLowerCase();
+            if (!body.includes(config.body_contains.toLowerCase())) match = false;
+        }
+        
+        return match;
+      });
+
+      if (matchingRules.length === 0) continue;
+
+      // Buffers for Batching
+      const actionsBuffer = [];
+      const extractedBuffer = {};
+
+      for (const rule of matchingRules) {
+        // Execute Rule 
+        const res = await base44.functions.invoke('executeAutomationRule', {
+          mailId: mail.id,
+          ruleId: rule.id
+        });
+
+        if (res.error) {
+            console.error(`[Automation] Rule ${rule.id} error:`, res.error);
+            continue;
+        }
+
+        const data = res.data || {};
+        
+        // Collect Info
+        if (data.extracted_info) Object.assign(extractedBuffer, data.extracted_info);
+        if (data.case_id) extractedBuffer.case_id = data.case_id;
+        if (data.client_id) extractedBuffer.client_id = data.client_id;
+
+        // Collect Pending Actions (The critical Batch Logic)
+        if (data.results) {
+            const pending = data.results.filter(r => r.status === 'pending_batch');
+            actionsBuffer.push(...pending);
+        }
+      }
+
+      // Create Batch if needed
+      if (actionsBuffer.length > 0) {
+        console.log(`[Automation] 📦 Creating approval batch with ${actionsBuffer.length} actions.`);
+        await base44.functions.invoke('aggregateApprovalBatch', {
+            mailId: mail.id,
+            actionsToApprove: actionsBuffer,
+            extractedInfo: extractedBuffer
+        });
+      }
+
+    } catch (e) {
+      console.error(`[Automation] Failed to process mail ${mail.id}:`, e);
+    }
+  }
+}
+
+// ========================================
+// 5. MAIN ENTRY POINT (ASYNC SERVER)
 // ========================================
 
 Deno.serve(async (req) => {
-  const headers = { 
-    "Access-Control-Allow-Origin": "*", 
-    "Access-Control-Allow-Headers": "Content-Type, Authorization",
-    "Content-Type": "application/json"
-  };
-  
-  if (req.method === "OPTIONS") return new Response(null, { headers });
+  // Always handle OPTIONS for CORS
+  if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   try {
+    // 1. Auth Check
     const base44 = createClientFromRequest(req);
     const user = await base44.auth.me();
     
+    // Explicitly handle unauthorized access
     if (!user) {
-      return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers });
+        return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: corsHeaders });
     }
 
-    console.log(`[Sync] 🚀 Starting mail sync for user: ${user.email || user.id}`);
-
-    const allConnections = await base44.entities.IntegrationConnection.list('-created_at', 100);
-    const items = Array.isArray(allConnections) ? allConnections : (allConnections.data || []);
-    const connection = items.find(c => c.provider === 'google' && c.is_active !== false);
-    
-    if (!connection) {
-      return new Response(JSON.stringify({ error: 'Google connection not found' }), { status: 404, headers });
-    }
-
-    const accessToken = await decrypt(connection.access_token_encrypted);
-    const refreshToken = connection.refresh_token_encrypted ? await decrypt(connection.refresh_token_encrypted) : null;
-    
-    if (!accessToken) throw new Error("Failed to decrypt access token");
-
-    let newEmails;
-    const gmailSync = connection.metadata?.gmail_sync;
-    
-    if (!gmailSync || !gmailSync.history_id) {
-      newEmails = await fetchFirstWeekMessages(accessToken, refreshToken, connection, base44);
+    // 2. TRIGGER BACKGROUND WORK (The 500 Fix)
+    // This allows the response to return immediately while the sync happens in background
+    if (typeof EdgeRuntime !== 'undefined') {
+        EdgeRuntime.waitUntil(executeSync(base44, user));
     } else {
-      newEmails = await fetchIncrementalMessages(accessToken, refreshToken, connection, base44);
+        // Fallback for non-edge environments (Promise doesn't block response)
+        executeSync(base44, user);
     }
 
-    // Save mails
-    const allExistingMails = await base44.entities.Mail.list('-received_at', 2000);
-    const existingMailItems = Array.isArray(allExistingMails) ? allExistingMails : (allExistingMails.data || []);
-    const existingIds = new Set(existingMailItems.map(m => m.external_id));
-
-    const savedMails = [];
-    for (const mail of newEmails) {
-      if (!existingIds.has(mail.external_id)) {
-        try {
-          const created = await base44.entities.Mail.create({ ...mail, user_id: user.id });
-          savedMails.push(created);
-        } catch (createError) {
-          console.error(`[Sync] ❌ Failed to save mail ${mail.external_id}:`, createError.message);
-        }
-      }
-    }
-
-    // ========================================
-    // 🔥 AUTOMATION ORCHESTRATOR (Corrected)
-    // ========================================
-    if (savedMails.length > 0) {
-      console.log(`[Automation] 🚀 Triggering automation for ${savedMails.length} new mails`);
-      
-      // Async execution - doesn't block the response
-      setTimeout(async () => {
-        let totalRulesExecuted = 0;
-        let totalBatchesCreated = 0;
-
-        for (const mail of savedMails) {
-          try {
-            const matchingRules = await findMatchingRules(mail, base44);
-            if (matchingRules.length === 0) continue;
-            
-            // Buffer for collecting actions that require approval (for batching)
-            const mailActionsBuffer = [];
-            // Buffer for extracted info
-            const aggregatedExtractedInfo = {};
-            
-            for (const rule of matchingRules) {
-              try {
-                // Call executeAutomationRule
-                const invokeResponse = await base44.functions.invoke('executeAutomationRule', {
-                  mailId: mail.id,
-                  ruleId: rule.id,
-                  testMode: false
-                });
-
-                const resultData = invokeResponse.data || {};
-                
-                // IMPORTANT: Check for execution errors
-                if (invokeResponse.error) {
-                    console.error(`[Automation] Rule invocation failed:`, invokeResponse.error);
-                    continue;
-                }
-                
-                totalRulesExecuted++;
-                
-                // Collect extraction info
-                if (resultData.extracted_info) Object.assign(aggregatedExtractedInfo, resultData.extracted_info);
-                if (resultData.case_id) aggregatedExtractedInfo.case_id = resultData.case_id;
-                if (resultData.client_id) aggregatedExtractedInfo.client_id = resultData.client_id;
-                
-                // 🔥 CRITICAL FIX: Detect pending_batch status
-                // Check if results array exists and has items with pending_batch status
-                if (resultData.results && Array.isArray(resultData.results)) {
-                    const pending = resultData.results.filter(r => r.status === 'pending_batch');
-                    
-                    if (pending.length > 0) {
-                        console.log(`[Automation] 📥 Collected ${pending.length} actions for batch approval`);
-                        mailActionsBuffer.push(...pending);
-                    }
-                }
-                
-              } catch (ruleError) {
-                console.error(`[Automation] ❌ Rule error:`, ruleError);
-              }
-            } // End rules loop
-            
-            // If we have pending actions, create the BATCH
-            if (mailActionsBuffer.length > 0) {
-              console.log(`[Automation] 📦 Creating BATCH with ${mailActionsBuffer.length} actions`);
-              
-              const batchPayload = {
-                mailId: mail.id,
-                actionsToApprove: mailActionsBuffer,
-                extractedInfo: aggregatedExtractedInfo
-              };
-
-              // Try invoking aggregateApprovalBatch
-              let batchInvoke = await base44.functions.invoke('aggregateApprovalBatch', batchPayload);
-              
-              // Fallback retry if needed (handle function name mismatch)
-              if (batchInvoke.error && String(batchInvoke.error).includes('404')) {
-                  console.warn('[Automation] Retrying with kebab-case: aggregate-approval-batch');
-                  batchInvoke = await base44.functions.invoke('aggregate-approval-batch', batchPayload);
-              }
-
-              if (batchInvoke.error || (batchInvoke.data && !batchInvoke.data.success)) {
-                console.error(`[Automation] ❌ Batch creation failed:`, batchInvoke.error || batchInvoke.data);
-              } else {
-                totalBatchesCreated++;
-                console.log(`[Automation] ✅ Batch created and email sent!`);
-              }
-            }
-            
-          } catch (mailError) {
-            console.error(`[Automation] ❌ Mail processing failed:`, mailError);
-          }
-        }
-      }, 0);
-    }
-
+    // 3. IMMEDIATE RESPONSE (200 OK)
+    // The browser gets this immediately, solving the Timeout issue
     return new Response(JSON.stringify({ 
       success: true, 
-      synced: savedMails.length 
-    }), { status: 200, headers });
+      status: 'queued', 
+      message: 'Sync started in background' 
+    }), { 
+      status: 200, 
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+    });
 
   } catch (err) {
-    console.error("[Sync] ❌ ERROR:", err);
-    return new Response(JSON.stringify({ error: err.message }), { status: 500, headers });
+    console.error("[Serve] Error:", err);
+    return new Response(JSON.stringify({ error: err.message }), { status: 500, headers: corsHeaders });
   }
 });
