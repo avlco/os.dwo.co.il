@@ -66,6 +66,7 @@ function parseGmailMessage(gmailMsg) {
         messageId: messageId
       });
     }
+    
     if (payload.body?.data) {
       const decoded = decodeBase64Utf8(payload.body.data);
       if (decoded) {
@@ -73,6 +74,7 @@ function parseGmailMessage(gmailMsg) {
         else if (payload.mimeType === 'text/plain') bodyText = decoded;
       }
     }
+    
     if (payload.parts && Array.isArray(payload.parts)) {
       payload.parts.forEach(p => extractParts(p, messageId));
     }
@@ -128,23 +130,20 @@ async function refreshGoogleToken(refreshToken, connection, base44) {
 }
 
 // ========================================
-// 3. CORE SYNC LOGIC (BACKGROUND TASK)
+// 3. CORE SYNC LOGIC (SYNCHRONOUS EXECUTION)
 // ========================================
 
 async function executeSync(base44, user) {
-  console.log(`[Background] 🚀 Starting Sync for user ${user.id}`);
+  console.log(`[Sync] 🚀 Starting Sync for user ${user.id}`);
+  let syncedCount = 0;
 
   try {
-    // A. GET CONNECTION (IMPROVED ROBUST LOOKUP)
-    // Fetch more items to avoid missing the connection if list is cluttered
+    // A. GET CONNECTION (ROBUST LOOKUP)
+    // Fetch 50 items to ensure we find the connection even if list is cluttered
     const connectionsRes = await base44.entities.IntegrationConnection.list('-created_at', 50);
     const connections = connectionsRes.data || connectionsRes;
     
-    // Debug log to see what we actually found
-    const providersFound = connections.map(c => `${c.provider}(active:${c.is_active})`).join(', ');
-    console.log(`[Background] Found ${connections.length} connections: ${providersFound}`);
-
-    // Robust finding: Case insensitive check
+    // Case-insensitive search for 'google'
     const connection = connections.find(c => 
       c.provider && 
       c.provider.toLowerCase() === 'google' && 
@@ -152,35 +151,39 @@ async function executeSync(base44, user) {
     );
     
     if (!connection) {
-      console.log("[Background] ❌ No active Google connection found (checked top 50).");
-      return;
+      console.log("[Sync] ❌ No active Google connection found.");
+      return 0;
     }
 
     let accessToken = await decrypt(connection.access_token_encrypted);
     const refreshToken = connection.refresh_token_encrypted ? await decrypt(connection.refresh_token_encrypted) : null;
 
-    // B. DETERMINE QUERY
+    // B. DETERMINE QUERY (SMART SYNC)
     const lastMails = await base44.entities.Mail.list('-received_at', 1);
     const lastMail = (lastMails.data || lastMails)[0];
 
     let query = '';
     
     if (!lastMail) {
+      // First Sync: Last 24 hours
       const oneDayAgo = Math.floor((Date.now() - 24 * 60 * 60 * 1000) / 1000);
       query = `after:${oneDayAgo}`;
-      console.log(`[Background] 🆕 First Sync detected. Query: ${query} (Last 24h)`);
+      console.log(`[Sync] 🆕 First Sync. Query: ${query}`);
     } else {
+      // Delta Sync: Last mail time minus 10 minutes overlap
       const bufferMinutes = 10; 
       const lastTime = Math.floor((new Date(lastMail.received_at).getTime() - (bufferMinutes * 60 * 1000)) / 1000);
       query = `after:${lastTime}`;
-      console.log(`[Background] 🔄 Delta Sync (Overlap ${bufferMinutes}m). Query: ${query}`);
+      console.log(`[Sync] 🔄 Delta Sync. Query: ${query}`);
     }
 
-    // C. FETCH LIST FROM GMAIL
-    let listUrl = `https://gmail.googleapis.com/gmail/v1/users/me/messages?q=${encodeURIComponent(query)}&maxResults=50`;
+    // C. FETCH FROM GMAIL
+    // Limited to 20 to prevent timeouts in synchronous mode
+    let listUrl = `https://gmail.googleapis.com/gmail/v1/users/me/messages?q=${encodeURIComponent(query)}&maxResults=20`;
     
     let listRes = await fetch(listUrl, { headers: { Authorization: `Bearer ${accessToken}` } });
     
+    // Handle Token Expiry
     if (listRes.status === 401 && refreshToken) {
       accessToken = await refreshGoogleToken(refreshToken, connection, base44);
       listRes = await fetch(listUrl, { headers: { Authorization: `Bearer ${accessToken}` } });
@@ -188,15 +191,16 @@ async function executeSync(base44, user) {
 
     const listData = await listRes.json();
     if (!listData.messages || listData.messages.length === 0) {
-      console.log("[Background] ✨ No new messages found.");
-      return;
+      console.log("[Sync] ✨ No new messages.");
+      return 0;
     }
 
-    console.log(`[Background] 📥 Found ${listData.messages.length} potential messages. Fetching details...`);
+    console.log(`[Sync] 📥 Fetching details for ${listData.messages.length} messages...`);
 
-    // D. FETCH DETAILS & SAVE
+    // D. SAVE EMAILS
     const savedMails = [];
-    const existingMailsList = await base44.entities.Mail.list('-received_at', 200); 
+    // Check duplicates
+    const existingMailsList = await base44.entities.Mail.list('-received_at', 100); 
     const existingIds = new Set((existingMailsList.data || existingMailsList).map(m => m.external_id));
 
     for (const msg of listData.messages) {
@@ -216,19 +220,24 @@ async function executeSync(base44, user) {
         const created = await base44.entities.Mail.create({ ...parsed, user_id: user.id });
         savedMails.push(created);
       } catch (e) {
-        console.error(`[Background] Error saving mail ${msg.id}:`, e);
+        console.error(`[Sync] Error saving mail ${msg.id}:`, e);
       }
     }
 
-    console.log(`[Background] ✅ Saved ${savedMails.length} actual new mails.`);
+    syncedCount = savedMails.length;
+    console.log(`[Sync] ✅ Saved ${syncedCount} new mails.`);
 
     // E. TRIGGER AUTOMATION
     if (savedMails.length > 0) {
-      await runAutomation(base44, savedMails);
+      // Pass the userId to the automation function!
+      await runAutomation(base44, savedMails, user.id);
     }
 
+    return syncedCount;
+
   } catch (error) {
-    console.error("[Background] ❌ Critical Sync Error:", error);
+    console.error("[Sync] ❌ Critical Error:", error);
+    throw error; // Re-throw so the main handler catches it
   }
 }
 
@@ -236,8 +245,8 @@ async function executeSync(base44, user) {
 // 4. AUTOMATION LOGIC
 // ========================================
 
-async function runAutomation(base44, mails) {
-  console.log(`[Automation] 🤖 Processing ${mails.length} mails for rules...`);
+async function runAutomation(base44, mails, userId) {
+  console.log(`[Automation] 🤖 Processing rules for user ${userId}...`);
   
   const rulesRaw = await base44.entities.AutomationRule.list('-created_date', 100);
   const rules = (rulesRaw.data || rulesRaw).filter(r => r.is_active);
@@ -270,9 +279,11 @@ async function runAutomation(base44, mails) {
       const extractedBuffer = {};
 
       for (const rule of matchingRules) {
+        // IMPORTANT: Pass userId to executeAutomationRule
         const res = await base44.functions.invoke('executeAutomationRule', {
           mailId: mail.id,
-          ruleId: rule.id
+          ruleId: rule.id,
+          userId: userId // <--- PASSING USER ID
         });
 
         if (res.error) {
@@ -293,11 +304,13 @@ async function runAutomation(base44, mails) {
       }
 
       if (actionsBuffer.length > 0) {
-        console.log(`[Automation] 📦 Creating approval batch with ${actionsBuffer.length} actions.`);
+        console.log(`[Automation] 📦 Creating approval batch...`);
+        // IMPORTANT: Pass userId to aggregateApprovalBatch
         await base44.functions.invoke('aggregateApprovalBatch', {
             mailId: mail.id,
             actionsToApprove: actionsBuffer,
-            extractedInfo: extractedBuffer
+            extractedInfo: extractedBuffer,
+            userId: userId // <--- PASSING USER ID
         });
       }
 
@@ -322,16 +335,14 @@ Deno.serve(async (req) => {
         return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: corsHeaders });
     }
 
-    if (typeof EdgeRuntime !== 'undefined') {
-        EdgeRuntime.waitUntil(executeSync(base44, user));
-    } else {
-        executeSync(base44, user);
-    }
+    // Synchronous execution (awaiting result)
+    const count = await executeSync(base44, user);
 
+    // Return the count to the UI
     return new Response(JSON.stringify({ 
       success: true, 
-      status: 'queued', 
-      message: 'Sync started in background' 
+      synced: count,
+      message: `Synced ${count} emails` 
     }), { 
       status: 200, 
       headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
