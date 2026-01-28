@@ -11,7 +11,6 @@
  */
 
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.6';
-import { executeBatchActions } from './utils/batchExecutor.js';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -59,10 +58,11 @@ Deno.serve(async (req) => {
     }
 
     // Authorization: only approver or admin
-    const isApprover = batch.approver_email === user.email;
+    const isApprover = (batch.approver_email || '').toLowerCase() === user.email.toLowerCase(); // תיקון לאותיות קטנות
     const isAdmin = user.role === 'admin';
-    
-    if (!isApprover && !isAdmin) {
+    const isOwner = batch.user_id === user.id; // <--- הבדיקה החדשה
+
+    if (!isApprover && !isAdmin && !isOwner) {
       return Response.json(
         { success: false, code: 'FORBIDDEN', message: 'Not authorized to access this batch' },
         { status: 403, headers: corsHeaders }
@@ -372,4 +372,81 @@ function validateActionsUpdate(original, updated) {
   }
 
   return errors;
+}
+// ========================================
+// EMBEDDED EXECUTOR
+// ========================================
+
+async function executeBatchActions(base44, batch, context) {
+  const actions = batch.actions_current || [];
+  const results = [];
+  let successCount = 0;
+  let failCount = 0;
+
+  console.log(`[Executor] Starting execution of ${actions.length} actions for Batch ${batch.id}`);
+
+  for (const action of actions) {
+    try {
+      const type = action.action_type || action.action;
+      const config = action.config || {};
+      let result = null;
+
+      // --- Execute based on type ---
+      switch (type) {
+        case 'send_email':
+          result = await base44.functions.invoke('sendEmail', {
+            to: config.to,
+            subject: config.subject,
+            body: config.body
+          });
+          if (result.error) throw new Error(result.error);
+          break;
+
+        case 'create_task':
+          result = await base44.entities.Task.create({
+            title: config.title,
+            description: config.description,
+            case_id: batch.case_id,
+            client_id: batch.client_id,
+            status: 'pending',
+            due_date: config.due_date
+          });
+          break;
+
+        case 'billing':
+          result = await base44.entities.TimeEntry.create({
+            case_id: batch.case_id,
+            description: config.description || 'Automated billing',
+            hours: config.hours,
+            rate: config.rate || config.hourly_rate || 0,
+            date_worked: new Date().toISOString().split('T')[0],
+            is_billable: true
+          });
+          break;
+          
+        case 'calendar_event':
+           result = await base44.functions.invoke('createCalendarEvent', {
+             ...config,
+             case_id: batch.case_id
+           });
+           if (result.error) throw new Error(result.error);
+           break;
+      }
+
+      results.push({ id: action.idempotency_key, status: 'success', data: result });
+      successCount++;
+    } catch (error) {
+      console.error(`[Executor] Action failed: ${error.message}`);
+      results.push({ id: action.idempotency_key, status: 'failed', error: error.message });
+      failCount++;
+    }
+  }
+
+  return {
+    success: successCount,
+    failed: failCount,
+    total: actions.length,
+    results,
+    executed_at: new Date().toISOString()
+  };
 }
