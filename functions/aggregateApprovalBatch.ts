@@ -6,22 +6,85 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+// ========================================
+// DWO EMAIL DESIGN SYSTEM (EMBEDDED)
+// ========================================
+
+const BRAND = {
+  colors: {
+    primary: '#b62f12',    // DWO Red
+    secondary: '#545454',  // DWO Dark Gray
+    bg: '#f3f4f6',         // Light Grey Background
+    card: '#ffffff',       // White Card
+    text: '#000000',       // Black Text
+    textLight: '#545454',  // Metadata Text
+    link: '#b62f12'        // Link
+  },
+  logoUrl: 'https://dwo.co.il/wp-content/uploads/2020/04/Drori-Stav-logo-2.png', 
+  appUrl: 'https://os.dwo.co.il'
+};
+
+function generateEmailLayout(contentHtml, title, language = 'he') {
+  const dir = language === 'he' ? 'rtl' : 'ltr';
+  const t = {
+    footer_contact: 'DWO - משרד עורכי דין | www.dwo.co.il',
+    footer_disclaimer: 'הודעה זו מכילה מידע סודי ומוגן. אם קיבלת הודעה זו בטעות, אנא מחק אותה ודווח לשולח.'
+  };
+
+  return `
+<!DOCTYPE html>
+<html dir="${dir}" lang="${language}">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>${title}</title>
+  <style>
+    body { margin: 0; padding: 0; background-color: ${BRAND.colors.bg}; font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; }
+    .email-wrapper { padding: 20px; }
+    .email-container { max-width: 600px; margin: 0 auto; background-color: ${BRAND.colors.card}; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
+    .header { background-color: ${BRAND.colors.card}; padding: 20px; text-align: center; border-bottom: 3px solid ${BRAND.colors.primary}; }
+    .content { padding: 30px 25px; color: ${BRAND.colors.text}; line-height: 1.6; }
+    .footer { background-color: #f8fafc; padding: 20px; text-align: center; font-size: 12px; color: ${BRAND.colors.textLight}; border-top: 1px solid #e2e8f0; }
+    a { color: ${BRAND.colors.link}; text-decoration: none; }
+    .logo { height: 50px; width: auto; max-width: 200px; object-fit: contain; }
+    .btn { display: inline-block; padding: 12px 30px; background-color: ${BRAND.colors.primary}; color: #ffffff !important; text-decoration: none; border-radius: 6px; font-weight: bold; margin-top: 20px; }
+    .meta-table { width: 100%; border-collapse: collapse; margin-bottom: 20px; font-size: 14px; }
+    .meta-table td { padding: 5px 0; border-bottom: 1px solid #f0f0f0; }
+    .meta-label { color: ${BRAND.colors.textLight}; width: 100px; }
+    .meta-value { font-weight: 600; color: ${BRAND.colors.text}; }
+  </style>
+</head>
+<body dir="${dir}">
+  <div class="email-wrapper">
+    <div class="email-container">
+      <div class="header">
+         <img src="${BRAND.logoUrl}" alt="DWO Logo" class="logo" />
+      </div>
+      <div class="content">
+        ${contentHtml}
+      </div>
+      <div class="footer">
+        <p style="margin: 0 0 10px 0;">${t.footer_contact}</p>
+        <p style="margin: 0; opacity: 0.7;">${t.footer_disclaimer}</p>
+      </div>
+    </div>
+  </div>
+</body>
+</html>`.trim();
+}
+
 // ==========================================
-// INTERNAL HELPER: EMAIL TEMPLATE GENERATOR
+// INTERNAL HELPER: EMAIL TEMPLATE RENDERER
 // ==========================================
 function renderApprovalEmail({ batch, approveUrl, editUrl, language = 'he', caseName, clientName }) {
   const isHebrew = language === 'he';
-  const dir = isHebrew ? 'rtl' : 'ltr';
   const align = isHebrew ? 'right' : 'left';
   
   const title = isHebrew 
     ? `אישור נדרש: ${batch.automation_rule_name}`
     : `Approval Required: ${batch.automation_rule_name}`;
-    
-  const contextText = [];
-  if (caseName) contextText.push(isHebrew ? `תיק: ${caseName}` : `Case: ${caseName}`);
-  if (clientName) contextText.push(isHebrew ? `לקוח: ${clientName}` : `Client: ${clientName}`);
   
+  // Build actions list with new branding
   const actionsList = (batch.actions_current || []).map(action => {
     let icon = '⚡';
     let desc = action.action_type;
@@ -42,8 +105,8 @@ function renderApprovalEmail({ batch, approveUrl, editUrl, language = 'he', case
         break;
       case 'billing':
         icon = '💰';
-        desc = isHebrew ? 'חיוב' : 'Billing';
-        details = `${config.hours || 0}h @ ${config.rate || config.hourly_rate || 0}`;
+        desc = isHebrew ? 'חיוב שעות' : 'Billing';
+        details = `${config.hours || 0}h @ ${config.rate || config.hourly_rate || 0} ₪`;
         break;
       case 'save_file':
         icon = '💾';
@@ -58,54 +121,55 @@ function renderApprovalEmail({ batch, approveUrl, editUrl, language = 'he', case
     }
     
     return `
-      <div style="background: #f8f9fa; padding: 10px; margin-bottom: 8px; border-radius: 6px; border-${align}: 4px solid #3b82f6;">
-        <div style="font-weight: bold;">${icon} ${desc}</div>
-        <div style="color: #666; font-size: 0.9em;">${details}</div>
+      <div style="background: #f8f9fa; padding: 12px; margin-bottom: 10px; border-radius: 6px; border-${align}: 4px solid ${BRAND.colors.primary}; text-align: ${align};">
+        <div style="font-weight: bold; color: ${BRAND.colors.text}; font-size: 15px;">${icon} ${desc}</div>
+        <div style="color: ${BRAND.colors.textLight}; font-size: 13px; margin-top: 4px;">${details}</div>
       </div>
     `;
   }).join('');
 
-  return `
-    <!DOCTYPE html>
-    <html lang="${language}" dir="${dir}">
-    <head>
-      <meta charset="UTF-8">
-      <style>
-        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; line-height: 1.6; color: #333; }
-        .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-        .header { text-align: center; margin-bottom: 30px; }
-        .card { border: 1px solid #e5e7eb; border-radius: 8px; padding: 20px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
-        .btn { display: inline-block; padding: 12px 24px; background-color: #2563eb; color: white; text-decoration: none; border-radius: 6px; font-weight: bold; margin-top: 20px; }
-        .meta { color: #6b7280; font-size: 0.875rem; margin-bottom: 20px; border-bottom: 1px solid #e5e7eb; padding-bottom: 15px; }
-      </style>
-    </head>
-    <body>
-      <div class="container">
-        <div class="header">
-          <h2>${title}</h2>
-        </div>
-        
-        <div class="card">
-          <div class="meta">
-            <div><strong>${isHebrew ? 'נושא המייל' : 'Mail Subject'}:</strong> ${batch.mail_subject}</div>
-            <div><strong>${isHebrew ? 'מאת' : 'From'}:</strong> ${batch.mail_from}</div>
-            ${contextText.length > 0 ? `<div style="margin-top: 8px; color: #4b5563;">${contextText.join(' | ')}</div>` : ''}
-          </div>
-          
-          <h3 style="margin-top: 0;">${isHebrew ? 'פעולות ממתינות לאישור' : 'Actions Pending Approval'}</h3>
-          ${actionsList}
-          
-          <div style="text-align: center; margin-top: 30px;">
-            <a href="${editUrl}" class="btn">${isHebrew ? 'סקירה ואישור במערכת' : 'Review & Approve'}</a>
-            <p style="font-size: 0.8rem; color: #9ca3af; margin-top: 15px;">
-              ${isHebrew ? 'לחיצה תוביל למסך עריכה ואישור מרוכז' : 'Link leads to batch review screen'}
-            </p>
-          </div>
-        </div>
+  // Build Inner Content
+  const innerContent = `
+    <h2 style="color: ${BRAND.colors.primary}; margin-top: 0; text-align: center; margin-bottom: 25px;">${title}</h2>
+    
+    <div style="background-color: #ffffff; padding: 5px;">
+      <table class="meta-table" role="presentation">
+        <tr>
+          <td class="meta-label">${isHebrew ? 'נושא המייל' : 'Subject'}:</td>
+          <td class="meta-value">${batch.mail_subject || '-'}</td>
+        </tr>
+        <tr>
+          <td class="meta-label">${isHebrew ? 'מאת' : 'From'}:</td>
+          <td class="meta-value">${batch.mail_from || '-'}</td>
+        </tr>
+        ${caseName ? `
+        <tr>
+          <td class="meta-label">${isHebrew ? 'תיק' : 'Case'}:</td>
+          <td class="meta-value">${caseName}</td>
+        </tr>` : ''}
+        ${clientName ? `
+        <tr>
+          <td class="meta-label">${isHebrew ? 'לקוח' : 'Client'}:</td>
+          <td class="meta-value">${clientName}</td>
+        </tr>` : ''}
+      </table>
+      
+      <h3 style="color: ${BRAND.colors.secondary}; font-size: 16px; margin-top: 20px; border-bottom: 1px solid #eee; padding-bottom: 5px; text-align: ${align};">
+        ${isHebrew ? 'פעולות ממתינות לאישור' : 'Actions Pending Approval'}
+      </h3>
+      
+      ${actionsList}
+      
+      <div style="text-align: center; margin-top: 35px; margin-bottom: 20px;">
+        <a href="${editUrl}" class="btn">${isHebrew ? 'סקירה ואישור במערכת' : 'Review & Approve'}</a>
+        <p style="font-size: 13px; color: ${BRAND.colors.textLight}; margin-top: 15px;">
+          ${isHebrew ? 'לחיצה תוביל למסך עריכה ואישור מרוכז' : 'Link leads to batch review screen'}
+        </p>
       </div>
-    </body>
-    </html>
+    </div>
   `;
+
+  return generateEmailLayout(innerContent, title, language);
 }
 
 // ==========================================
@@ -176,7 +240,6 @@ Deno.serve(async (req) => {
         let batch;
         const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 60 minutes
 
-        // 🔥 FIX 422: Prepare map_snapshot as Dictionary
         let mapSnapshotDict = {};
         if (Array.isArray(firstAction.map_snapshot)) {
             mapSnapshotDict = { rules: firstAction.map_snapshot };
@@ -223,7 +286,7 @@ Deno.serve(async (req) => {
             approver_email: approverEmail,
             expires_at: expiresAt.toISOString(),
             catch_snapshot: firstAction.catch_snapshot || {},
-            map_snapshot: mapSnapshotDict, // ✅ FIXED: Now guaranteed to be an object
+            map_snapshot: mapSnapshotDict,
             extracted_info: extractedInfo || {},
             actions_original: actionsWithKeys,
             actions_current: JSON.parse(JSON.stringify(actionsWithKeys))
@@ -252,6 +315,7 @@ Deno.serve(async (req) => {
              } catch(e) {}
           }
 
+          // Use the embedded render function with new design
           const emailHtml = renderApprovalEmail({
             batch: {
               id: batch.id,
@@ -269,6 +333,7 @@ Deno.serve(async (req) => {
 
           const subject = `אישור נדרש: ${batch.automation_rule_name} (${batch.actions_current.length} פעולות)`;
 
+          // Using invoke 'sendEmail' ensures we use the proper Gmail integration
           await base44.functions.invoke('sendEmail', {
             to: approverEmail,
             subject,
@@ -284,7 +349,6 @@ Deno.serve(async (req) => {
 
       } catch (e) {
         console.error(`[AggregateApproval] ❌ Error processing approver ${approverEmail}:`, e);
-        // Important: Log error but continue to next approver
       }
     }
 
