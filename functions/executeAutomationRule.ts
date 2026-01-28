@@ -33,7 +33,6 @@ function generateEmailLayout(contentHtml, title) {
     footer_disclaimer: 'הודעה זו מכילה מידע סודי ומוגן. אם קיבלת הודעה זו בטעות, אנא מחק אותה ודווח לשולח.'
   };
 
-  // Define styles as strings for reusability and cleanness
   const s = {
     body: `margin: 0; padding: 0; background-color: ${BRAND.colors.bg}; font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;`,
     wrapper: `padding: 20px; background-color: ${BRAND.colors.bg};`,
@@ -56,26 +55,22 @@ function generateEmailLayout(contentHtml, title) {
 <body style="${s.body}">
   <div style="${s.wrapper}">
     <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%" style="${s.container}">
-      
       <tr>
         <td style="${s.header}">
            <img src="${BRAND.logoUrl}" alt="DWO Logo" style="${s.logo}" width="200" height="50" />
         </td>
       </tr>
-
       <tr>
         <td style="${s.content}">
           ${contentHtml}
         </td>
       </tr>
-
       <tr>
         <td style="${s.footer}">
           <p style="margin: 0 0 10px 0;">${t.footer_contact}</p>
           <p style="margin: 0; opacity: 0.7;">${t.footer_disclaimer}</p>
         </td>
       </tr>
-
     </table>
   </div>
 </body>
@@ -264,19 +259,31 @@ Deno.serve(async (req) => {
     
     const rawBody = await req.json();
     const params = rawBody.body || rawBody;
-    const { mailId, ruleId, testMode = false } = params;
+    const { mailId, ruleId, testMode = false, userId } = params; // <--- ACCEPT userId
 
     if (!mailId || !ruleId) throw new Error('mailId and ruleId are required');
+
+    // 1. RESOLVE USER EMAIL (Accurate Attribution)
+    if (userId) {
+       try {
+         const u = await base44.entities.User.get(userId);
+         if (u) userEmail = u.email;
+       } catch(e) { console.warn('Failed to fetch user by ID'); }
+    }
+    
+    // Fallback: If no userId provided, try to guess from sender (Legacy behavior)
+    if (!userEmail) {
+        const mail = await base44.entities.Mail.get(mailId);
+        if (mail && mail.sender_email) {
+            let rawEmail = mail.sender_email;
+            const emailMatch = rawEmail.match(/<(.+?)>/);
+            userEmail = emailMatch ? emailMatch[1] : rawEmail;
+        }
+    }
 
     const mail = await base44.entities.Mail.get(mailId);
     if (!mail) throw new Error(`Mail not found: ${mailId}`);
     mailData = mail;
-
-    if (mail.sender_email) {
-      let rawEmail = mail.sender_email;
-      const emailMatch = rawEmail.match(/<(.+?)>/);
-      userEmail = emailMatch ? emailMatch[1] : rawEmail;
-    }
 
     const rule = await base44.entities.AutomationRule.get(ruleId);
     if (!rule) throw new Error(`Rule not found: ${ruleId}`);
@@ -328,8 +335,6 @@ Deno.serve(async (req) => {
       }
       
       // BATCHING LOGIC:
-      // If approval is required, return "pending_batch" and DO NOT execute.
-      // This allows processIncomingMail to aggregate all actions.
       if (rule.require_approval) {
         results.push({ 
           action: actionType, 
@@ -357,8 +362,7 @@ Deno.serve(async (req) => {
         };
         
         await handleAction('send_email', emailConfig, async () => {
-          // 🔥 BRANDING FIX FOR DIRECT SEND + OUTLOOK SUPPORT:
-          // Wrap the raw body with the Inline CSS Design System
+          // BRANDING: Inline CSS Wrapper
           const formattedBody = `
             <div style="font-family: 'Segoe UI', Arial, sans-serif; color: ${BRAND.colors.text}; white-space: pre-wrap;">
               ${emailConfig.body}
@@ -369,7 +373,7 @@ Deno.serve(async (req) => {
           const emailResult = await base44.functions.invoke('sendEmail', {
             to: emailConfig.to,
             subject: emailConfig.subject,
-            body: finalHtml // Send styled HTML with Inline CSS
+            body: finalHtml
           });
           
           if (emailResult.error) throw new Error(`sendEmail failed: ${emailResult.error}`);
@@ -422,7 +426,7 @@ Deno.serve(async (req) => {
         date_worked: new Date().toISOString(),
         is_billable: true,
         billed: false,
-        user_email: userEmail,
+        user_email: userEmail, // <--- Correctly attributed to the lawyer
         task_id: null
       };
       
@@ -448,6 +452,7 @@ Deno.serve(async (req) => {
            try {
               const supabaseUrl = Deno.env.get('SUPABASE_URL');
               const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+              // Using existing helper for download
               const downloadResponse = await fetch(`${supabaseUrl}/functions/v1/downloadGmailAttachment`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${supabaseServiceKey}` },
@@ -497,10 +502,9 @@ Deno.serve(async (req) => {
         execution_status: 'completed',
         actions_summary: results,
         execution_time_ms: executionTime,
-        user_email: userEmail,
+        user_email: userEmail, // <--- Correctly logged
         metadata: { case_id: caseId, client_id: clientId, extracted: extractedInfo }
       });
-      // Stats updated only on full completion
       await updateRuleStats(base44, ruleId, true);
     }
 
