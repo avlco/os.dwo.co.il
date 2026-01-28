@@ -155,7 +155,7 @@ function parseGmailMessage(gmailMsg) {
 }
 
 // ========================================
-// 🆕 RULE MATCHING LOGIC
+// RULE MATCHING LOGIC
 // ========================================
 
 async function findMatchingRules(mail, base44) {
@@ -180,58 +180,54 @@ async function findMatchingRules(mail, base44) {
       let isMatch = true;
       const reasons = [];
       
-      // בדיקה 1: שולח (sender)
+      // Check 1: Sender
       if (config.senders && Array.isArray(config.senders) && config.senders.length > 0) {
         const senderMatches = config.senders.some(sender => {
           const senderLower = sender.toLowerCase().trim();
           const mailSenderLower = (mail.sender_email || '').toLowerCase();
-          
           return mailSenderLower.includes(senderLower) || senderLower.includes(mailSenderLower);
         });
         
         if (!senderMatches) {
           isMatch = false;
-          reasons.push(`sender mismatch (expected: ${config.senders.join(', ')})`);
+          reasons.push(`sender mismatch`);
         } else {
           reasons.push('✓ sender match');
         }
       }
       
-      // בדיקה 2: נושא (subject)
+      // Check 2: Subject
       if (config.subject_contains && config.subject_contains.trim().length > 0) {
         const subjectKeyword = config.subject_contains.toLowerCase().trim();
         const mailSubject = (mail.subject || '').toLowerCase();
         
         if (!mailSubject.includes(subjectKeyword)) {
           isMatch = false;
-          reasons.push(`subject mismatch (looking for: "${config.subject_contains}")`);
+          reasons.push(`subject mismatch`);
         } else {
           reasons.push('✓ subject match');
         }
       }
       
-      // בדיקה 3: גוף המייל (body)
+      // Check 3: Body
       if (config.body_contains && config.body_contains.trim().length > 0) {
         const bodyKeyword = config.body_contains.toLowerCase().trim();
         const mailBody = (mail.body_plain || mail.body_html || '').toLowerCase();
         
         if (!mailBody.includes(bodyKeyword)) {
           isMatch = false;
-          reasons.push(`body mismatch (looking for: "${config.body_contains}")`);
+          reasons.push(`body mismatch`);
         } else {
           reasons.push('✓ body match');
         }
       }
       
       if (isMatch) {
-        console.log(`[RuleMatcher] ✅ Rule "${rule.name}" MATCHED: ${reasons.join(', ')}`);
+        console.log(`[RuleMatcher] ✅ Rule "${rule.name}" MATCHED`);
         matchingRules.push(rule);
-      } else {
-        console.log(`[RuleMatcher] ❌ Rule "${rule.name}" rejected: ${reasons.join(', ')}`);
       }
     }
     
-    console.log(`[RuleMatcher] 🎯 Total matching rules: ${matchingRules.length}`);
     return matchingRules;
     
   } catch (error) {
@@ -397,18 +393,11 @@ async function fetchFirstWeekMessages(accessToken, refreshToken, connection, use
         { headers: { Authorization: `Bearer ${currentToken}` } }
       );
       
-      if (!detailRes.ok) {
-        console.error(`[Sync] ❌ Failed to fetch message ${msg.id}: ${detailRes.status}`);
-        continue;
-      }
+      if (!detailRes.ok) continue;
       
       const detailData = await detailRes.json();
       const parsedMail = parseGmailMessage(detailData);
       emails.push(parsedMail);
-      
-      if ((i + 1) % 50 === 0) {
-        console.log(`[Sync] Progress: ${i + 1}/${listData.messages.length} messages processed`);
-      }
       
     } catch (error) {
       console.error(`[Sync] ❌ Error processing message ${msg.id}:`, error);
@@ -425,7 +414,7 @@ async function fetchFirstWeekMessages(accessToken, refreshToken, connection, use
     });
   }
   
-  console.log(`[Sync] ✅ First sync complete: ${emails.length} messages from last 7 days`);
+  console.log(`[Sync] ✅ First sync complete: ${emails.length} messages`);
   return emails;
 }
 
@@ -465,16 +454,12 @@ async function fetchIncrementalMessages(accessToken, refreshToken, connection, u
     
     if (!historyData.history || historyData.history.length === 0) {
       console.log('[Sync] ✨ No new messages since last sync');
-      
       await updateSyncMetadata(connection, userBase44, {
         last_sync_timestamp: Date.now(),
         sync_mode: 'incremental_no_changes'
       });
-      
       return [];
     }
-    
-    console.log(`[Sync] 📬 Found ${historyData.history.length} history records with new messages`);
     
     const newMessageIds = [];
     for (const record of historyData.history) {
@@ -485,30 +470,19 @@ async function fetchIncrementalMessages(accessToken, refreshToken, connection, u
       }
     }
     
-    console.log(`[Sync] 📥 Processing ${newMessageIds.length} new message(s)`);
-    
     const newMessages = [];
-    for (let i = 0; i < newMessageIds.length; i++) {
-      const messageId = newMessageIds[i];
-      
+    for (const messageId of newMessageIds) {
       try {
         const detailRes = await fetch(
           `https://gmail.googleapis.com/gmail/v1/users/me/messages/${messageId}?format=full`,
           { headers: { Authorization: `Bearer ${currentToken}` } }
         );
         
-        if (!detailRes.ok) {
-          console.error(`[Sync] ❌ Failed to fetch message ${messageId}: ${detailRes.status}`);
-          continue;
-        }
+        if (!detailRes.ok) continue;
         
         const detailData = await detailRes.json();
         const parsedMail = parseGmailMessage(detailData);
         newMessages.push(parsedMail);
-        
-        if ((i + 1) % 10 === 0) {
-          console.log(`[Sync] Progress: ${i + 1}/${newMessageIds.length} new messages processed`);
-        }
         
       } catch (error) {
         console.error(`[Sync] ❌ Error processing message ${messageId}:`, error);
@@ -528,7 +502,6 @@ async function fetchIncrementalMessages(accessToken, refreshToken, connection, u
     
   } catch (error) {
     console.error('[Sync] ❌ Incremental sync failed:', error);
-    console.log('[Sync] 🔄 Falling back to recent messages fetch');
     return await fetchFallbackMessages(accessToken, refreshToken, connection, userBase44, 100);
   }
 }
@@ -544,7 +517,6 @@ async function fetchFallbackMessages(accessToken, refreshToken, connection, user
   });
   
   if (listRes.status === 401) {
-    console.log("[Sync] Token expired during fallback, refreshing...");
     currentToken = await refreshGoogleToken(refreshToken, connection, userBase44);
     listRes = await fetch(listUrl, {
       headers: { Authorization: `Bearer ${currentToken}` }
@@ -553,35 +525,20 @@ async function fetchFallbackMessages(accessToken, refreshToken, connection, user
   
   const listData = await listRes.json();
   
-  if (!listData.messages || listData.messages.length === 0) {
-    console.log('[Sync] ℹ️ No messages found in fallback');
-    return [];
-  }
-  
-  console.log(`[Sync] 📧 Found ${listData.messages.length} messages in fallback`);
+  if (!listData.messages || listData.messages.length === 0) return [];
   
   const emails = [];
-  for (let i = 0; i < listData.messages.length; i++) {
-    const msg = listData.messages[i];
-    
+  for (const msg of listData.messages) {
     try {
       const detailRes = await fetch(
         `https://gmail.googleapis.com/gmail/v1/users/me/messages/${msg.id}?format=full`,
         { headers: { Authorization: `Bearer ${currentToken}` } }
       );
-      
       if (!detailRes.ok) continue;
-      
       const detailData = await detailRes.json();
-      const parsedMail = parseGmailMessage(detailData);
-      emails.push(parsedMail);
-      
-      if ((i + 1) % 25 === 0) {
-        console.log(`[Sync] Fallback progress: ${i + 1}/${listData.messages.length}`);
-      }
-      
-    } catch (error) {
-      console.error(`[Sync] Error in fallback for ${msg.id}:`, error);
+      emails.push(parseGmailMessage(detailData));
+    } catch (e) {
+      console.error(e);
     }
   }
   
@@ -595,12 +552,11 @@ async function fetchFallbackMessages(accessToken, refreshToken, connection, user
     });
   }
   
-  console.log(`[Sync] ✅ Fallback complete: ${emails.length} messages`);
   return emails;
 }
 
 // ========================================
-// MAIN HANDLER
+// MAIN HANDLER & ORCHESTRATOR
 // ========================================
 
 Deno.serve(async (req) => {
@@ -610,19 +566,14 @@ Deno.serve(async (req) => {
     "Content-Type": "application/json"
   };
   
-  if (req.method === "OPTIONS") {
-    return new Response(null, { headers });
-  }
+  if (req.method === "OPTIONS") return new Response(null, { headers });
 
   try {
     const base44 = createClientFromRequest(req);
     const user = await base44.auth.me();
     
     if (!user) {
-      return new Response(
-        JSON.stringify({ error: 'Unauthorized' }), 
-        { status: 401, headers }
-      );
+      return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers });
     }
 
     console.log(`[Sync] 🚀 Starting mail sync for user: ${user.email || user.id}`);
@@ -632,219 +583,142 @@ Deno.serve(async (req) => {
     const connection = items.find(c => c.provider === 'google' && c.is_active !== false);
     
     if (!connection) {
-      console.log('[Sync] ❌ No active Google connection found');
-      return new Response(
-        JSON.stringify({ 
-          error: 'Google connection not found. Please connect via Settings.',
-          code: 'NO_CONNECTION'
-        }), 
-        { status: 404, headers }
-      );
+      return new Response(JSON.stringify({ error: 'Google connection not found' }), { status: 404, headers });
     }
 
     const accessToken = await decrypt(connection.access_token_encrypted);
-    const refreshToken = connection.refresh_token_encrypted 
-      ? await decrypt(connection.refresh_token_encrypted) 
-      : null;
+    const refreshToken = connection.refresh_token_encrypted ? await decrypt(connection.refresh_token_encrypted) : null;
     
-    if (!accessToken) {
-      throw new Error("Failed to decrypt access token");
-    }
+    if (!accessToken) throw new Error("Failed to decrypt access token");
 
     let newEmails;
     const gmailSync = connection.metadata?.gmail_sync;
     
     if (!gmailSync || !gmailSync.history_id) {
-      console.log('[Sync] 📍 First sync detected - using date-based fetch (last 7 days)');
       newEmails = await fetchFirstWeekMessages(accessToken, refreshToken, connection, base44);
     } else {
-      console.log('[Sync] 🔄 Regular sync - using incremental History API');
       newEmails = await fetchIncrementalMessages(accessToken, refreshToken, connection, base44);
     }
 
-    console.log(`[Sync] 📊 Fetched ${newEmails.length} message(s) from Gmail`);
-
+    // Save mails
     const allExistingMails = await base44.entities.Mail.list('-received_at', 2000);
-    const existingMailItems = Array.isArray(allExistingMails) 
-      ? allExistingMails 
-      : (allExistingMails.data || []);
-    
+    const existingMailItems = Array.isArray(allExistingMails) ? allExistingMails : (allExistingMails.data || []);
     const existingIds = new Set(existingMailItems.map(m => m.external_id));
-    console.log(`[Sync] 📋 Found ${existingIds.size} existing mails in database`);
 
     const savedMails = [];
     for (const mail of newEmails) {
       if (!existingIds.has(mail.external_id)) {
         try {
-          const created = await base44.entities.Mail.create({ 
-            ...mail, 
-            user_id: user.id 
-          });
+          const created = await base44.entities.Mail.create({ ...mail, user_id: user.id });
           savedMails.push(created);
         } catch (createError) {
           console.error(`[Sync] ❌ Failed to save mail ${mail.external_id}:`, createError.message);
         }
-      } else {
-        console.log(`[Sync] ⏭️ Skipping duplicate: ${mail.external_id}`);
       }
     }
 
     // ========================================
-    // 🔥 NEW AUTOMATION ORCHESTRATOR
+    // 🔥 AUTOMATION ORCHESTRATOR (Corrected)
     // ========================================
-    console.log(`[Automation] 🚀 Starting async automation for ${savedMails.length} new mails`);
-    
-    // Non-blocking automation execution
-    setTimeout(async () => {
-      let totalRulesExecuted = 0;
-      let totalBatchesCreated = 0;
+    if (savedMails.length > 0) {
+      console.log(`[Automation] 🚀 Triggering automation for ${savedMails.length} new mails`);
+      
+      // Async execution - doesn't block the response
+      setTimeout(async () => {
+        let totalRulesExecuted = 0;
+        let totalBatchesCreated = 0;
 
-      for (const mail of savedMails) {
-        try {
-          console.log(`[Automation] 📧 Processing mail ID ${mail.id}: "${mail.subject}"`);
-          
-          const matchingRules = await findMatchingRules(mail, base44);
-          
-          if (matchingRules.length === 0) {
-            console.log(`[Automation] ⚠️ No matching rules for mail ${mail.id}`);
-            continue;
-          }
-          
-          // Buffer for collecting actions that require approval (for batching)
-          const mailActionsBuffer = [];
-          // Buffer for extracted info (merge all info extracted by different rules)
-          const aggregatedExtractedInfo = {};
-          
-          for (const rule of matchingRules) {
-            try {
-              console.log(`[Automation] ▶️ Executing rule "${rule.name}" (ID: ${rule.id}) on mail ${mail.id}`);
-              
-              // Call execution function
-              const invokeResponse = await base44.functions.invoke('executeAutomationRule', {
-                mailId: mail.id,
-                ruleId: rule.id,
-                testMode: false
-              });
-              
-              const invokeError = invokeResponse.error;
-              const resultData = invokeResponse.data || {};
-
-              totalRulesExecuted++;
-              
-              // Handle invocation error
-              if (invokeError) {
-                console.error(`[Automation] ❌ Rule "${rule.name}" invocation error:`, invokeError);
-                continue;
-              }
-
-              // Handle logic error inside response
-              if (resultData.error) {
-                console.error(`[Automation] ❌ Rule "${rule.name}" logic error:`, resultData.error);
-                continue;
-              }
-              
-              // Collect extraction info
-              if (resultData.extracted_info) {
-                Object.assign(aggregatedExtractedInfo, resultData.extracted_info);
-              }
-              // Prefer last non-null case/client ID
-              if (resultData.case_id) aggregatedExtractedInfo.case_id = resultData.case_id;
-              if (resultData.client_id) aggregatedExtractedInfo.client_id = resultData.client_id;
-              
-              // Check for actions needing approval
-              if (resultData.results && Array.isArray(resultData.results)) {
-                const pendingActions = resultData.results.filter(r => r.status === 'pending_batch');
-                if (pendingActions.length > 0) {
-                  console.log(`[Automation] 📥 Collected ${pendingActions.length} pending actions from rule "${rule.name}"`);
-                  mailActionsBuffer.push(...pendingActions);
-                }
-              }
-              
-            } catch (ruleError) {
-              console.error(`[Automation] ❌ Exception executing rule "${rule.name}":`, ruleError);
-            }
-          } // End of rules loop
-          
-          // If we have pending actions for this mail, create a BATCH
-          if (mailActionsBuffer.length > 0) {
-            console.log(`[Automation] 📦 Creating approval batch with ${mailActionsBuffer.length} actions for mail ${mail.id}`);
+        for (const mail of savedMails) {
+          try {
+            const matchingRules = await findMatchingRules(mail, base44);
+            if (matchingRules.length === 0) continue;
             
-            const batchPayload = {
-              mailId: mail.id,
-              actionsToApprove: mailActionsBuffer,
-              extractedInfo: aggregatedExtractedInfo
-            };
-
-            let batchData = null;
-            let batchError = null;
-
-            try {
-              // 🔄 Attempt 1: Try CamelCase (Standard)
-              console.log('[Automation] Trying invoke: aggregateApprovalBatch');
-              const batchInvoke1 = await base44.functions.invoke('aggregateApprovalBatch', batchPayload);
-              
-              if (batchInvoke1.error && (batchInvoke1.error.status === 404 || batchInvoke1.error.message?.includes('404'))) {
-                 throw new Error('404 Not Found');
-              }
-              
-              batchData = batchInvoke1.data;
-              batchError = batchInvoke1.error;
-
-            } catch (e1) {
-              // 🔄 Attempt 2: Try Kebab-Case (Fallback for auto-slugified names)
-              console.warn('[Automation] ⚠️ aggregateApprovalBatch failed (404/Error), trying fallback: aggregate-approval-batch');
-              
+            // Buffer for collecting actions that require approval (for batching)
+            const mailActionsBuffer = [];
+            // Buffer for extracted info
+            const aggregatedExtractedInfo = {};
+            
+            for (const rule of matchingRules) {
               try {
-                const batchInvoke2 = await base44.functions.invoke('aggregate-approval-batch', batchPayload);
-                batchData = batchInvoke2.data;
-                batchError = batchInvoke2.error;
-                console.log('[Automation] ✅ Fallback invocation succeeded');
-              } catch (e2) {
-                console.error('[Automation] ❌ Fallback invocation also failed:', e2);
-                // Give up
-                batchError = e2;
+                // Call executeAutomationRule
+                const invokeResponse = await base44.functions.invoke('executeAutomationRule', {
+                  mailId: mail.id,
+                  ruleId: rule.id,
+                  testMode: false
+                });
+
+                const resultData = invokeResponse.data || {};
+                
+                // IMPORTANT: Check for execution errors
+                if (invokeResponse.error) {
+                    console.error(`[Automation] Rule invocation failed:`, invokeResponse.error);
+                    continue;
+                }
+                
+                totalRulesExecuted++;
+                
+                // Collect extraction info
+                if (resultData.extracted_info) Object.assign(aggregatedExtractedInfo, resultData.extracted_info);
+                if (resultData.case_id) aggregatedExtractedInfo.case_id = resultData.case_id;
+                if (resultData.client_id) aggregatedExtractedInfo.client_id = resultData.client_id;
+                
+                // 🔥 CRITICAL FIX: Detect pending_batch status
+                // Check if results array exists and has items with pending_batch status
+                if (resultData.results && Array.isArray(resultData.results)) {
+                    const pending = resultData.results.filter(r => r.status === 'pending_batch');
+                    
+                    if (pending.length > 0) {
+                        console.log(`[Automation] 📥 Collected ${pending.length} actions for batch approval`);
+                        mailActionsBuffer.push(...pending);
+                    }
+                }
+                
+              } catch (ruleError) {
+                console.error(`[Automation] ❌ Rule error:`, ruleError);
+              }
+            } // End rules loop
+            
+            // If we have pending actions, create the BATCH
+            if (mailActionsBuffer.length > 0) {
+              console.log(`[Automation] 📦 Creating BATCH with ${mailActionsBuffer.length} actions`);
+              
+              const batchPayload = {
+                mailId: mail.id,
+                actionsToApprove: mailActionsBuffer,
+                extractedInfo: aggregatedExtractedInfo
+              };
+
+              // Try invoking aggregateApprovalBatch
+              let batchInvoke = await base44.functions.invoke('aggregateApprovalBatch', batchPayload);
+              
+              // Fallback retry if needed (handle function name mismatch)
+              if (batchInvoke.error && String(batchInvoke.error).includes('404')) {
+                  console.warn('[Automation] Retrying with kebab-case: aggregate-approval-batch');
+                  batchInvoke = await base44.functions.invoke('aggregate-approval-batch', batchPayload);
+              }
+
+              if (batchInvoke.error || (batchInvoke.data && !batchInvoke.data.success)) {
+                console.error(`[Automation] ❌ Batch creation failed:`, batchInvoke.error || batchInvoke.data);
+              } else {
+                totalBatchesCreated++;
+                console.log(`[Automation] ✅ Batch created and email sent!`);
               }
             }
             
-            if (batchError || (batchData && !batchData.success)) {
-              console.error(`[Automation] ❌ Batch creation failed after retries:`, batchError || batchData);
-            } else if (batchData) {
-              totalBatchesCreated++;
-              console.log(`[Automation] ✅ Batch created successfully for mail ${mail.id}`);
-            }
+          } catch (mailError) {
+            console.error(`[Automation] ❌ Mail processing failed:`, mailError);
           }
-          
-        } catch (error) {
-          console.error(`[Automation] ❌ Failed to process automation for mail ${mail.id}:`, error);
         }
-      }
+      }, 0);
+    }
 
-      console.log(`[Automation] 📊 Summary: Executed Rules: ${totalRulesExecuted}, Batches Created: ${totalBatchesCreated}`);
-    }, 0); // End of async automation
-
-    const syncMode = gmailSync?.sync_mode || 'unknown';
-    console.log(`[Sync] ✅ COMPLETE - Saved ${savedMails.length} new mail(s) | Mode: ${syncMode}`);
-
-    return new Response(
-      JSON.stringify({ 
-        success: true, 
-        synced: savedMails.length,
-        fetched: newEmails.length,
-        sync_mode: syncMode,
-        existing_in_db: existingMailItems.length,
-        automation_started: savedMails.length > 0
-      }), 
-      { status: 200, headers }
-    );
+    return new Response(JSON.stringify({ 
+      success: true, 
+      synced: savedMails.length 
+    }), { status: 200, headers });
 
   } catch (err) {
     console.error("[Sync] ❌ ERROR:", err);
-    return new Response(
-      JSON.stringify({ 
-        error: err.message || String(err),
-        stack: err.stack 
-      }), 
-      { status: 500, headers }
-    );
+    return new Response(JSON.stringify({ error: err.message }), { status: 500, headers });
   }
 });
