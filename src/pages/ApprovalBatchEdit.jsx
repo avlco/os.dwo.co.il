@@ -74,12 +74,13 @@ export default function ApprovalBatchEdit() {
   const { data: batchData, isLoading, error } = useQuery({
     queryKey: ['approval-batch', batchId],
     queryFn: async () => {
-      const response = await base44.functions.invoke('handleApprovalBatch', {
-        method: 'get',
-        batch_id: batchId
-      });
-      if (!response.success) throw new Error(response.message);
-      return response.batch;
+      const raw = await base44.functions.invoke('handleApprovalBatch', {
+    method: 'get',
+    batch_id: batchId
+});
+const response = raw.data || raw;
+if (!response.success) throw new Error(response.message);
+return response.batch;
     },
     enabled: !!batchId
   });
@@ -95,13 +96,14 @@ export default function ApprovalBatchEdit() {
   // Save mutation
   const saveMutation = useMutation({
     mutationFn: async () => {
-      const response = await base44.functions.invoke('handleApprovalBatch', {
-        method: 'update_actions',
-        batch_id: batchId,
-        actions_current: actions
-      });
-      if (!response.success) throw new Error(response.message || JSON.stringify(response.errors));
-      return response;
+      const raw = await base44.functions.invoke('handleApprovalBatch', {
+    method: 'update_actions',
+    batch_id: batchId,
+    actions_current: actions
+});
+const response = raw.data || raw;
+if (!response.success) throw new Error(response.message || JSON.stringify(response.errors));
+return response;
     },
     onSuccess: () => {
       queryClient.invalidateQueries(['approval-batch', batchId]);
@@ -122,14 +124,14 @@ export default function ApprovalBatchEdit() {
     mutationFn: async () => {
       // Save first if there are changes
       if (hasChanges) {
-        await base44.functions.invoke('handleApprovalBatch', {
+        const saveRaw = await base44.functions.invoke('handleApprovalBatch', {
           method: 'update_actions',
           batch_id: batchId,
           actions_current: actions
         });
       }
       
-      const response = await base44.functions.invoke('handleApprovalBatch', {
+      const approveRaw = await base44.functions.invoke('handleApprovalBatch', {
         method: 'approve',
         batch_id: batchId
       });
@@ -165,13 +167,14 @@ export default function ApprovalBatchEdit() {
   // Cancel mutation
   const cancelMutation = useMutation({
     mutationFn: async () => {
-      const response = await base44.functions.invoke('handleApprovalBatch', {
-        method: 'cancel',
-        batch_id: batchId,
-        reason: 'בוטל על ידי המשתמש'
-      });
-      if (!response.success) throw new Error(response.message);
-      return response;
+      const raw = await base44.functions.invoke('handleApprovalBatch', {
+    method: 'cancel',
+    batch_id: batchId,
+    reason: 'בוטל על ידי המשתמש'
+});
+const response = raw.data || raw;
+if (!response.success) throw new Error(response.message);
+return response;
     },
     onSuccess: () => {
       queryClient.invalidateQueries(['approval-batch', batchId]);
