@@ -136,42 +136,74 @@ Deno.serve(async (req) => {
     // AUTHORIZATION LOGIC (UPDATED WITH SCHEMA FIELDS)
     // =========================================================
     
-    // 1. Direct Role Access
-    const currentUserEmail = (user.email || '').toLowerCase();
-    const isApprover = (batch.approver_email || '').toLowerCase() === currentUserEmail;
+    // =========================================================
+    // 🔍 DIAGNOSTIC AUTH BLOCK (עם הדפסות לוג)
+    // =========================================================
     
-    // הרחבת הרשאות: גם שותפים נחשבים למנהלים
+    const currentUserEmail = (user.email || '').trim().toLowerCase();
+    const batchApprover = (batch.approver_email || '').trim().toLowerCase();
+    
+    // בדיקות ישירות
+    const isApprover = batchApprover === currentUserEmail;
     const isAdminOrPartner = ['admin', 'partner', 'super_admin'].includes(user.role);
     const isOwner = batch.user_id === user.id;
 
-    // 2. Case Context Access (Lawyer/Attorney Check)
     let isCaseLawyer = false;
-    
-    // בודקים הרשאת תיק רק אם אין הרשאה ישירה אחרת
-    if (batch.case_id && !isApprover && !isAdminOrPartner && !isOwner) {
+    let debugCaseInfo = "No Case";
+
+    if (batch.case_id) {
       try {
-        // שליפת התיק עם הרשאת מערכת (ServiceRole) לבדיקת שדות הבעלות
         const c = await base44.asServiceRole.entities.Case.get(batch.case_id);
-        
         if (c) {
-          // בדיקה 1: לפי מזהה עורך דין (המרה למחרוזת למניעת תקלות סוגים)
-          const isIdMatch = c.assigned_lawyer_id && String(c.assigned_lawyer_id) === String(user.id);
-          
-          // בדיקה 2: לפי אימייל עורך דין אחראי (השדה החדש מהסכמה)
-          const isEmailMatch = c.assigned_attorney_email && c.assigned_attorney_email.toLowerCase() === currentUserEmail;
-          
-          // בדיקה 3: האם המשתמש הוא היוצר המקורי של התיק
-          const isCreatorMatch = c.user_id === user.id;
+          // נרמול נתונים להשוואה
+          const lawyerId = c.assigned_lawyer_id ? String(c.assigned_lawyer_id) : '';
+          const userId = String(user.id);
+          const lawyerEmail = (c.assigned_attorney_email || '').trim().toLowerCase();
+          const caseOwnerId = c.user_id ? String(c.user_id) : '';
+
+          // בדיקות
+          const isIdMatch = lawyerId === userId;
+          const isEmailMatch = lawyerEmail === currentUserEmail;
+          const isCreatorMatch = caseOwnerId === userId;
 
           if (isIdMatch || isEmailMatch || isCreatorMatch) {
             isCaseLawyer = true;
           }
+
+          // שמירת מידע ללוג
+          debugCaseInfo = JSON.stringify({
+            case_id: c.id,
+            assigned_lawyer_id_DB: lawyerId,
+            assigned_attorney_email_DB: lawyerEmail,
+            case_user_id_DB: caseOwnerId
+          });
         }
       } catch (e) {
-        console.warn('[Auth] Failed to check case permissions:', e);
+        debugCaseInfo = "Error fetching case: " + e.message;
       }
     }
 
+    // =========================================================
+    // 🛑 TRAP: הדפסת האמת ללוג אם החסימה עומדת לקרות
+    // =========================================================
+    if (!isApprover && !isAdminOrPartner && !isOwner && !isCaseLawyer) {
+      console.log('🚨 ACCESS DENIED DIAGNOSIS 🚨');
+      console.log('--------------------------------------------------');
+      console.log(`User Email (You):    [${currentUserEmail}]`);
+      console.log(`User ID (You):       [${user.id}]`);
+      console.log(`User Role (You):     [${user.role}]`);
+      console.log('--------------------------------------------------');
+      console.log(`Batch Approver:      [${batchApprover}]`);
+      console.log(`Batch Owner ID:      [${batch.user_id}]`);
+      console.log('--------------------------------------------------');
+      console.log(`Case Context Info:   ${debugCaseInfo}`);
+      console.log('--------------------------------------------------');
+      
+      return Response.json(
+        { success: false, code: 'FORBIDDEN', message: 'Not authorized' },
+        { status: 403, headers: corsHeaders }
+      );
+    }
     // חסימה סופית אם אף אחד מהתנאים לא התקיים
     if (!isApprover && !isAdminOrPartner && !isOwner && !isCaseLawyer) {
       return Response.json(
