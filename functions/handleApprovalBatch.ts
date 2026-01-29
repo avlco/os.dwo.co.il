@@ -132,26 +132,48 @@ Deno.serve(async (req) => {
       );
     }
 
-    // Authorization: only approver, owner or admin
-    // NORMALIZED EMAIL CHECK (LOWERCASE)
-    const isApprover = (batch.approver_email || '').toLowerCase() === (user.email || '').toLowerCase();
-    const isAdmin = user.role === 'admin';
-    const isOwner = batch.user_id === user.id; // CHECK OWNERSHIP
+    // =========================================================
+    // AUTHORIZATION LOGIC (UPDATED WITH SCHEMA FIELDS)
+    // =========================================================
+    
+    // 1. Direct Role Access
+    const currentUserEmail = (user.email || '').toLowerCase();
+    const isApprover = (batch.approver_email || '').toLowerCase() === currentUserEmail;
+    
+    // הרחבת הרשאות: גם שותפים נחשבים למנהלים
+    const isAdminOrPartner = ['admin', 'partner', 'super_admin'].includes(user.role);
+    const isOwner = batch.user_id === user.id;
+
+    // 2. Case Context Access (Lawyer/Attorney Check)
     let isCaseLawyer = false;
-    if (batch.case_id && !isApprover && !isAdmin && !isOwner) {
+    
+    // בודקים הרשאת תיק רק אם אין הרשאה ישירה אחרת
+    if (batch.case_id && !isApprover && !isAdminOrPartner && !isOwner) {
       try {
-        // שולפים את התיק עם הרשאות מערכת כדי לבדוק מי העו"ד המטפל
-        const connectedCase = await base44.asServiceRole.entities.Case.get(batch.case_id);
-        // נניח ששדה העו"ד בתיק נקרא 'assigned_lawyer_id' או 'user_id'
-        // התאם את שם השדה למבנה הנתונים שלך ב-Case
-        if (connectedCase && (connectedCase.assigned_lawyer_id === user.id || connectedCase.user_id === user.id)) {
-          isCaseLawyer = true;
+        // שליפת התיק עם הרשאת מערכת (ServiceRole) לבדיקת שדות הבעלות
+        const c = await base44.asServiceRole.entities.Case.get(batch.case_id);
+        
+        if (c) {
+          // בדיקה 1: לפי מזהה עורך דין (המרה למחרוזת למניעת תקלות סוגים)
+          const isIdMatch = c.assigned_lawyer_id && String(c.assigned_lawyer_id) === String(user.id);
+          
+          // בדיקה 2: לפי אימייל עורך דין אחראי (השדה החדש מהסכמה)
+          const isEmailMatch = c.assigned_attorney_email && c.assigned_attorney_email.toLowerCase() === currentUserEmail;
+          
+          // בדיקה 3: האם המשתמש הוא היוצר המקורי של התיק
+          const isCreatorMatch = c.user_id === user.id;
+
+          if (isIdMatch || isEmailMatch || isCreatorMatch) {
+            isCaseLawyer = true;
+          }
         }
       } catch (e) {
-        console.log('Error checking case permissions:', e);
+        console.warn('[Auth] Failed to check case permissions:', e);
       }
     }
-    if (!isApprover && !isAdmin && !isOwner && !isCaseLawyer) {
+
+    // חסימה סופית אם אף אחד מהתנאים לא התקיים
+    if (!isApprover && !isAdminOrPartner && !isOwner && !isCaseLawyer) {
       return Response.json(
         { success: false, code: 'FORBIDDEN', message: 'Not authorized to access this batch' },
         { status: 403, headers: corsHeaders }
