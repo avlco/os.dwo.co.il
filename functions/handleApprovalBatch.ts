@@ -137,8 +137,21 @@ Deno.serve(async (req) => {
     const isApprover = (batch.approver_email || '').toLowerCase() === (user.email || '').toLowerCase();
     const isAdmin = user.role === 'admin';
     const isOwner = batch.user_id === user.id; // CHECK OWNERSHIP
-    
-    if (!isApprover && !isAdmin && !isOwner) {
+    let isCaseLawyer = false;
+    if (batch.case_id && !isApprover && !isAdmin && !isOwner) {
+      try {
+        // שולפים את התיק עם הרשאות מערכת כדי לבדוק מי העו"ד המטפל
+        const connectedCase = await base44.asServiceRole.entities.Case.get(batch.case_id);
+        // נניח ששדה העו"ד בתיק נקרא 'assigned_lawyer_id' או 'user_id'
+        // התאם את שם השדה למבנה הנתונים שלך ב-Case
+        if (connectedCase && (connectedCase.assigned_lawyer_id === user.id || connectedCase.user_id === user.id)) {
+          isCaseLawyer = true;
+        }
+      } catch (e) {
+        console.log('Error checking case permissions:', e);
+      }
+    }
+    if (!isApprover && !isAdmin && !isOwner && !isCaseLawyer) {
       return Response.json(
         { success: false, code: 'FORBIDDEN', message: 'Not authorized to access this batch' },
         { status: 403, headers: corsHeaders }
