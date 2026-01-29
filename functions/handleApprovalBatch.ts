@@ -145,7 +145,7 @@ Deno.serve(async (req) => {
     
     // בדיקות ישירות
     const isApprover = batchApprover === currentUserEmail;
-    const isAdminOrPartner = ['admin', 'partner', 'super_admin'].includes(user.role);
+    const isAdminOrPartner = ['admin'].includes(user.role);
     const isOwner = batch.user_id === user.id;
 
     let isCaseLawyer = false;
