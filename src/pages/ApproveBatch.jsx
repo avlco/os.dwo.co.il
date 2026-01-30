@@ -46,7 +46,8 @@ export default function ApproveBatch() {
       setStatus('loading');
       setMessage('מעבד אישור...');
 
-      const response = await base44.functions.invoke('approveAutomationBatchPublic', { token });
+      const raw = await base44.functions.invoke('approveAutomationBatchPublic', { token });
+      const response = raw.data || raw;
 
       if (response.success) {
         setStatus('success');
