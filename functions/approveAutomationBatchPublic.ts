@@ -116,6 +116,29 @@ function getHtmlPage(title, message, isError = false) {
 // 3. EXECUTION ENGINE (Embedded)
 // ========================================
 
+function generateBrandedEmailBody(contentHtml, title, language = 'he') {
+  const dir = language === 'he' ? 'rtl' : 'ltr';
+  const logoUrl = 'https://dwo.co.il/wp-content/uploads/2020/04/Drori-Stav-logo-2.png';
+  return `<!DOCTYPE html>
+<html dir="${dir}" lang="${language}">
+<head><meta charset="UTF-8"><title>${title}</title></head>
+<body style="margin:0;padding:0;background-color:#f3f4f6;font-family:'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
+  <div style="padding:20px;background-color:#f3f4f6;">
+    <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%" style="max-width:600px;margin:0 auto;background-color:#ffffff;border-radius:8px;overflow:hidden;box-shadow:0 4px 6px rgba(0,0,0,0.05);">
+      <tr><td style="background-color:#ffffff;padding:20px;text-align:center;border-bottom:3px solid #b62f12;">
+        <img src="${logoUrl}" alt="DWO" style="height:50px;width:auto;max-width:200px;" />
+      </td></tr>
+      <tr><td style="padding:30px 25px;color:#000000;line-height:1.6;font-size:16px;" dir="${dir}">
+        ${contentHtml}
+      </td></tr>
+      <tr><td style="background-color:#f8fafc;padding:20px;text-align:center;font-size:12px;color:#545454;border-top:1px solid #e2e8f0;">
+        <p style="margin:0;">DWO - משרד עורכי דין | www.dwo.co.il</p>
+      </td></tr>
+    </table>
+  </div>
+</body></html>`;
+}
+
 async function executeBatchActions(base44, batch, context) {
   const actions = batch.actions_current || [];
   const results = [];
@@ -124,7 +147,7 @@ async function executeBatchActions(base44, batch, context) {
 
   console.log(`[Executor] Starting execution of ${actions.length} actions for Batch ${batch.id}`);
 
-  for (const action of actions) {
+    for (const action of actions.filter(a => a.enabled !== false)) {
     try {
       const type = action.action_type || action.action;
       const config = action.config || {};
@@ -132,11 +155,15 @@ async function executeBatchActions(base44, batch, context) {
 
       // --- Execute based on type ---
       switch (type) {
-        case 'send_email':
+                case 'send_email':
+          const brandedBody = generateBrandedEmailBody(
+            `<div style="direction:rtl;text-align:right;">${config.body}</div>`,
+            config.subject
+          );
           result = await base44.functions.invoke('sendEmail', {
             to: config.to,
             subject: config.subject,
-            body: config.body
+            body: brandedBody
           });
           if (result.error) throw new Error(result.error);
           break;
