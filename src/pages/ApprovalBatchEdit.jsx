@@ -86,9 +86,13 @@ return response.batch;
   });
 
   // Initialize actions when batch loads
-  useEffect(() => {
+    useEffect(() => {
     if (batchData?.actions_current) {
-      setActions(JSON.parse(JSON.stringify(batchData.actions_current)));
+      const normalized = JSON.parse(JSON.stringify(batchData.actions_current)).map(a => ({
+        ...a,
+        enabled: a.enabled !== null && a.enabled !== undefined ? a.enabled : true
+      }));
+      setActions(normalized);
       setHasChanges(false);
     }
   }, [batchData]);
@@ -135,6 +139,7 @@ return response;
         method: 'approve',
         batch_id: batchId
       });
+      const response = approveRaw.data || approveRaw;
       return response;
     },
     onSuccess: (response) => {
