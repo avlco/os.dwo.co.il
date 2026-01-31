@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { base44 } from '@/api/base44Client';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../lib/AuthContext';
 import { createPageUrl } from '../utils';
 import { format } from 'date-fns';
 import PageHeader from '../components/ui/PageHeader';
@@ -48,6 +49,7 @@ export default function ApprovalQueue() {
   const { t, i18n } = useTranslation();
   const isRTL = i18n.language === 'he';
   const navigate = useNavigate();
+  const { user: currentUser } = useAuth();
   const queryClient = useQueryClient();
   const [filterStatus, setFilterStatus] = useState('pending');
   const [selectedApproval, setSelectedApproval] = useState(null);
@@ -533,7 +535,11 @@ export default function ApprovalQueue() {
                         </div>
                         
                         <div className="flex gap-2">
-                          {['pending', 'editing'].includes(batch.status) && (
+                                                    {['pending', 'editing'].includes(batch.status) &&
+                            (currentUser?.role === 'admin' ||
+                             (currentUser?.email && batch.approver_email && currentUser.email.toLowerCase() === batch.approver_email.toLowerCase()) ||
+                             (currentUser?.id && batch.user_id && String(currentUser.id) === String(batch.user_id))
+                            ) && (
                             <>
                               <Button
                                 size="sm"
@@ -546,7 +552,7 @@ export default function ApprovalQueue() {
                               </Button>
                             </>
                           )}
-                          {['executed', 'failed'].includes(batch.status) && (
+                          {['executed', 'failed', 'cancelled'].includes(batch.status) && (
                             <Button
                               size="sm"
                               variant="ghost"
