@@ -40,71 +40,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/components/ui/use-toast";
 
-// --- רכיב פנימי למסמכי לקוח ---
-function ClientDocuments({ clientId }) {
-  const { data: tasks = [], isLoading } = useQuery({
-    queryKey: ['client-tasks-docs', clientId],
-    queryFn: () => base44.entities.Task.filter({ client_id: clientId }),
-    enabled: !!clientId,
-  });
-
-  const dropboxDocuments = [];
-  tasks.forEach(task => {
-    const executionLog = task.extracted_data?.execution_log || [];
-    executionLog.forEach(entry => {
-      // תנאי מורחב: תופס גם העלאות מוצלחות וגם תוצאות עם URL
-      if (entry.status === 'success' && (entry.action_type === 'upload_to_dropbox' || entry.result_url)) {
-        dropboxDocuments.push({
-          id: `${task.id}_${entry.executed_at}`,
-          task_title: task.title,
-          url: entry.result_url,
-          uploaded_at: entry.executed_at,
-          filename: entry.details?.filename || 'מסמך ללא שם',
-          destination: entry.details?.destination || ''
-        });
-      }
-    });
-  });
-
-  dropboxDocuments.sort((a, b) => new Date(b.uploaded_at) - new Date(a.uploaded_at));
-
-  if (isLoading) return <Loader2 className="w-6 h-6 animate-spin mx-auto my-8 text-slate-400" />;
-
-  if (dropboxDocuments.length === 0) {
-    return (
-      <div className="text-center py-8 text-slate-500">
-        <Cloud className="w-12 h-12 mx-auto mb-3 opacity-20" />
-        <p>לא נמצאו מסמכים שנסרקו ל-Dropbox עבור לקוח זה.</p>
-      </div>
-    );
-  }
-
-  return (
-    <div className="space-y-3">
-      {dropboxDocuments.map((doc) => (
-        <div key={doc.id} className="flex items-center gap-4 p-4 bg-white dark:bg-slate-800 border dark:border-slate-700 rounded-xl hover:shadow-sm transition-all">
-          <div className="w-10 h-10 rounded-lg bg-blue-50 dark:bg-blue-900/30 flex items-center justify-center flex-shrink-0">
-            <FileText className="w-5 h-5 text-blue-600 dark:text-blue-400" />
-          </div>
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2">
-               <p className="font-medium text-slate-800 dark:text-slate-200 truncate">{doc.filename}</p>
-               <Badge variant="outline" className="text-[10px] h-5">{format(new Date(doc.uploaded_at), 'dd/MM/yyyy')}</Badge>
-            </div>
-            <p className="text-xs text-slate-500 dark:text-slate-400 truncate dir-ltr text-left">
-              {doc.destination}
-            </p>
-          </div>
-          <a href={doc.url} target="_blank" rel="noopener noreferrer">
-            <Button variant="ghost" size="icon">
-              <ExternalLink className="w-4 h-4 text-slate-400" />
-            </Button>
-          </a>
-        </div>
-      ))}
-    </div>
-  );
-}
+import DocumentViewer from '../components/documents/DocumentViewer';
 
 // --- הדף הראשי ---
 export default function ClientView() {
@@ -425,7 +361,7 @@ export default function ClientView() {
 
               {/* Tab: Documents */}
               <TabsContent value="docs">
-                <ClientDocuments clientId={clientId} />
+                <DocumentViewer clientId={clientId} />
               </TabsContent>
             </div>
           </Tabs>

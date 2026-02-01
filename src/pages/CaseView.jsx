@@ -37,7 +37,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
-import CaseDocuments from '../components/case/CaseDocuments';
+import DocumentViewer from '../components/documents/DocumentViewer';
 import { useToast } from "@/components/ui/use-toast";
 import { useTranslation } from 'react-i18next'; // הוספת תרגום
 import { Badge } from "@/components/ui/badge"; // הוספת Badge
@@ -473,7 +473,7 @@ export default function CaseView() {
         </TabsContent>
 
         <TabsContent value="documents">
-          <CaseDocuments caseId={caseId} />
+          <DocumentViewer caseId={caseId} />
         </TabsContent>
 
         <TabsContent value="financials">
