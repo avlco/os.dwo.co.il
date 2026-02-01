@@ -136,15 +136,35 @@ async function executeBatchActions(base44, batch, context) {
       const config = action.config || {};
       let result = null;
 
-      switch (type) {
+            switch (type) {
         case 'send_email': {
+          const brandedBody = `<!DOCTYPE html>
+<html dir="rtl" lang="he">
+<head><meta charset="UTF-8"></head>
+<body style="margin:0;padding:0;background:#f4f4f4;font-family:Arial,sans-serif;">
+<table width="100%" cellpadding="0" cellspacing="0" style="background:#f4f4f4;padding:20px 0;">
+<tr><td align="center">
+<table width="600" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:8px;overflow:hidden;">
+<tr><td style="background:${EMAIL_BRAND.color};padding:20px;text-align:center;">
+<img src="${EMAIL_BRAND.logoUrl}" alt="DWO" height="40" style="height:40px;">
+</td></tr>
+<tr><td style="padding:30px;direction:rtl;text-align:right;">
+${config.body}
+</td></tr>
+<tr><td style="background:#f8f9fa;padding:15px;text-align:center;font-size:12px;color:#666;">
+${EMAIL_BRAND.footer}
+</td></tr>
+</table>
+</td></tr>
+</table>
+</body>
+</html>`;
           result = await base44.functions.invoke('sendEmail', {
             to: config.to,
             subject: config.subject,
-            body: config.body
+            body: brandedBody
           });
-          const resultData = result?.data || result;
-          if (resultData?.error) throw new Error(resultData.error);
+          if (result.error) throw new Error(result.error);
           break;
         }
 
@@ -291,7 +311,7 @@ Deno.serve(async (req) => {
       return respond({ success: false, code: 'NOT_FOUND', title: 'לא נמצא', message: 'בקשת האישור לא נמצאה.' }, 404);
     }
 
-    if (batch.status !== 'pending' && batch.status !== 'failed') {
+    if (!['pending', 'editing', 'failed'].includes(batch.status)) {
       if (batch.status === 'approved' || batch.status === 'executed') {
         return respond({ success: true, code: 'ALREADY_PROCESSED', status: batch.status, batch_id: batch.id, title: 'הפעולה כבר בוצעה', message: 'הבקשה אושרה ובוצעה כבר בעבר.' });
       }
