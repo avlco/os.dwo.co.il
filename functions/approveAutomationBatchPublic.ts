@@ -78,11 +78,67 @@ const BRAND = {
 };
 
 const EMAIL_BRAND = {
-  logoUrl: 'https://dwo.co.il/wp-content/uploads/2020/04/Drori-Stav-logo-2.png',
-  footer: '© DWO – דרורי, שטב ושות׳ | משרד עורכי דין',
-  color: '#1a3c5e'
+  colors: {
+    primary: '#b62f12',
+    secondary: '#545454',
+    bg: '#f3f4f6',
+    card: '#ffffff',
+    text: '#000000',
+    textLight: '#545454',
+    link: '#b62f12'
+  },
+  logoUrl: 'https://dwo.co.il/wp-content/uploads/2020/04/Drori-Stav-logo-2.png'
 };
 
+function generateEmailLayout(contentHtml, title) {
+  const t = {
+    footer_contact: 'DWO - משרד עורכי דין | www.dwo.co.il',
+    footer_disclaimer: 'הודעה זו מכילה מידע סודי ומוגן. אם קיבלת הודעה זו בטעות, אנא מחק אותה ודווח לשולח.'
+  };
+
+  const s = {
+    body: `margin: 0; padding: 0; background-color: ${EMAIL_BRAND.colors.bg}; font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;`,
+    wrapper: `padding: 20px; background-color: ${EMAIL_BRAND.colors.bg};`,
+    container: `max-width: 600px; margin: 0 auto; background-color: ${EMAIL_BRAND.colors.card}; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 6px rgba(0,0,0,0.05);`,
+    header: `background-color: ${EMAIL_BRAND.colors.card}; padding: 20px; text-align: center; border-bottom: 3px solid ${EMAIL_BRAND.colors.primary};`,
+    logo: `height: 50px; width: auto; max-width: 200px; object-fit: contain; display: block; margin: 0 auto;`,
+    content: `padding: 30px 25px; color: ${EMAIL_BRAND.colors.text}; line-height: 1.6; text-align: right; direction: rtl; font-size: 16px;`,
+    footer: `background-color: #f8fafc; padding: 20px; text-align: center; font-size: 12px; color: ${EMAIL_BRAND.colors.textLight}; border-top: 1px solid #e2e8f0; direction: rtl;`,
+    link: `color: ${EMAIL_BRAND.colors.link}; text-decoration: none; font-weight: bold;`
+  };
+
+  return `
+<!DOCTYPE html>
+<html dir="rtl" lang="he">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>${title}</title>
+</head>
+<body style="${s.body}">
+  <div style="${s.wrapper}">
+    <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%" style="${s.container}">
+      <tr>
+        <td style="${s.header}">
+           <img src="${EMAIL_BRAND.logoUrl}" alt="DWO Logo" style="${s.logo}" width="200" height="50" />
+        </td>
+      </tr>
+      <tr>
+        <td style="${s.content}">
+          ${contentHtml}
+        </td>
+      </tr>
+      <tr>
+        <td style="${s.footer}">
+          <p style="margin: 0 0 10px 0;">${t.footer_contact}</p>
+          <p style="margin: 0; opacity: 0.7;">${t.footer_disclaimer}</p>
+        </td>
+      </tr>
+    </table>
+  </div>
+</body>
+</html>`.trim();
+}
 function getHtmlPage(title, message, isError = false) {
   const color = isError ? BRAND.colors.error : BRAND.colors.success;
   const icon = isError ? '✕' : '✓';
@@ -137,28 +193,9 @@ async function executeBatchActions(base44, batch, context) {
       let result = null;
 
             switch (type) {
-        case 'send_email': {
-          const brandedBody = `<!DOCTYPE html>
-<html dir="rtl" lang="he">
-<head><meta charset="UTF-8"></head>
-<body style="margin:0;padding:0;background:#f4f4f4;font-family:Arial,sans-serif;">
-<table width="100%" cellpadding="0" cellspacing="0" style="background:#f4f4f4;padding:20px 0;">
-<tr><td align="center">
-<table width="600" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:8px;overflow:hidden;">
-<tr><td style="background:${EMAIL_BRAND.color};padding:20px;text-align:center;">
-<img src="${EMAIL_BRAND.logoUrl}" alt="DWO" height="40" style="height:40px;">
-</td></tr>
-<tr><td style="padding:30px;direction:rtl;text-align:right;">
-${config.body}
-</td></tr>
-<tr><td style="background:#f8f9fa;padding:15px;text-align:center;font-size:12px;color:#666;">
-${EMAIL_BRAND.footer}
-</td></tr>
-</table>
-</td></tr>
-</table>
-</body>
-</html>`;
+                case 'send_email': {
+          const formattedBody = `<div style="white-space: pre-wrap; font-family: 'Segoe UI', Arial, sans-serif; color: ${EMAIL_BRAND.colors.text};">${config.body}</div>`;
+          const brandedBody = generateEmailLayout(formattedBody, config.subject);
           result = await base44.functions.invoke('sendEmail', {
             to: config.to,
             subject: config.subject,
