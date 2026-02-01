@@ -14,7 +14,8 @@ import { Badge } from "@/components/ui/badge";
 import { base44 } from '@/api/base44Client';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from "sonner";
-import { Plus, Edit, Trash2, X, Braces, ShieldCheck, Copy, Wand2 } from 'lucide-react';
+import { Plus, Edit, Trash2, X, Braces, ShieldCheck, Copy, Wand2, Upload, Download } from 'lucide-react';
+import ImportExportDialog from '../import-export/ImportExportDialog';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -188,6 +189,8 @@ export default function AutomationRulesManager() {
   
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isWizardOpen, setIsWizardOpen] = useState(false);
+  const [isImportExportOpen, setIsImportExportOpen] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
   
   const [currentRule, setCurrentRule] = useState(defaultRule);
   const [activeTab, setActiveTab] = useState("catch");
@@ -280,6 +283,47 @@ export default function AutomationRulesManager() {
     updateMutation.mutate({ id, data: { is_active: checked } });
   };
 
+  const handleExport = async () => {
+    setIsExporting(true);
+    try {
+      const response = await base44.functions.invoke('exportData', { entityType: 'automations' });
+      const { content, filename, mimeType } = response.data;
+      
+      const blob = new Blob([content], { type: `${mimeType};charset=utf-8` });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      
+      toast.success(`${rules.length} חוקי אוטומציה יוצאו בהצלחה`);
+    } catch (error) {
+      toast.error(`שגיאה בייצוא: ${error.message}`);
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
+  const handleImport = async (items) => {
+    try {
+      const response = await base44.functions.invoke('importData', { entityType: 'automations', items });
+      const { created, updated, failed, errors } = response.data;
+      
+      queryClient.invalidateQueries(['automationRules']);
+      
+      let description = `נוצרו ${created}, עודכנו ${updated}`;
+      if (failed > 0) description += `, נכשלו ${failed}`;
+      
+      toast.success(`הייבוא הושלם: ${description}`);
+    } catch (error) {
+      toast.error(`שגיאה בייבוא: ${error.message}`);
+      throw error;
+    }
+  };
+
   const addMapRow = () => {
     setCurrentRule(prev => ({
       ...prev,
@@ -328,6 +372,10 @@ export default function AutomationRulesManager() {
         <CardHeader className="flex flex-row items-center justify-between pb-3">
           <CardTitle className="text-xl dark:text-slate-100">{t('settings.automation_rules')}</CardTitle>
           <div className="flex gap-2">
+            <Button variant="outline" onClick={() => setIsImportExportOpen(true)} className="gap-2">
+              <Upload className="w-4 h-4" />
+              ייבוא/ייצוא
+            </Button>
             <Button onClick={() => setIsWizardOpen(true)} className="gap-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700">
               <Wand2 className="w-4 h-4" />
               {t('settings.new_rule')} (אשף)
@@ -745,6 +793,16 @@ export default function AutomationRulesManager() {
           </div>
         </div>
       )}
+
+      <ImportExportDialog
+        open={isImportExportOpen}
+        onOpenChange={setIsImportExportOpen}
+        entityType="automations"
+        existingData={rules}
+        onExport={handleExport}
+        onImport={handleImport}
+        isLoading={isExporting}
+      />
     </>
   );
 }
