@@ -7,13 +7,15 @@ import PageHeader from '../components/ui/PageHeader';
 import UserManagement from '../components/settings/UserManagement';
 import AutomationRulesManager from '../components/settings/AutomationRulesManager';
 import IntegrationsTab from '../components/settings/IntegrationsTab';
+import DocumentTaxonomyManager from '../components/settings/DocumentTaxonomyManager';
 import {
   User,
   Bell,
   Shield,
   Users,
   Settings as SettingsIcon,
-  Link2
+  Link2,
+  FolderTree
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
