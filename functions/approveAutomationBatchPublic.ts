@@ -292,7 +292,24 @@ Deno.serve(async (req) => {
       }
     }
 
-    // 5. Update Status -> Approved
+        // 5. Handle Reject Action
+    if (payload.action === 'reject') {
+      await base44.asServiceRole.entities.ApprovalBatch.update(batch.id, {
+        status: 'cancelled',
+        cancelled_at: new Date().toISOString(),
+        cancel_reason: 'Rejected via email link',
+        approved_by_email: payload.approver_email
+      });
+      return respond({
+        success: true,
+        batch_id: batch.id,
+        status: 'cancelled',
+        title: 'הבקשה בוטלה',
+        message: 'בקשת האישור בוטלה בהצלחה.'
+      });
+    }
+
+    // 6. Update Status -> Approved
     await base44.asServiceRole.entities.ApprovalBatch.update(batch.id, {
       status: 'approved',
       approved_at: new Date().toISOString(),
@@ -300,7 +317,7 @@ Deno.serve(async (req) => {
       approved_by_email: payload.approver_email
     });
 
-    // 6. Execute Actions
+    // 7. Execute Actions
     await base44.asServiceRole.entities.ApprovalBatch.update(batch.id, { status: 'executing' });
     
     const freshBatch = await base44.asServiceRole.entities.ApprovalBatch.get(batch.id);
@@ -308,13 +325,13 @@ Deno.serve(async (req) => {
     
     const finalStatus = executionSummary.failed > 0 ? 'executed_with_errors' : 'executed';
     
-    // 7. Final Update
+    // 8. Final Update
     await base44.asServiceRole.entities.ApprovalBatch.update(batch.id, {
       status: finalStatus,
       execution_summary: executionSummary
     });
 
-    // 8. Return Result
+    // 9. Return Result
     if (executionSummary.failed > 0) {
       return respond({
         success: true,
@@ -350,3 +367,4 @@ Deno.serve(async (req) => {
     );
   }
 });
+
