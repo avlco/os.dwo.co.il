@@ -114,11 +114,17 @@ export default function MailRoom() {
         return groupMailsToThreads;
 
       case 'automation':
-        // מיילים לאוטומציה - רק מיילים שזוהו ע"י חוקי אוטומציה (לא כולל משימות ידניות)
-        return groupMailsToThreads.filter(thread => 
-          thread.latestMail.matched_rule_id ||
-          ['matched_for_automation', 'awaiting_approval', 'automation_complete', 'automation_failed'].includes(thread.latestMail.processing_status)
+        // מיילים לאוטומציה - כל מייל בודד שזוהה לאוטומציה (לא קיבוץ לשרשורים)
+        const automationMails = allMails.filter(mail => 
+          mail.matched_rule_id ||
+          ['matched_for_automation', 'awaiting_approval', 'automation_complete', 'automation_failed', 'automation_cancelled'].includes(mail.processing_status)
         );
+        // יצירת פורמט דמוי thread עבור כל מייל בודד
+        return automationMails.map(mail => ({
+          threadId: mail.id,
+          mails: [mail],
+          latestMail: mail
+        }));
 
       default:
         return groupMailsToThreads;
@@ -134,10 +140,10 @@ export default function MailRoom() {
   const stats = useMemo(() => {
     // דואר נכנס = כל המיילים
     const inboxCount = groupMailsToThreads.length;
-    // מיילים לאוטומציה = רק מיילים שזוהו ע"י חוקי אוטומציה (לא כולל משימות ידניות)
-    const automationCount = groupMailsToThreads.filter(t => 
-      t.latestMail.matched_rule_id ||
-      ['matched_for_automation', 'awaiting_approval', 'automation_complete', 'automation_failed'].includes(t.latestMail.processing_status)
+    // מיילים לאוטומציה = כל מייל בודד שזוהה לאוטומציה (לא קיבוץ לשרשורים)
+    const automationCount = allMails.filter(mail => 
+      mail.matched_rule_id ||
+      ['matched_for_automation', 'awaiting_approval', 'automation_complete', 'automation_failed', 'automation_cancelled'].includes(mail.processing_status)
     ).length;
     const successLogs = automationLogs.filter(l => l.status === 'completed').length;
     const failedLogs = automationLogs.filter(l => l.status === 'failed' || l.status === 'completed_with_errors').length;

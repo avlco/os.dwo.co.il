@@ -301,15 +301,31 @@ Deno.serve(async (req) => {
         approved_by_email: payload.approver_email
       });
       
-      // עדכון סטטוס המייל לחזרה ל-pending
+      // עדכון סטטוס המייל ל-automation_cancelled
       if (batch.mail_id) {
         try {
           await base44.asServiceRole.entities.Mail.update(batch.mail_id, {
-            processing_status: 'pending'
+            processing_status: 'automation_cancelled'
           });
         } catch (e) {
-          console.warn('[Approval] Failed to reset mail status:', e.message);
+          console.warn('[Approval] Failed to update mail status to cancelled:', e.message);
         }
+      }
+
+      // עדכון ה-Activity log לסטטוס cancelled
+      try {
+        const activities = await base44.asServiceRole.entities.Activity.filter({
+          'metadata.mail_id': batch.mail_id,
+          activity_type: 'automation_log',
+          status: 'pending'
+        });
+        for (const activity of activities) {
+          await base44.asServiceRole.entities.Activity.update(activity.id, {
+            status: 'cancelled'
+          });
+        }
+      } catch (e) {
+        console.warn('[Approval] Failed to update Activity log to cancelled:', e.message);
       }
       
       return respond({
@@ -352,9 +368,14 @@ Deno.serve(async (req) => {
     // 8.1 עדכון סטטוס המייל המקורי
     if (batch.mail_id) {
       try {
-        const mailStatus = executionSummary.failed > 0 ? 'automation_failed' : 'automation_complete';
+        let mailProcessingStatus = 'automation_complete';
+        if (finalStatus === 'failed') {
+          mailProcessingStatus = 'automation_failed';
+        } else if (finalStatus === 'cancelled') {
+          mailProcessingStatus = 'automation_cancelled';
+        }
         await base44.asServiceRole.entities.Mail.update(batch.mail_id, {
-          processing_status: mailStatus
+          processing_status: mailProcessingStatus
         });
       } catch (e) {
         console.warn('[Approval] Failed to update mail status:', e.message);

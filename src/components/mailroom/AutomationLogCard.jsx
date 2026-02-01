@@ -41,6 +41,8 @@ export default function AutomationLogCard({ log, relatedMail }) {
   const isSuccess = log.status === 'completed';
   const isPartialSuccess = log.status === 'completed_with_errors';
   const isFailed = log.status === 'failed';
+  const isCancelled = log.status === 'cancelled';
+  const isPending = log.status === 'pending';
   const metadata = log.metadata || {};
   const actionsSummary = metadata.actions_summary || [];
   
@@ -48,12 +50,16 @@ export default function AutomationLogCard({ log, relatedMail }) {
   const getBorderColor = () => {
     if (isSuccess) return 'border-r-green-500';
     if (isPartialSuccess) return 'border-r-amber-500';
+    if (isCancelled) return 'border-r-gray-400';
+    if (isPending) return 'border-r-blue-400';
     return 'border-r-red-500';
   };
 
   const getStatusBadge = () => {
     if (isSuccess) return { label: 'הצליח', color: 'bg-green-100 text-green-800' };
     if (isPartialSuccess) return { label: 'הצליח חלקית', color: 'bg-amber-100 text-amber-800' };
+    if (isCancelled) return { label: 'בוטל', color: 'bg-gray-100 text-gray-700' };
+    if (isPending) return { label: 'ממתין לאישור', color: 'bg-blue-100 text-blue-800' };
     return { label: 'נכשל', color: 'bg-red-100 text-red-800' };
   };
 
@@ -70,6 +76,10 @@ export default function AutomationLogCard({ log, relatedMail }) {
                 <CheckCircle2 className="w-5 h-5 text-green-600 flex-shrink-0" />
               ) : isPartialSuccess ? (
                 <Clock className="w-5 h-5 text-amber-600 flex-shrink-0" />
+              ) : isCancelled ? (
+                <XCircle className="w-5 h-5 text-gray-500 flex-shrink-0" />
+              ) : isPending ? (
+                <Clock className="w-5 h-5 text-blue-600 flex-shrink-0" />
               ) : (
                 <XCircle className="w-5 h-5 text-red-600 flex-shrink-0" />
               )}
@@ -101,20 +111,58 @@ export default function AutomationLogCard({ log, relatedMail }) {
                     const actionType = typeof action === 'string' 
                       ? action.split(':')[0].trim() 
                       : (action.action || action.action_type || 'unknown');
-                    const actionStatus = typeof action === 'string'
-                      ? action.includes('✅')
-                      : action.status === 'success';
+                    
+                    // קביעת סטטוס וצבע לפעולה בודדת
+                    let actionStatusText = '';
+                    let actionBadgeClass = '';
+                    
+                    if (typeof action === 'string') {
+                      if (action.includes('✅')) {
+                        actionStatusText = '✅';
+                        actionBadgeClass = 'bg-green-50 border-green-200';
+                      } else if (action.includes('⏸️') || action.includes('Batch')) {
+                        actionStatusText = '⏳';
+                        actionBadgeClass = 'bg-blue-50 border-blue-200';
+                      } else if (action.includes('⏭️')) {
+                        actionStatusText = '⏭️';
+                        actionBadgeClass = 'bg-gray-50 border-gray-200';
+                      } else {
+                        actionStatusText = '❌';
+                        actionBadgeClass = 'bg-red-50 border-red-200';
+                      }
+                    } else {
+                      switch (action.status) {
+                        case 'success':
+                          actionStatusText = '✅';
+                          actionBadgeClass = 'bg-green-50 border-green-200';
+                          break;
+                        case 'pending_batch':
+                          actionStatusText = '⏳';
+                          actionBadgeClass = 'bg-blue-50 border-blue-200';
+                          break;
+                        case 'skipped':
+                          actionStatusText = '⏭️';
+                          actionBadgeClass = 'bg-gray-50 border-gray-200';
+                          break;
+                        case 'failed':
+                        default:
+                          actionStatusText = '❌';
+                          actionBadgeClass = 'bg-red-50 border-red-200';
+                          break;
+                      }
+                    }
+                    
                     const Icon = actionIcons[actionType] || Zap;
                     
                     return (
                       <Badge 
                         key={idx} 
                         variant="outline" 
-                        className={`text-xs ${actionStatus ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'}`}
+                        className={`text-xs ${actionBadgeClass}`}
                       >
                         <Icon className="w-3 h-3 ml-1" />
                         {actionLabels[actionType] || actionType}
-                        {actionStatus ? ' ✅' : ' ❌'}
+                        {` ${actionStatusText}`}
                       </Badge>
                     );
                   })}

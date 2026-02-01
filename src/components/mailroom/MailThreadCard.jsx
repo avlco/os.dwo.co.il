@@ -23,6 +23,7 @@ const statusConfig = {
   awaiting_approval: { label: 'ממתין לאישור', color: 'bg-yellow-100 text-yellow-800', icon: Clock },
   automation_complete: { label: 'אוטומציה הושלמה', color: 'bg-green-100 text-green-800', icon: CheckCircle2 },
   automation_failed: { label: 'אוטומציה נכשלה', color: 'bg-red-100 text-red-800', icon: XCircle },
+  automation_cancelled: { label: 'אוטומציה בוטלה', color: 'bg-gray-100 text-gray-700', icon: XCircle },
   manual_task_created: { label: 'משימה נוצרה', color: 'bg-purple-100 text-purple-800', icon: FileText },
   processed: { label: 'עובד', color: 'bg-green-100 text-green-800', icon: CheckCircle2 },
   archived: { label: 'ארכיון', color: 'bg-gray-100 text-gray-800', icon: Mail }
