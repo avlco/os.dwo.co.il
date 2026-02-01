@@ -78,7 +78,7 @@ export default function MailThreadCard({ thread, automationLogs = [] }) {
                   {latestMail.subject || '(ללא נושא)'}
                 </h3>
                 <span className="text-xs text-slate-500 dark:text-slate-400 whitespace-nowrap">
-                  {format(new Date(latestMail.received_at), 'dd/MM HH:mm', { locale: he })}
+                  {latestMail.received_at ? format(new Date(latestMail.received_at), 'dd/MM HH:mm', { locale: he }) : '-'}
                 </span>
               </div>
               

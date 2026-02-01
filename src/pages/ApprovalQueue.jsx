@@ -6,6 +6,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../lib/AuthContext';
 import { createPageUrl } from '../utils';
 import { format } from 'date-fns';
+import { he } from 'date-fns/locale';
 import PageHeader from '../components/ui/PageHeader';
 import DataTable from '../components/ui/DataTable';
 import EmptyState from '../components/ui/EmptyState';
@@ -323,7 +324,7 @@ export default function ApprovalQueue() {
           : row.created_date;
         return (
           <span className="text-sm dark:text-slate-400">
-            {dateToShow ? format(new Date(dateToShow), 'dd/MM/yyyy HH:mm') : '-'}
+            {dateToShow ? format(new Date(dateToShow), 'dd/MM/yyyy HH:mm', { locale: he }) : '-'}
           </span>
         );
       },
@@ -531,8 +532,8 @@ export default function ApprovalQueue() {
                           </div>
                           
                           <p className="text-xs text-slate-500">
-                            נוצר: {format(new Date(batch.created_date), 'dd/MM/yyyy HH:mm')}
-                            {batch.approved_at && ` | אושר: ${format(new Date(batch.approved_at), 'dd/MM/yyyy HH:mm')}`}
+                            נוצר: {format(new Date(batch.created_date), 'dd/MM/yyyy HH:mm', { locale: he })}
+                            {batch.approved_at && ` | אושר: ${format(new Date(batch.approved_at), 'dd/MM/yyyy HH:mm', { locale: he })}`}
                           </p>
                         </div>
                         
@@ -662,9 +663,9 @@ export default function ApprovalQueue() {
                 <Label className="text-sm text-slate-600 dark:text-slate-400">תאריך</Label>
                 <p className="dark:text-slate-200">
                   {selectedApproval.activity_type === 'automation_log' && selectedApproval.metadata?.logged_at
-                    ? format(new Date(selectedApproval.metadata.logged_at), 'dd/MM/yyyy HH:mm')
+                    ? format(new Date(selectedApproval.metadata.logged_at), 'dd/MM/yyyy HH:mm', { locale: he })
                     : selectedApproval.created_date 
-                      ? format(new Date(selectedApproval.created_date), 'dd/MM/yyyy HH:mm')
+                      ? format(new Date(selectedApproval.created_date), 'dd/MM/yyyy HH:mm', { locale: he })
                       : '-'
                   }
                 </p>
@@ -715,7 +716,7 @@ export default function ApprovalQueue() {
                     <Label className="text-sm text-slate-600 dark:text-slate-400">תאריך</Label>
                     <p className="dark:text-slate-200">
                       {selectedApproval.metadata?.approved_at 
-                        ? format(new Date(selectedApproval.metadata.approved_at), 'dd/MM/yyyy HH:mm')
+                        ? format(new Date(selectedApproval.metadata.approved_at), 'dd/MM/yyyy HH:mm', { locale: he })
                         : '-'
                       }
                     </p>

@@ -130,10 +130,18 @@ export default function AutomationLogCard({ log, relatedMail }) {
             )}
           </div>
           
-          {/* תאריך וזמן */}
+          {/* תאריך וזמן - שימוש בתאריך logged_at אם קיים, אחרת created_date */}
           <div className="text-left text-sm text-slate-500 dark:text-slate-400 flex-shrink-0">
-            <p>{format(new Date(log.created_date), 'dd/MM/yyyy', { locale: he })}</p>
-            <p>{format(new Date(log.created_date), 'HH:mm:ss', { locale: he })}</p>
+            {(() => {
+              const dateToUse = metadata.logged_at || log.created_date;
+              const dateObj = new Date(dateToUse);
+              return (
+                <>
+                  <p>{format(dateObj, 'dd/MM/yyyy', { locale: he })}</p>
+                  <p>{format(dateObj, 'HH:mm:ss', { locale: he })}</p>
+                </>
+              );
+            })()}
             {metadata.execution_time_ms && (
               <p className="mt-1 text-xs flex items-center gap-1">
                 <Clock className="w-3 h-3" />
