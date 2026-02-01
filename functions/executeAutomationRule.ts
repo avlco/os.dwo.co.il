@@ -503,6 +503,22 @@ Deno.serve(async (req) => {
             results.push({ action: 'calendar_event', status: 'failed', error: calendarResult.error });
          } else {
             results.push({ action: 'calendar_event', status: 'success', google_event_id: calendarResult?.google_event_id });
+            try {
+              await base44.entities.Deadline.create({
+                case_id: caseId,
+                deadline_type: 'hearing',
+                description: eventData.title || eventData.description || 'אירוע מאוטומציה',
+                due_date: eventData.start_date || new Date().toISOString().split('T')[0],
+                status: 'pending',
+                is_critical: false,
+                metadata: {
+                  google_event_id: calendarResult?.google_event_id || null,
+                  html_link: calendarResult?.htmlLink || null,
+                  meet_link: calendarResult?.meetLink || null,
+                  source: 'automation_direct'
+                }
+              });
+            } catch (e) { console.warn('[AutoRule] Failed to create local Deadline:', e.message); }
          }
       });
     }
