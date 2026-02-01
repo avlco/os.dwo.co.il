@@ -1,5 +1,4 @@
 import React, { useState } from 'react';
-import { useAuth } from '@/lib/AuthContext';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { base44 } from '@/api/base44Client';
 import { useTranslation } from 'react-i18next';
@@ -537,11 +536,10 @@ export default function ApprovalQueue() {
                         
                         <div className="flex gap-2">
                                                     {['pending', 'editing'].includes(batch.status) &&
-                            (currentUser?.role === 'admin' ||
+                           (currentUser?.role === 'admin' || currentUser?.email?.toLowerCase() === batch.approver_email?.toLowerCase()) && (
                              (currentUser?.email && batch.approver_email && currentUser.email.toLowerCase() === batch.approver_email.toLowerCase()) ||
                              (currentUser?.id && batch.user_id && String(currentUser.id) === String(batch.user_id))
                             ) && (
-                           (currentUser?.role === 'admin' || currentUser?.email?.toLowerCase() === batch.approver_email?.toLowerCase()) && (
                             <>
                               <Button
                                 size="sm"
