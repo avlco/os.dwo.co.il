@@ -55,16 +55,26 @@ async function executeBatchActions(base44, batch, context) {
           });
           break;
 
-        case 'billing':
+        case 'billing': {
           result = await base44.entities.TimeEntry.create({
-            case_id: batch.case_id,
+            case_id: config.case_id || batch.case_id,
+            client_id: config.client_id || batch.client_id,
             description: config.description || 'Automated billing',
             hours: config.hours,
             rate: config.rate || config.hourly_rate || 0,
-            date_worked: new Date().toISOString().split('T')[0],
-            is_billable: true
+            date_worked: config.date_worked || new Date().toISOString().split('T')[0],
+            is_billable: true,
+            billed: false,
+            user_email: config.user_email || null
           });
+          try {
+            const entryId = result?.id || result?.data?.id;
+            if (entryId) {
+              await base44.functions.invoke('syncBillingToSheets', { timeEntryId: entryId });
+            }
+          } catch (e) { console.warn('[Executor] Sheets sync failed:', e.message); }
           break;
+        }
           
         case 'calendar_event': {
           result = await base44.functions.invoke('createCalendarEvent', {
