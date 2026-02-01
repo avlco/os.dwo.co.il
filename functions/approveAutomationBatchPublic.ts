@@ -275,7 +275,7 @@ Deno.serve(async (req) => {
 
     // 2. Verify Token
     const payload = await verifyApprovalToken(token, secret);
-    if (!payload || payload.action !== 'approve') {
+        if (!payload || !['approve', 'reject'].includes(payload.action)) {
       return respond({ success: false, code: 'INVALID_TOKEN', title: 'קישור פג תוקף', message: 'הקישור אינו תקין או שפג תוקפו.' }, 401);
     }
 
