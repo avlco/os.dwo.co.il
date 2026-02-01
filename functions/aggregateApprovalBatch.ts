@@ -260,11 +260,10 @@ Deno.serve(async (req) => {
         const approveToken = await generateApprovalToken({ batch_id: batch.id, approver_email: approverEmail, action: 'approve' }, secret);
         const rejectToken = await generateApprovalToken({ batch_id: batch.id, approver_email: approverEmail, action: 'reject' }, secret);
 
-        // 🔥 FIX: TRYING LOWERCASE (FLATTENED) NAMES FOR ROUTING
-        // Since CamelCase and KebabCase failed, Lowercase is the next logical standard for Deno deployments
-        const approveUrl = `${functionsBase}/approveautomationbatchpublic?token=${approveToken}`;
-        const rejectUrl = `${functionsBase}/approveautomationbatchpublic?token=${rejectToken}`;
+        const approveUrl = `${appUrl}/ApproveBatch?token=${approveToken}`;
+        const rejectUrl = `${appUrl}/ApproveBatch?token=${rejectToken}`;
         const editUrl = `${appUrl}/ApprovalBatchEdit?batchId=${batch.id}`;
+
 
         let caseName = null;
         if (batch.case_id) {
