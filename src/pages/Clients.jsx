@@ -7,6 +7,7 @@ import { createPageUrl } from '../utils';
 import PageHeader from '../components/ui/PageHeader';
 import DataTable from '../components/ui/DataTable';
 import EmptyState from '../components/ui/EmptyState';
+import ImportExportDialog from '../components/import-export/ImportExportDialog';
 import {
   Users,
   Search,
@@ -19,7 +20,9 @@ import {
   Phone,
   Building2,
   UserCheck,
-  Eye
+  Eye,
+  Upload,
+  Download
 } from 'lucide-react';
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -60,6 +63,8 @@ export default function Clients() {
   const [showArchived, setShowArchived] = useState(false);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingClient, setEditingClient] = useState(null);
+  const [isImportExportOpen, setIsImportExportOpen] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
   
   const [formData, setFormData] = useState({
     name: '',
@@ -360,6 +365,51 @@ export default function Clients() {
     return cases.filter(c => c.client_id === clientId).length;
   };
 
+  const handleExport = async () => {
+    setIsExporting(true);
+    try {
+      const response = await base44.functions.invoke('exportData', { entityType: 'clients' });
+      const { content, filename, mimeType } = response.data;
+      
+      const blob = new Blob([content], { type: `${mimeType};charset=utf-8` });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      
+      toast({ title: "הייצוא הושלם", description: `${clients.length} לקוחות יוצאו בהצלחה` });
+    } catch (error) {
+      toast({ variant: "destructive", title: "שגיאה בייצוא", description: error.message });
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
+  const handleImport = async (items) => {
+    try {
+      const response = await base44.functions.invoke('importData', { entityType: 'clients', items });
+      const { created, updated, failed, errors } = response.data;
+      
+      queryClient.invalidateQueries(['clients']);
+      
+      let description = `נוצרו ${created}, עודכנו ${updated}`;
+      if (failed > 0) description += `, נכשלו ${failed}`;
+      
+      toast({ 
+        title: "הייבוא הושלם", 
+        description,
+        variant: failed > 0 ? "warning" : "default"
+      });
+    } catch (error) {
+      toast({ variant: "destructive", title: "שגיאה בייבוא", description: error.message });
+      throw error;
+    }
+  };
+
   const getLawyerName = (lawyerId) => {
     const lawyer = users.find(u => u.id === lawyerId);
     return lawyer?.full_name || lawyer?.email || '-';
@@ -561,12 +611,22 @@ export default function Clients() {
 
   return (
     <div className="space-y-6">
-      <PageHeader
-        title={t('clients.title')}
-        subtitle={`${clients.length} לקוחות במערכת`}
-        action={openCreateDialog}
-        actionLabel={t('clients.new_client')}
-      />
+      <div className="flex items-center justify-between">
+        <PageHeader
+          title={t('clients.title')}
+          subtitle={`${clients.length} לקוחות במערכת`}
+          action={openCreateDialog}
+          actionLabel={t('clients.new_client')}
+        />
+        <Button 
+          variant="outline" 
+          onClick={() => setIsImportExportOpen(true)}
+          className="gap-2"
+        >
+          <Upload className="w-4 h-4" />
+          ייבוא/ייצוא
+        </Button>
+      </div>
 
       <div className="flex flex-wrap gap-4 items-center">
         <div className="relative flex-1 min-w-[200px] max-w-md">
@@ -864,6 +924,16 @@ export default function Clients() {
           </form>
         </DialogContent>
       </Dialog>
+
+      <ImportExportDialog
+        open={isImportExportOpen}
+        onOpenChange={setIsImportExportOpen}
+        entityType="clients"
+        existingData={clients}
+        onExport={handleExport}
+        onImport={handleImport}
+        isLoading={isExporting}
+      />
     </div>
   );
 }
