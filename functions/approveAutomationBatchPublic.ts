@@ -77,6 +77,12 @@ const BRAND = {
   colors: { success: '#10b981', error: '#ef4444', text: '#1f2937', bg: '#f9fafb' }
 };
 
+const EMAIL_BRAND = {
+  logoUrl: 'https://dwo.co.il/wp-content/uploads/2020/04/Drori-Stav-logo-2.png',
+  footer: '© DWO – דרורי, שטב ושות׳ | משרד עורכי דין',
+  color: '#1a3c5e'
+};
+
 function getHtmlPage(title, message, isError = false) {
   const color = isError ? BRAND.colors.error : BRAND.colors.success;
   const icon = isError ? '✕' : '✓';
