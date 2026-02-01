@@ -372,27 +372,64 @@ Deno.serve(async (req) => {
             break;
 
           case 'upload_to_dropbox':
-            if (case_id && mail?.attachments?.length > 0 && action.dropbox_folder_path) {
+            if (mail?.attachments?.length > 0) {
               try {
                 const dropboxToken = await getValidToken(base44, user.id, 'dropbox');
-                const cases = await base44.entities.Case.filter({id: case_id});
-                const clients = await base44.entities.Client.filter({id: client_id});
+                const cases = case_id ? await base44.entities.Case.filter({id: case_id}) : [];
+                const clients = client_id ? await base44.entities.Client.filter({id: client_id}) : [];
                 
                 const clientName = sanitizeDropboxName(clients[0]?.name);
+                const clientNumber = sanitizeDropboxName(clients[0]?.client_number || '0000');
                 const caseNumber = sanitizeDropboxName(cases[0]?.case_number);
                 
-                const folderPath = action.dropbox_folder_path
-                  .replace('{{client_name}}', clientName)
-                  .replace('{{case_number}}', caseNumber);
+                // Build smart path
+                let folderPath;
+                if (action.dropbox_folder_path) {
+                  folderPath = action.dropbox_folder_path
+                    .replace('{{client_name}}', clientName)
+                    .replace('{{client_number}}', clientNumber)
+                    .replace('{{case_number}}', caseNumber);
+                } else if (clients[0]) {
+                  // Smart default path
+                  const clientFolder = `/DWO/לקוחות - משרד/${clientNumber} - ${clientName}`;
+                  folderPath = cases[0] 
+                    ? `${clientFolder}/${caseNumber}/correspondence`
+                    : `${clientFolder}/general`;
+                } else {
+                  // Fallback to Manual_Review
+                  folderPath = `/DWO/Manual_Review/${new Date().toISOString().split('T')[0]}`;
+                }
                 
                 await ensureDropboxFolder(dropboxToken, folderPath);
                 
                 for (const attachment of mail.attachments) {
                   if (!attachment.url) continue;
                   const fileContent = await downloadFile(attachment.url);
-                  const filePath = `${folderPath}/${sanitizeDropboxName(attachment.filename)}`;
+                  const safeFilename = sanitizeDropboxName(attachment.filename);
+                  const filePath = `${folderPath}/${safeFilename}`;
                   const uploadResult = await uploadToDropbox(dropboxToken, filePath, fileContent);
                   const sharedUrl = await createDropboxSharedLink(dropboxToken, uploadResult.path_display);
+                  
+                  // Create Document entity record
+                  try {
+                    await base44.entities.Document.create({
+                      name: attachment.filename,
+                      type: 'correspondence',
+                      file_url: sharedUrl,
+                      dropbox_path: uploadResult.path_display,
+                      dropbox_file_id: uploadResult.id,
+                      file_size: uploadResult.size || fileContent.length,
+                      client_id: client_id || null,
+                      case_id: case_id || null,
+                      folder: folderPath,
+                      uploaded_by: user.email,
+                      source_mail_id: mail.id,
+                      source_task_id: task_id,
+                      version: 1
+                    });
+                  } catch (docError) {
+                    console.warn('Failed to create Document record:', docError.message);
+                  }
                   
                   executedActions.push({ 
                     type: 'upload_to_dropbox', 
