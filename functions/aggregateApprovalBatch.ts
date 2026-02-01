@@ -263,7 +263,7 @@ Deno.serve(async (req) => {
         // 🔥 FIX: TRYING LOWERCASE (FLATTENED) NAMES FOR ROUTING
         // Since CamelCase and KebabCase failed, Lowercase is the next logical standard for Deno deployments
         const approveUrl = `${functionsBase}/approveautomationbatchpublic?token=${approveToken}`;
-        const rejectUrl = `${functionsBase}/rejectautomationbatchpublic?token=${rejectToken}`;
+        const rejectUrl = `${functionsBase}/approveautomationbatchpublic?token=${rejectToken}`;
         const editUrl = `${appUrl}/ApprovalBatchEdit?batchId=${batch.id}`;
 
         let caseName = null;
