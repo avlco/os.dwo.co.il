@@ -39,11 +39,28 @@ const actionLabels = {
 
 export default function AutomationLogCard({ log, relatedMail }) {
   const isSuccess = log.status === 'completed';
+  const isPartialSuccess = log.status === 'completed_with_errors';
+  const isFailed = log.status === 'failed';
   const metadata = log.metadata || {};
   const actionsSummary = metadata.actions_summary || [];
   
+  // קביעת צבע הגבול והאייקון
+  const getBorderColor = () => {
+    if (isSuccess) return 'border-r-green-500';
+    if (isPartialSuccess) return 'border-r-amber-500';
+    return 'border-r-red-500';
+  };
+
+  const getStatusBadge = () => {
+    if (isSuccess) return { label: 'הצליח', color: 'bg-green-100 text-green-800' };
+    if (isPartialSuccess) return { label: 'הצליח חלקית', color: 'bg-amber-100 text-amber-800' };
+    return { label: 'נכשל', color: 'bg-red-100 text-red-800' };
+  };
+
+  const statusBadge = getStatusBadge();
+
   return (
-    <Card className={`border-r-4 ${isSuccess ? 'border-r-green-500' : 'border-r-red-500'} dark:bg-slate-800`}>
+    <Card className={`border-r-4 ${getBorderColor()} dark:bg-slate-800`}>
       <CardContent className="p-4">
         <div className="flex items-start justify-between gap-4">
           <div className="flex-1 min-w-0">
@@ -51,14 +68,16 @@ export default function AutomationLogCard({ log, relatedMail }) {
             <div className="flex items-center gap-3 mb-2">
               {isSuccess ? (
                 <CheckCircle2 className="w-5 h-5 text-green-600 flex-shrink-0" />
+              ) : isPartialSuccess ? (
+                <Clock className="w-5 h-5 text-amber-600 flex-shrink-0" />
               ) : (
                 <XCircle className="w-5 h-5 text-red-600 flex-shrink-0" />
               )}
               <h3 className="font-semibold text-slate-800 dark:text-slate-100">
                 {metadata.rule_name || 'חוק לא ידוע'}
               </h3>
-              <Badge variant={isSuccess ? 'success' : 'destructive'} className={isSuccess ? 'bg-green-100 text-green-800' : ''}>
-                {isSuccess ? 'הצליח' : 'נכשל'}
+              <Badge className={statusBadge.color}>
+                {statusBadge.label}
               </Badge>
             </div>
             

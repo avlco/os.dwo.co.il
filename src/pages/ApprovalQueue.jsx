@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { base44 } from '@/api/base44Client';
 import { useTranslation } from 'react-i18next';
@@ -57,26 +57,28 @@ export default function ApprovalQueue() {
   const [rejectionReason, setRejectionReason] = useState('');
   const [activeTab, setActiveTab] = useState('batches');
 
-  // Fetch ApprovalBatches (new system)
-  const { data: batches = [], isLoading: batchesLoading } = useQuery({
-    queryKey: ['approval-batches', filterStatus],
+  // Fetch ApprovalBatches (new system) - כל האצוות, ללא סינון ראשוני
+  const { data: allBatches = [], isLoading: batchesLoading } = useQuery({
+    queryKey: ['approval-batches'],
     queryFn: async () => {
-      const allBatches = await base44.entities.ApprovalBatch.list('-created_date', 500);
-      
-      // Map status filter
-      const statusMap = {
-        pending: ['pending', 'editing'],
-        completed: ['executed'],
-        cancelled: ['cancelled', 'failed'],
-        all: null
-      };
-      
-      const allowedStatuses = statusMap[filterStatus];
-      if (!allowedStatuses) return allBatches;
-      
-      return allBatches.filter(b => allowedStatuses.includes(b.status));
+      return await base44.entities.ApprovalBatch.list('-created_date', 500);
     },
   });
+
+  // סינון לפי filterStatus רק לתצוגה (לא בשליפה)
+  const batches = useMemo(() => {
+    const statusMap = {
+      pending: ['pending', 'editing'],
+      completed: ['executed'],
+      cancelled: ['cancelled', 'failed'],
+      all: null
+    };
+    
+    const allowedStatuses = statusMap[filterStatus];
+    if (!allowedStatuses) return allBatches;
+    
+    return allBatches.filter(b => allowedStatuses.includes(b.status));
+  }, [allBatches, filterStatus]);
 
   // Fetch legacy approval activities (for backwards compatibility)
   const { data: legacyApprovals = [], isLoading: legacyLoading } = useQuery({

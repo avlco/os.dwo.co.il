@@ -183,13 +183,28 @@ async function logAutomationExecution(base44, logData) {
       return `${action.action}: ${status}`;
     });
 
+    // חישוב סטטוס מדויק בהתבסס על תוצאות הפעולות
+    const actions = logData.actions_summary || [];
+    const successCount = actions.filter(a => a.status === 'success').length;
+    const failedCount = actions.filter(a => a.status === 'failed').length;
+    const pendingBatchCount = actions.filter(a => a.status === 'pending_batch').length;
+    
+    let activityStatus = 'completed';
+    if (failedCount > 0 && successCount > 0) {
+      activityStatus = 'completed_with_errors';
+    } else if (failedCount > 0 && successCount === 0) {
+      activityStatus = 'failed';
+    } else if (pendingBatchCount > 0) {
+      activityStatus = 'pending';
+    }
+
     await base44.entities.Activity.create({
       activity_type: 'automation_log',
       type: 'automation_log',
       case_id: logData.metadata?.case_id || null,
       client_id: logData.metadata?.client_id || null,
-      status: logData.execution_status === 'completed' ? 'completed' : 'failed',
-      title: `${logData.rule_name} - ${logData.execution_status}`,
+      status: activityStatus,
+      title: `${logData.rule_name} - ${activityStatus}`,
       description: `${logData.rule_name} → ${logData.mail_subject}`,
       user_email: logData.user_email || null,
       metadata: {
@@ -197,7 +212,7 @@ async function logAutomationExecution(base44, logData) {
         rule_name: logData.rule_name,
         mail_id: logData.mail_id,
         mail_subject: logData.mail_subject,
-        execution_status: logData.execution_status,
+        execution_status: activityStatus,
         actions_summary: actionsSummaryStrings,
         execution_time_ms: logData.execution_time_ms,
         case_id_ref: logData.metadata?.case_id,
