@@ -86,12 +86,10 @@ return response.batch;
   });
 
   // Initialize actions when batch loads
-    useEffect(() => {
+  useEffect(() => {
     if (batchData?.actions_current) {
-      const normalized = JSON.parse(JSON.stringify(batchData.actions_current)).map(a => ({
-        ...a,
-        enabled: a.enabled !== null && a.enabled !== undefined ? a.enabled : true
-      }));
+      const parsed = JSON.parse(JSON.stringify(batchData.actions_current));
+      const normalized = parsed.map(a => ({ ...a, enabled: a.enabled !== false }));
       setActions(normalized);
       setHasChanges(false);
     }
