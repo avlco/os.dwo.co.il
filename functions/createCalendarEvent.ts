@@ -38,7 +38,8 @@ Deno.serve(async (req) => {
 
   try {
     const base44 = createClientFromRequest(req);
-    const body = await req.json();
+    const rawBody = await req.json();
+    const body = rawBody.body || rawBody;
     
     const { 
       title, 
