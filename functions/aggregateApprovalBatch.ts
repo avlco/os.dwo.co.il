@@ -140,7 +140,14 @@ function renderApprovalEmail({ batch, approveUrl, rejectUrl, editUrl, language =
     return `
       <div style="background: #f8f9fa; padding: 12px; margin-bottom: 10px; border-radius: 6px; border-${align}: 4px solid ${BRAND.colors.primary}; text-align: ${align};">
         <div style="font-weight: bold; color: ${BRAND.colors.text}; font-size: 15px;">${icon} ${desc}</div>
-        <div style="color: ${BRAND.colors.textLight}; font-size: 13px; margin-top: 4px;">${JSON.stringify(config).substring(0, 100)}...</div>
+        <div style="color: ${BRAND.colors.textLight}; font-size: 13px; margin-top: 4px;">${
+          type === 'send_email' ? `נמען: ${config.to || '-'} | נושא: ${config.subject || '-'}` :
+          type === 'create_task' ? `משימה: ${config.title || '-'}` :
+          type === 'billing' ? `${config.hours || 0} שעות × ₪${config.rate || config.hourly_rate || 0}` :
+          type === 'calendar_event' ? `${config.title || '-'} | ${config.start_date || '-'}` :
+          type === 'save_file' ? `נתיב: ${config.path || config.dropbox_folder_path || '-'}` :
+          JSON.stringify(config).substring(0, 100)
+        }</div>
       </div>
     `;
   }).join('');
