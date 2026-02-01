@@ -300,6 +300,18 @@ Deno.serve(async (req) => {
         cancel_reason: 'Rejected via email link',
         approved_by_email: payload.approver_email
       });
+      
+      // עדכון סטטוס המייל לחזרה ל-pending
+      if (batch.mail_id) {
+        try {
+          await base44.asServiceRole.entities.Mail.update(batch.mail_id, {
+            processing_status: 'pending'
+          });
+        } catch (e) {
+          console.warn('[Approval] Failed to reset mail status:', e.message);
+        }
+      }
+      
       return respond({
         success: true,
         batch_id: batch.id,
@@ -330,6 +342,18 @@ Deno.serve(async (req) => {
       status: finalStatus,
       execution_summary: executionSummary
     });
+    
+    // 8.1 עדכון סטטוס המייל המקורי
+    if (batch.mail_id) {
+      try {
+        const mailStatus = executionSummary.failed > 0 ? 'automation_failed' : 'automation_complete';
+        await base44.asServiceRole.entities.Mail.update(batch.mail_id, {
+          processing_status: mailStatus
+        });
+      } catch (e) {
+        console.warn('[Approval] Failed to update mail status:', e.message);
+      }
+    }
 
     // 9. Return Result
     if (executionSummary.failed > 0) {
@@ -367,4 +391,3 @@ Deno.serve(async (req) => {
     );
   }
 });
-
