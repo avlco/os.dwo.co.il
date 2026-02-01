@@ -123,7 +123,7 @@ export default function AutomationLogCard({ log, relatedMail }) {
             )}
             
             {/* הודעת שגיאה */}
-            {!isSuccess && metadata.error_message && (
+            {(isFailed || isPartialSuccess) && metadata.error_message && (
               <div className="mt-3 p-2 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded text-sm text-red-700 dark:text-red-300">
                 {metadata.error_message}
               </div>
