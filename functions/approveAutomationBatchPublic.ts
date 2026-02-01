@@ -116,29 +116,6 @@ function getHtmlPage(title, message, isError = false) {
 // 3. EXECUTION ENGINE (Embedded)
 // ========================================
 
-function generateBrandedEmailBody(contentHtml, title, language = 'he') {
-  const dir = language === 'he' ? 'rtl' : 'ltr';
-  const logoUrl = 'https://dwo.co.il/wp-content/uploads/2020/04/Drori-Stav-logo-2.png';
-  return `<!DOCTYPE html>
-<html dir="${dir}" lang="${language}">
-<head><meta charset="UTF-8"><title>${title}</title></head>
-<body style="margin:0;padding:0;background-color:#f3f4f6;font-family:'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
-  <div style="padding:20px;background-color:#f3f4f6;">
-    <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%" style="max-width:600px;margin:0 auto;background-color:#ffffff;border-radius:8px;overflow:hidden;box-shadow:0 4px 6px rgba(0,0,0,0.05);">
-      <tr><td style="background-color:#ffffff;padding:20px;text-align:center;border-bottom:3px solid #b62f12;">
-        <img src="${logoUrl}" alt="DWO" style="height:50px;width:auto;max-width:200px;" />
-      </td></tr>
-      <tr><td style="padding:30px 25px;color:#000000;line-height:1.6;font-size:16px;" dir="${dir}">
-        ${contentHtml}
-      </td></tr>
-      <tr><td style="background-color:#f8fafc;padding:20px;text-align:center;font-size:12px;color:#545454;border-top:1px solid #e2e8f0;">
-        <p style="margin:0;">DWO - משרד עורכי דין | www.dwo.co.il</p>
-      </td></tr>
-    </table>
-  </div>
-</body></html>`;
-}
-
 async function executeBatchActions(base44, batch, context) {
   const actions = batch.actions_current || [];
   const results = [];
@@ -147,26 +124,23 @@ async function executeBatchActions(base44, batch, context) {
 
   console.log(`[Executor] Starting execution of ${actions.length} actions for Batch ${batch.id}`);
 
-    for (const action of actions.filter(a => a.enabled !== false)) {
+  for (const action of actions.filter(a => a.enabled !== false)) {
     try {
       const type = action.action_type || action.action;
       const config = action.config || {};
       let result = null;
 
-      // --- Execute based on type ---
       switch (type) {
-                case 'send_email':
-          const brandedBody = generateBrandedEmailBody(
-            `<div style="direction:rtl;text-align:right;">${config.body}</div>`,
-            config.subject
-          );
+        case 'send_email': {
           result = await base44.functions.invoke('sendEmail', {
             to: config.to,
             subject: config.subject,
-            body: brandedBody
+            body: config.body
           });
-          if (result.error) throw new Error(result.error);
+          const resultData = result?.data || result;
+          if (resultData?.error) throw new Error(resultData.error);
           break;
+        }
 
         case 'create_task':
           result = await base44.asServiceRole.entities.Task.create({
@@ -190,18 +164,18 @@ async function executeBatchActions(base44, batch, context) {
           });
           break;
           
-        case 'calendar_event':
-          // Re-use logic or call helper if available. For now, we assume simple success if logging works
-          // Ideally, we would invoke 'createCalendarEvent'
-           result = await base44.functions.invoke('createCalendarEvent', {
-             ...config,
-             case_id: batch.case_id
-           });
-           if (result.error) throw new Error(result.error);
-           break;
+        case 'calendar_event': {
+          result = await base44.functions.invoke('createCalendarEvent', {
+            ...config,
+            case_id: batch.case_id
+          });
+          const resultData = result?.data || result;
+          if (resultData?.error) throw new Error(resultData.error);
+          break;
+        }
       }
 
-      results.push({ id: action.idempotency_key, status: 'success', data: result });
+      results.push({ id: action.idempotency_key, status: 'success', data: result?.data || 'ok' });
       successCount++;
     } catch (error) {
       console.error(`[Executor] Action failed: ${error.message}`);
@@ -224,15 +198,22 @@ async function executeBatchActions(base44, batch, context) {
 // ========================================
 
 Deno.serve(async (req) => {
-  // CORS Preflight
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
 
   try {
-    // 1. Extract Token from URL (GET support)
+    // 1. Extract Token - from URL (GET/browser) or POST body (SDK)
     const url = new URL(req.url);
-    const token = url.searchParams.get('token');
+    let token = url.searchParams.get('token');
+    const isApiCall = req.method === 'POST';
 
-    // Prepare helper for HTML responses
+    if (!token && isApiCall) {
+      try {
+        const body = await req.json();
+        token = body?.token;
+      } catch (e) { /* no body */ }
+    }
+
+    // Prepare HTML response helper (for browser/GET)
     const respondHtml = (title, msg, isError = false, status = 200) => {
       return new Response(getHtmlPage(title, msg, isError), {
         status,
@@ -240,30 +221,49 @@ Deno.serve(async (req) => {
       });
     };
 
+    // Dual response: JSON for SDK/POST, HTML for browser/GET
+    const respond = (data, status = 200) => {
+      if (isApiCall) {
+        return new Response(JSON.stringify(data), {
+          status,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+      return respondHtml(
+        data.title || (data.success ? 'הצלחה' : 'שגיאה'),
+        data.message || (data.success ? 'הפעולה בוצעה' : 'אירעה שגיאה'),
+        !data.success,
+        status
+      );
+    };
+
     if (!token) {
-      return respondHtml('שגיאה', 'קישור לא תקין (חסר טוקן).', true, 400);
+      return respond({ success: false, code: 'MISSING_TOKEN', title: 'שגיאה', message: 'קישור לא תקין (חסר טוקן).' }, 400);
     }
 
     const base44 = createClientFromRequest(req);
     const secret = Deno.env.get('APPROVAL_HMAC_SECRET');
-    if (!secret) return respondHtml('שגיאה טכנית', 'שגיאת הגדרות שרת.', true, 500);
+    if (!secret) {
+      return respond({ success: false, code: 'SERVER_ERROR', title: 'שגיאה טכנית', message: 'שגיאת הגדרות שרת.' }, 500);
+    }
 
     // 2. Verify Token
     const payload = await verifyApprovalToken(token, secret);
     if (!payload || payload.action !== 'approve') {
-      return respondHtml('קישור פג תוקף', 'הקישור אינו תקין או שפג תוקפו.', true, 401);
+      return respond({ success: false, code: 'INVALID_TOKEN', title: 'קישור פג תוקף', message: 'הקישור אינו תקין או שפג תוקפו.' }, 401);
     }
 
     // 3. Fetch & Validate Batch
     const batch = await base44.asServiceRole.entities.ApprovalBatch.get(payload.batch_id);
-    if (!batch) return respondHtml('לא נמצא', 'בקשת האישור לא נמצאה.', true, 404);
+    if (!batch) {
+      return respond({ success: false, code: 'NOT_FOUND', title: 'לא נמצא', message: 'בקשת האישור לא נמצאה.' }, 404);
+    }
 
     if (batch.status !== 'pending' && batch.status !== 'failed') {
-      // If already approved, show success message (idempotency)
       if (batch.status === 'approved' || batch.status === 'executed') {
-        return respondHtml('הפעולה כבר בוצעה', 'הבקשה אושרה ובוצעה כבר בעבר.');
+        return respond({ success: true, code: 'ALREADY_PROCESSED', status: batch.status, batch_id: batch.id, title: 'הפעולה כבר בוצעה', message: 'הבקשה אושרה ובוצעה כבר בעבר.' });
       }
-      return respondHtml('סטטוס שגוי', `הבקשה נמצאת בסטטוס ${batch.status} ולא ניתן לאשרה.`, true, 409);
+      return respond({ success: false, code: 'ALREADY_PROCESSED', status: batch.status, batch_id: batch.id, title: 'סטטוס שגוי', message: `הבקשה נמצאת בסטטוס ${batch.status} ולא ניתן לאשרה.` }, 409);
     }
 
     // 4. Anti-Replay (Nonce Check)
@@ -276,10 +276,9 @@ Deno.serve(async (req) => {
         used_at: new Date().toISOString()
       });
     } catch (e) {
-      // If duplicate nonce, allow if it's a retry of a failed execution, otherwise block
       const exists = await base44.asServiceRole.entities.ApprovalNonce.filter({ nonce_hash: nonceHash });
       if (exists.length > 0 && batch.status !== 'failed') {
-         return respondHtml('הקישור כבר נוצל', 'נעשה כבר שימוש בקישור זה.', true, 409);
+        return respond({ success: false, code: 'TOKEN_ALREADY_USED', batch_id: batch.id, title: 'הקישור כבר נוצל', message: 'נעשה כבר שימוש בקישור זה.' }, 409);
       }
     }
 
@@ -294,7 +293,6 @@ Deno.serve(async (req) => {
     // 6. Execute Actions
     await base44.asServiceRole.entities.ApprovalBatch.update(batch.id, { status: 'executing' });
     
-    // Re-fetch to be safe
     const freshBatch = await base44.asServiceRole.entities.ApprovalBatch.get(batch.id);
     const executionSummary = await executeBatchActions(base44, freshBatch);
     
@@ -306,19 +304,36 @@ Deno.serve(async (req) => {
       execution_summary: executionSummary
     });
 
-    // 8. Return Success Page
+    // 8. Return Result
     if (executionSummary.failed > 0) {
-      return respondHtml(
-        'בוצע עם שגיאות', 
-        `הפעולה אושרה, אך ${executionSummary.failed} מתוך ${executionSummary.total} פעולות נכשלו. אנא בדוק במערכת.`, 
-        true // Show as warning/error style
-      );
+      return respond({
+        success: true,
+        batch_id: batch.id,
+        status: finalStatus,
+        execution_summary: executionSummary,
+        title: 'בוצע עם שגיאות',
+        message: `הפעולה אושרה, אך ${executionSummary.failed} מתוך ${executionSummary.total} פעולות נכשלו. אנא בדוק במערכת.`
+      });
     }
 
-    return respondHtml('בוצע בהצלחה', 'כל הפעולות אושרו ובוצעו בהצלחה!');
+    return respond({
+      success: true,
+      batch_id: batch.id,
+      status: finalStatus,
+      execution_summary: executionSummary,
+      title: 'בוצע בהצלחה',
+      message: 'כל הפעולות אושרו ובוצעו בהצלחה!'
+    });
 
   } catch (error) {
     console.error('Critical Public Approval Error:', error);
+    const isApiCall = req.method === 'POST';
+    if (isApiCall) {
+      return new Response(JSON.stringify({ success: false, code: 'INTERNAL_ERROR', message: error.message }), {
+        status: 500,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
+    }
     return new Response(
       getHtmlPage('שגיאה בלתי צפויה', 'אירעה שגיאה בעיבוד הבקשה. אנא נסה שנית.', true),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'text/html; charset=utf-8' } }
