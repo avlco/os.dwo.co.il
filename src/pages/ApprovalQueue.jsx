@@ -81,15 +81,15 @@ export default function ApprovalQueue() {
     return allBatches.filter(b => allowedStatuses.includes(b.status));
   }, [allBatches, filterStatus]);
 
-  // Fetch legacy approval activities (for backwards compatibility)
+  // Fetch legacy approval activities AND automation logs (for full visibility)
   const { data: legacyApprovals = [], isLoading: legacyLoading } = useQuery({
     queryKey: ['legacy-approvals', filterStatus],
     queryFn: async () => {
       const activities = await base44.entities.Activity.list('-created_date', 500);
       
-      // Filter for approval activities
+      // Filter for approval activities AND automation logs
       return activities.filter(a => 
-        a.activity_type === 'approval_request' &&
+        (a.activity_type === 'approval_request' || a.activity_type === 'automation_log') &&
         (filterStatus === 'all' || a.status === filterStatus)
       );
     },
@@ -478,7 +478,7 @@ export default function ApprovalQueue() {
           {legacyApprovals.length > 0 && (
             <TabsTrigger value="legacy" className="gap-2">
               <AlertTriangle className="w-4 h-4" />
-              אישורים ישנים ({legacyApprovals.length})
+              יומן אוטומציה ({legacyApprovals.length})
             </TabsTrigger>
           )}
         </TabsList>
@@ -579,17 +579,11 @@ export default function ApprovalQueue() {
           {legacyApprovals.length === 0 ? (
             <EmptyState
               icon={CheckCircle}
-              title="אין אישורים ישנים"
-              description="כל האישורים הישנים טופלו"
+              title="אין פעילות אוטומציה"
+              description="אין רשומות יומן אוטומציה להצגה"
             />
           ) : (
             <>
-              <div className="bg-amber-50 dark:bg-amber-900/20 p-3 rounded-lg mb-4 flex items-center gap-2">
-                <AlertTriangle className="w-5 h-5 text-amber-600" />
-                <span className="text-amber-700 dark:text-amber-400 text-sm">
-                  אלו אישורים מהמערכת הישנה. אישורים חדשים נוצרים כחבילות.
-                </span>
-              </div>
               <DataTable
                 columns={columns}
                 data={legacyApprovals}

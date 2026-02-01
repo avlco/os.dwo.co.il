@@ -362,6 +362,57 @@ Deno.serve(async (req) => {
           error_message: finalStatus === 'failed' ? (executionSummary.error || 'Execution failed') : null
         });
 
+        // עדכון סטטוס המייל המקורי
+        if (batch.mail_id) {
+          try {
+            const mailStatus = finalStatus === 'executed' ? 'automation_complete' : 'automation_failed';
+            await base44.asServiceRole.entities.Mail.update(batch.mail_id, {
+              processing_status: mailStatus
+            });
+            console.log(`[HandleBatch] Updated Mail ${batch.mail_id} status to ${mailStatus}`);
+          } catch (mailErr) {
+            console.warn('[HandleBatch] Failed to update mail status:', mailErr.message);
+          }
+        }
+
+        // עדכון Activity log הקיים
+        try {
+          const activities = await base44.asServiceRole.entities.Activity.filter({
+            activity_type: 'automation_log',
+            'metadata.mail_id': batch.mail_id
+          }, '-created_date', 10);
+          
+          const relatedActivity = activities.find(a => 
+            a.status === 'pending' && 
+            a.metadata?.rule_id === batch.automation_rule_id
+          );
+          
+          if (relatedActivity) {
+            const activityStatus = finalStatus === 'executed' 
+              ? (executionSummary.failed > 0 ? 'completed_with_errors' : 'completed')
+              : 'failed';
+            
+            await base44.asServiceRole.entities.Activity.update(relatedActivity.id, {
+              status: activityStatus,
+              metadata: {
+                ...relatedActivity.metadata,
+                execution_status: finalStatus,
+                actions_summary: executionSummary.results?.map(r => ({
+                  action: r.id,
+                  status: r.status,
+                  error: r.error
+                })) || [],
+                approved_at: new Date().toISOString(),
+                approved_by: user.email,
+                execution_time_ms: executionSummary.execution_time_ms
+              }
+            });
+            console.log(`[HandleBatch] Updated Activity ${relatedActivity.id} status to ${activityStatus}`);
+          }
+        } catch (actErr) {
+          console.warn('[HandleBatch] Failed to update activity log:', actErr.message);
+        }
+
         return Response.json(
           { 
             success: finalStatus === 'executed',
@@ -386,6 +437,47 @@ Deno.serve(async (req) => {
           cancelled_at: new Date().toISOString(),
           cancel_reason: reason || 'Cancelled by user'
         });
+
+        // עדכון סטטוס המייל המקורי לביטול
+        if (batch.mail_id) {
+          try {
+            await base44.asServiceRole.entities.Mail.update(batch.mail_id, {
+              processing_status: 'automation_cancelled'
+            });
+            console.log(`[HandleBatch] Updated Mail ${batch.mail_id} status to automation_cancelled`);
+          } catch (mailErr) {
+            console.warn('[HandleBatch] Failed to update mail status on cancel:', mailErr.message);
+          }
+        }
+
+        // עדכון Activity log הקיים לביטול
+        try {
+          const activities = await base44.asServiceRole.entities.Activity.filter({
+            activity_type: 'automation_log',
+            'metadata.mail_id': batch.mail_id
+          }, '-created_date', 10);
+          
+          const relatedActivity = activities.find(a => 
+            a.status === 'pending' && 
+            a.metadata?.rule_id === batch.automation_rule_id
+          );
+          
+          if (relatedActivity) {
+            await base44.asServiceRole.entities.Activity.update(relatedActivity.id, {
+              status: 'cancelled',
+              metadata: {
+                ...relatedActivity.metadata,
+                execution_status: 'cancelled',
+                cancelled_at: new Date().toISOString(),
+                cancelled_by: user.email,
+                cancel_reason: reason || 'Cancelled by user'
+              }
+            });
+            console.log(`[HandleBatch] Updated Activity ${relatedActivity.id} status to cancelled`);
+          }
+        } catch (actErr) {
+          console.warn('[HandleBatch] Failed to update activity log on cancel:', actErr.message);
+        }
 
         return Response.json(
           { success: true, batch_id, status: 'cancelled', message: 'Batch cancelled' },
