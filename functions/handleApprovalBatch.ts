@@ -320,7 +320,10 @@ Deno.serve(async (req) => {
             userEmail: user.email
           });
           
-          if (executionSummary.failed > 0) {
+          // קביעת סטטוס מדויק: אם יש כישלונות חלקיים או מלאים
+          if (executionSummary.failed > 0 && executionSummary.success > 0) {
+            finalStatus = 'executed'; // הושלם עם שגיאות חלקיות - עדיין executed אבל יש מידע ב-execution_summary
+          } else if (executionSummary.failed > 0 && executionSummary.success === 0) {
             finalStatus = 'failed';
           }
         } catch (execError) {

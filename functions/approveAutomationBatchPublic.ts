@@ -335,7 +335,13 @@ Deno.serve(async (req) => {
     const freshBatch = await base44.asServiceRole.entities.ApprovalBatch.get(batch.id);
     const executionSummary = await executeBatchActions(base44, freshBatch);
     
-    const finalStatus = executionSummary.failed > 0 ? 'executed_with_errors' : 'executed';
+    // קביעת סטטוס מדויק
+    let finalStatus = 'executed';
+    if (executionSummary.failed > 0 && executionSummary.success === 0) {
+      finalStatus = 'failed';
+    } else if (executionSummary.failed > 0 && executionSummary.success > 0) {
+      finalStatus = 'executed'; // הושלם עם שגיאות חלקיות
+    }
     
     // 8. Final Update
     await base44.asServiceRole.entities.ApprovalBatch.update(batch.id, {
