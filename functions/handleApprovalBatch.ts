@@ -83,6 +83,22 @@ async function executeBatchActions(base44, batch, context) {
           });
           const resultData = result?.data || result;
           if (resultData?.error) throw new Error(resultData.error);
+          try {
+            await base44.entities.Deadline.create({
+              case_id: config.case_id || batch.case_id,
+              deadline_type: 'hearing',
+              description: config.title || config.description || 'אירוע מאוטומציה',
+              due_date: config.start_date || new Date().toISOString().split('T')[0],
+              status: 'pending',
+              is_critical: false,
+              metadata: {
+                google_event_id: resultData?.google_event_id || null,
+                html_link: resultData?.htmlLink || null,
+                meet_link: resultData?.meetLink || null,
+                source: 'automation_batch'
+              }
+            });
+          } catch (e) { console.warn('[Executor] Failed to create local Deadline:', e.message); }
           break;
         }
       }
