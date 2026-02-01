@@ -110,18 +110,16 @@ export default function MailRoom() {
   const filteredThreads = useMemo(() => {
     switch (activeTab) {
       case 'inbox':
-        // דואר נכנס - מיילים חדשים שלא עברו אוטומציה
-        return groupMailsToThreads.filter(thread => 
-          thread.latestMail.processing_status === 'pending'
-        );
-      
+        // דואר נכנס - כל המיילים (תיבת דואר מסורתית)
+        return groupMailsToThreads;
+
       case 'automation':
-        // מיילים לאוטומציה - כל מה שזוהה/עבר אוטומציה
+        // מיילים לאוטומציה - רק מיילים שזוהו ע"י חוקי אוטומציה (לא כולל משימות ידניות)
         return groupMailsToThreads.filter(thread => 
-          ['matched_for_automation', 'awaiting_approval', 'automation_complete', 'automation_failed', 'processed'].includes(thread.latestMail.processing_status) ||
-          thread.latestMail.matched_rule_id
+          thread.latestMail.matched_rule_id ||
+          ['matched_for_automation', 'awaiting_approval', 'automation_complete', 'automation_failed'].includes(thread.latestMail.processing_status)
         );
-      
+
       default:
         return groupMailsToThreads;
     }
@@ -134,17 +132,19 @@ export default function MailRoom() {
 
   // סטטיסטיקות
   const stats = useMemo(() => {
-    const inboxCount = groupMailsToThreads.filter(t => t.latestMail.processing_status === 'pending').length;
+    // דואר נכנס = כל המיילים
+    const inboxCount = groupMailsToThreads.length;
+    // מיילים לאוטומציה = רק מיילים שזוהו ע"י חוקי אוטומציה (לא כולל משימות ידניות)
     const automationCount = groupMailsToThreads.filter(t => 
-      ['matched_for_automation', 'awaiting_approval', 'automation_complete', 'automation_failed'].includes(t.latestMail.processing_status) ||
-      t.latestMail.matched_rule_id
+      t.latestMail.matched_rule_id ||
+      ['matched_for_automation', 'awaiting_approval', 'automation_complete', 'automation_failed'].includes(t.latestMail.processing_status)
     ).length;
     const successLogs = automationLogs.filter(l => l.status === 'completed').length;
-    const failedLogs = automationLogs.filter(l => l.status === 'failed').length;
+    const failedLogs = automationLogs.filter(l => l.status === 'failed' || l.status === 'completed_with_errors').length;
     const successRate = automationLogs.length > 0 
       ? ((successLogs / automationLogs.length) * 100).toFixed(0)
       : 0;
-    
+
     return { inboxCount, automationCount, successLogs, failedLogs, successRate, totalLogs: automationLogs.length };
   }, [groupMailsToThreads, automationLogs]);
 

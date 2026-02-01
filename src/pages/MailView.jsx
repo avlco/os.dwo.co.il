@@ -77,8 +77,9 @@ export default function MailView() {
       client_id: mailData.related_client_id,
     }),
     onSuccess: async (newTask) => {
+      // עדכון סטטוס המייל ל-manual_task_created (לא processed) כדי להפריד ממיילים אוטומטיים
       await base44.entities.Mail.update(mailId, { 
-        processing_status: 'processed', 
+        processing_status: 'manual_task_created', 
         task_id: newTask.id 
       });
       
