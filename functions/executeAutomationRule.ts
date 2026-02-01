@@ -482,7 +482,8 @@ Deno.serve(async (req) => {
       };
       
       await handleAction('calendar_event', eventData, async () => {
-         const calendarResult = await base44.functions.invoke('createCalendarEvent', eventData);
+         const calendarRaw = await base44.functions.invoke('createCalendarEvent', eventData);
+         const calendarResult = calendarRaw?.data || calendarRaw;
          if (calendarResult?.error) {
             results.push({ action: 'calendar_event', status: 'failed', error: calendarResult.error });
          } else {
