@@ -275,6 +275,17 @@ async function runAutomation(base44, mails, userId) {
 
       if (matchingRules.length === 0) continue;
 
+      // עדכון סטטוס המייל - זוהה לאוטומציה
+      try {
+        await base44.entities.Mail.update(mail.id, { 
+          processing_status: 'matched_for_automation',
+          matched_rule_id: matchingRules[0].id,
+          matched_rule_name: matchingRules[0].name
+        });
+      } catch (e) {
+        console.error(`[Automation] Failed to update mail status:`, e);
+      }
+
       const actionsBuffer = [];
       const extractedBuffer = {};
 
@@ -305,13 +316,34 @@ async function runAutomation(base44, mails, userId) {
 
       if (actionsBuffer.length > 0) {
         console.log(`[Automation] 📦 Creating approval batch...`);
-        // IMPORTANT: Pass userId to aggregateApprovalBatch
-        await base44.functions.invoke('aggregateApprovalBatch', {
-            mailId: mail.id,
-            actionsToApprove: actionsBuffer,
-            extractedInfo: extractedBuffer,
-            userId: userId // <--- PASSING USER ID
-        });
+        // עדכון סטטוס - ממתין לאישור
+        try {
+          const batchRes = await base44.functions.invoke('aggregateApprovalBatch', {
+              mailId: mail.id,
+              actionsToApprove: actionsBuffer,
+              extractedInfo: extractedBuffer,
+              userId: userId
+          });
+          
+          // עדכון המייל עם מזהה האצווה וסטטוס ממתין לאישור
+          if (batchRes.data?.batches?.length > 0) {
+            await base44.entities.Mail.update(mail.id, { 
+              processing_status: 'awaiting_approval',
+              automation_batch_id: batchRes.data.batches[0].batch_id
+            });
+          }
+        } catch (e) {
+          console.error(`[Automation] Failed to create batch:`, e);
+        }
+      } else {
+        // אם אין פעולות ממתינות לאישור, סמן כהושלם
+        try {
+          await base44.entities.Mail.update(mail.id, { 
+            processing_status: 'automation_complete'
+          });
+        } catch (e) {
+          console.error(`[Automation] Failed to update mail status:`, e);
+        }
       }
 
     } catch (e) {

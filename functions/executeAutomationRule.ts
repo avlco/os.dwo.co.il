@@ -494,7 +494,33 @@ Deno.serve(async (req) => {
 
     // --- Finalize ---
     const executionTime = Date.now() - startTime;
+    
+    // עדכון סטטוס המייל בהתאם לתוצאות
+    const hasPendingBatch = results.some(r => r.status === 'pending_batch');
+    const hasSuccess = results.some(r => r.status === 'success');
+    const hasFailed = results.some(r => r.status === 'failed');
+    
     if (!testMode) {
+      try {
+        let newStatus = mail.processing_status;
+        
+        if (hasPendingBatch) {
+          newStatus = 'awaiting_approval';
+        } else if (hasFailed && !hasSuccess) {
+          newStatus = 'automation_failed';
+        } else if (hasSuccess) {
+          newStatus = 'automation_complete';
+        }
+        
+        await base44.entities.Mail.update(mailId, { 
+          processing_status: newStatus,
+          matched_rule_id: ruleId,
+          matched_rule_name: rule.name
+        });
+      } catch (e) {
+        console.error('[AutoRule] Failed to update mail status:', e);
+      }
+      
       await logAutomationExecution(base44, {
         rule_id: ruleId,
         rule_name: rule.name,
@@ -503,7 +529,7 @@ Deno.serve(async (req) => {
         execution_status: 'completed',
         actions_summary: results,
         execution_time_ms: executionTime,
-        user_email: userEmail, // <--- Correctly logged
+        user_email: userEmail,
         metadata: { case_id: caseId, client_id: clientId, extracted: extractedInfo }
       });
       await updateRuleStats(base44, ruleId, true);
