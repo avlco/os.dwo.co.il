@@ -196,10 +196,11 @@ Deno.serve(async (req) => {
 
     const normalizedActions = actionsToApprove.map((action, index) => ({
       ...action,
-      action_type: action.action_type || action.action || 'unknown',
       enabled: action.enabled !== undefined ? action.enabled : true,
+      action_type: action.action_type || action.action || 'unknown',
       idempotency_key: action.idempotency_key || `${mailId}_${index}_${Date.now()}`
     }));
+
 
     const mail = await base44.entities.Mail.get(mailId);
     if (!mail) throw new Error(`Mail not found: ${mailId}`);
