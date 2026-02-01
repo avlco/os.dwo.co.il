@@ -13,31 +13,10 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.6';
 
 // --- EMBEDDED EXECUTOR START (To fix "Module not found") ---
 const EMAIL_BRAND = {
-  colors: { primary: '#b62f12', bg: '#f3f4f6', card: '#ffffff', text: '#000000', textLight: '#545454' },
-  logoUrl: 'https://dwo.co.il/wp-content/uploads/2020/04/Drori-Stav-logo-2.png'
+  logoUrl: 'https://dwo.co.il/wp-content/uploads/2020/04/Drori-Stav-logo-2.png',
+  footer: 'DWO - משרד עורכי דין | www.dwo.co.il'
 };
 
-function generateEmailLayout(contentHtml, title, language = 'he') {
-  const dir = language === 'he' ? 'rtl' : 'ltr';
-  return `<!DOCTYPE html>
-<html dir="${dir}" lang="${language}">
-<head><meta charset="UTF-8"><title>${title}</title></head>
-<body style="margin:0;padding:0;background-color:${EMAIL_BRAND.colors.bg};font-family:'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
-  <div style="padding:20px;background-color:${EMAIL_BRAND.colors.bg};">
-    <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%" style="max-width:600px;margin:0 auto;background-color:${EMAIL_BRAND.colors.card};border-radius:8px;overflow:hidden;box-shadow:0 4px 6px rgba(0,0,0,0.05);">
-      <tr><td style="background-color:${EMAIL_BRAND.colors.card};padding:20px;text-align:center;border-bottom:3px solid ${EMAIL_BRAND.colors.primary};">
-        <img src="${EMAIL_BRAND.logoUrl}" alt="DWO" style="height:50px;width:auto;max-width:200px;" />
-      </td></tr>
-      <tr><td style="padding:30px 25px;color:${EMAIL_BRAND.colors.text};line-height:1.6;font-size:16px;" dir="${dir}">
-        ${contentHtml}
-      </td></tr>
-      <tr><td style="background-color:#f8fafc;padding:20px;text-align:center;font-size:12px;color:${EMAIL_BRAND.colors.textLight};border-top:1px solid #e2e8f0;">
-        <p style="margin:0;">DWO - משרד עורכי דין | www.dwo.co.il</p>
-      </td></tr>
-    </table>
-  </div>
-</body></html>`;
-}
 async function executeBatchActions(base44, batch, context) {
   const actions = batch.actions_current || [];
   const results = [];
@@ -52,20 +31,18 @@ async function executeBatchActions(base44, batch, context) {
       const config = action.config || {};
       let result = null;
 
-      // --- Execute based on type ---
       switch (type) {
-                case 'send_email':
-          const brandedBody = generateEmailLayout(
-            `<div style="direction:rtl;text-align:right;">${config.body}</div>`,
-            config.subject
-          );
+        case 'send_email': {
+          const brandedBody = `<!DOCTYPE html><html dir="rtl" lang="he"><head><meta charset="UTF-8"></head><body style="margin:0;padding:20px;background:#f3f4f6;font-family:'Segoe UI',sans-serif;"><div style="max-width:600px;margin:0 auto;background:#fff;border-radius:8px;overflow:hidden;box-shadow:0 4px 6px rgba(0,0,0,0.05);"><div style="padding:20px;text-align:center;border-bottom:3px solid #b62f12;"><img src="${EMAIL_BRAND.logoUrl}" alt="DWO" style="height:50px;" /></div><div style="padding:25px;line-height:1.6;">${config.body}</div><div style="background:#f8fafc;padding:15px;text-align:center;font-size:12px;color:#545454;border-top:1px solid #e2e8f0;">${EMAIL_BRAND.footer}</div></div></body></html>`;
           result = await base44.functions.invoke('sendEmail', {
             to: config.to,
             subject: config.subject,
             body: brandedBody
           });
-          if (result.error) throw new Error(result.error);
+          const resultData = result?.data || result;
+          if (resultData?.error) throw new Error(resultData.error);
           break;
+        }
 
         case 'create_task':
           result = await base44.entities.Task.create({
@@ -89,16 +66,18 @@ async function executeBatchActions(base44, batch, context) {
           });
           break;
           
-        case 'calendar_event':
-           result = await base44.functions.invoke('createCalendarEvent', {
-             ...config,
-             case_id: batch.case_id
-           });
-           if (result.error) throw new Error(result.error);
-           break;
+        case 'calendar_event': {
+          result = await base44.functions.invoke('createCalendarEvent', {
+            ...config,
+            case_id: batch.case_id
+          });
+          const resultData = result?.data || result;
+          if (resultData?.error) throw new Error(resultData.error);
+          break;
+        }
       }
 
-      results.push({ id: action.idempotency_key, status: 'success', data: result });
+      results.push({ id: action.idempotency_key, status: 'success', data: result?.data || 'ok' });
       successCount++;
     } catch (error) {
       console.error(`[Executor] Action failed: ${error.message}`);
