@@ -124,6 +124,12 @@ export default function Settings() {
               {t('settings.automation_rules')}
             </TabsTrigger>
           )}
+          {user?.role === 'admin' && (
+            <TabsTrigger value="taxonomy" className="gap-2 dark:text-slate-300 dark:data-[state=active]:bg-slate-700">
+              <FolderTree className="w-4 h-4" />
+              טקסונומיית מסמכים
+            </TabsTrigger>
+          )}
           <TabsTrigger value="integrations" className="gap-2 dark:text-slate-300 dark:data-[state=active]:bg-slate-700">
             <Link2 className="w-4 h-4" />
             אינטגרציות
@@ -346,6 +352,12 @@ export default function Settings() {
         <TabsContent value="automation">
           <div className="max-w-4xl mx-auto">
             <AutomationRulesManager />
+          </div>
+        </TabsContent>
+
+        <TabsContent value="taxonomy">
+          <div className="max-w-4xl mx-auto">
+            <DocumentTaxonomyManager />
           </div>
         </TabsContent>
 
