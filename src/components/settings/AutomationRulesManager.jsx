@@ -142,7 +142,7 @@ function TokenTextarea({ value, onChange, placeholder, className }) {
   return (
     <div className="space-y-1">
       <div className="flex justify-end"><TokenButton onInsert={handleInsertToken} /></div>
-      <Textarea ref={textareaRef} value={value} onChange={e => onChange(e.target.value)} placeholder={placeholder} className={`min-h-[120px] ${className}`} />
+      <Textarea ref={textareaRef} value={value} onChange={e => onChange(e.target.value)} placeholder={placeholder} className={`min-h-[160px] ${className}`} rows={6} />
     </div>
   );
 }
@@ -417,9 +417,8 @@ export default function AutomationRulesManager() {
                   </p>
                 </div>
                 
-                <div className="flex items-center gap-1">
+                <div className="flex items-center gap-2 flex-row-reverse">
                   <Switch checked={rule.is_active} onCheckedChange={(c) => toggleActive(rule.id, c)} />
-                  <div className="w-2" />
                   
                   <Button variant="ghost" size="icon" onClick={() => openEdit(rule)} title="ערוך חוק">
                     <Edit className="w-4 h-4" />
@@ -527,10 +526,10 @@ export default function AutomationRulesManager() {
               <Button variant="outline" onClick={addMapRow} className="w-full gap-2"><Plus className="w-4 h-4" /> הוסף כלל חילוץ</Button>
             </TabsContent>
 
-            <TabsContent value="actions" className="space-y-4 pt-4">
+            <TabsContent value="actions" className="space-y-6 pt-4">
               
               {/* Billing */}
-              <div className="p-4 border dark:border-slate-700 rounded-lg space-y-3">
+              <div className="p-4 border dark:border-slate-700 rounded-lg space-y-4">
                 <div className="flex items-center gap-2">
                   <Checkbox checked={currentRule.action_bundle.billing.enabled} onCheckedChange={c => updateAction('billing', 'enabled', c)} />
                   <Label className="font-medium">💰 חיוב שעות</Label>
@@ -554,7 +553,7 @@ export default function AutomationRulesManager() {
               </div>
 
               {/* Create Alert */}
-              <div className="p-4 border dark:border-slate-700 rounded-lg space-y-3">
+              <div className="p-4 border dark:border-slate-700 rounded-lg space-y-4">
                 <div className="flex items-center gap-2">
                   <Checkbox checked={currentRule.action_bundle.create_alert.enabled} onCheckedChange={c => updateAction('create_alert', 'enabled', c)} />
                   <Label className="font-medium">🚨 התרעה / דוקטינג</Label>
@@ -622,7 +621,7 @@ export default function AutomationRulesManager() {
               </div>
 
               {/* Calendar Event */}
-              <div className="p-4 border dark:border-slate-700 rounded-lg space-y-3">
+              <div className="p-4 border dark:border-slate-700 rounded-lg space-y-4">
                 <div className="flex items-center gap-2">
                   <Checkbox checked={currentRule.action_bundle.calendar_event.enabled} onCheckedChange={c => updateAction('calendar_event', 'enabled', c)} />
                   <Label className="font-medium">📅 אירוע ביומן</Label>
@@ -698,7 +697,7 @@ export default function AutomationRulesManager() {
               </div>
 
               {/* Send Email */}
-              <div className="p-4 border dark:border-slate-700 rounded-lg space-y-3">
+              <div className="p-4 border dark:border-slate-700 rounded-lg space-y-4">
                 <div className="flex items-center gap-2">
                   <Checkbox checked={currentRule.action_bundle.send_email.enabled} onCheckedChange={c => updateAction('send_email', 'enabled', c)} />
                   <Label className="font-medium">📧 שליחת מייל</Label>
@@ -754,8 +753,8 @@ export default function AutomationRulesManager() {
                 )}
               </div>
 
-                            {/* Save File */}
-              <div className="p-4 border dark:border-slate-700 rounded-lg space-y-3">
+              {/* Save File */}
+              <div className="p-4 border dark:border-slate-700 rounded-lg space-y-4">
                 <div className="flex items-center gap-2">
                   <Checkbox checked={currentRule.action_bundle.save_file.enabled} onCheckedChange={c => updateAction('save_file', 'enabled', c)} />
                   <Label className="font-medium">🗂️ שמירת קבצים ב-Dropbox</Label>

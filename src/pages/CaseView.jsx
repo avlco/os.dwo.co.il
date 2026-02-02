@@ -338,7 +338,7 @@ export default function CaseView() {
       <Tabs defaultValue="details" className="space-y-6">
         <TabsList className="bg-white dark:bg-slate-800 border dark:border-slate-700">
           <TabsTrigger value="details" className="dark:text-slate-300 dark:data-[state=active]:bg-slate-700">פרטים</TabsTrigger>
-          <TabsTrigger value="deadlines" className="dark:text-slate-300 dark:data-[state=active]:bg-slate-700">מועדים</TabsTrigger>
+          <TabsTrigger value="deadlines" className="dark:text-slate-300 dark:data-[state=active]:bg-slate-700">אירועים</TabsTrigger>
           <TabsTrigger value="tasks" className="dark:text-slate-300 dark:data-[state=active]:bg-slate-700">משימות</TabsTrigger>
           <TabsTrigger value="documents" className="dark:text-slate-300 dark:data-[state=active]:bg-slate-700">
             <Cloud className="w-4 h-4 ml-1" />
@@ -376,7 +376,18 @@ export default function CaseView() {
                     {currentCase.grant_date ? format(new Date(currentCase.grant_date), 'dd/MM/yyyy') : '-'}
                   </p>
                 </div>
-                {/* שדה חדש שהוספנו */}
+                <div>
+                  <p className="text-sm text-slate-500">תאריך פקיעה</p>
+                  <p className="font-medium">
+                    {currentCase.expiry_date ? format(new Date(currentCase.expiry_date), 'dd/MM/yyyy') : '-'}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-sm text-slate-500">מועד חידוש</p>
+                  <p className="font-medium">
+                    {currentCase.renewal_date ? format(new Date(currentCase.renewal_date), 'dd/MM/yyyy') : '-'}
+                  </p>
+                </div>
                 <div>
                   <p className="text-sm text-slate-500">תאריך סטטוס רשמי</p>
                   <p className="font-medium">
