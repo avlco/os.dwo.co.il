@@ -262,6 +262,16 @@ async function executeBatchActions(base44, batch, context) {
           } catch (e) { console.warn('[Executor] Failed to create local Deadline:', e.message); }
           break;
         }
+                case 'save_file':
+          result = await base44.functions.invoke('uploadToDropbox', {
+            mailId: batch.mail_id,
+            caseId: batch.case_id,
+            clientId: batch.client_id,
+            documentType: config.document_type || 'other',
+            subfolder: config.subfolder || ''
+          });
+          if (result.error) throw new Error(result.error);
+          break;
       }
 
       results.push({ id: action.idempotency_key, status: 'success', data: result?.data || 'ok' });
