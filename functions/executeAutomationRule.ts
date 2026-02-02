@@ -454,33 +454,35 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Action 4: Save File
+        // Action 4: Save File (via uploadToDropbox)
     if (actions.save_file?.enabled) {
       if (!mail.attachments || mail.attachments.length === 0) {
         results.push({ action: 'save_file', status: 'skipped', reason: 'no_attachments' });
       } else {
-        const folderPath = await replaceTokens(actions.save_file.path_template, { mail, caseId, clientId }, base44);
-        
-        if (testMode) {
-          results.push({ action: 'save_file', status: 'test_skipped', data: { path: folderPath } });
-        } else {
-           try {
-              const supabaseUrl = Deno.env.get('SUPABASE_URL');
-              const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
-              // Using existing helper for download
-              const downloadResponse = await fetch(`${supabaseUrl}/functions/v1/downloadGmailAttachment`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${supabaseServiceKey}` },
-                body: JSON.stringify({ mail_id: mailId, destination_path: folderPath })
-              });
-              if (!downloadResponse.ok) throw new Error(`downloadGmailAttachment failed`);
-              results.push({ action: 'save_file', status: 'success', uploaded: mail.attachments.length, path: folderPath });
-           } catch (error) {
-              results.push({ action: 'save_file', status: 'failed', error: error.message });
-           }
-        }
+        const uploadConfig = {
+          mailId: mailId,
+          caseId: caseId,
+          clientId: clientId,
+          documentType: actions.save_file.document_type || 'other',
+          subfolder: actions.save_file.subfolder || ''
+        };
+
+        await handleAction('save_file', uploadConfig, async () => {
+          const rawResult = await base44.functions.invoke('uploadToDropbox', uploadConfig);
+          const uploadResult = rawResult.data || rawResult;
+
+          if (uploadResult.error) throw new Error(uploadResult.error);
+          results.push({
+            action: 'save_file',
+            status: 'success',
+            uploaded: uploadResult.uploaded,
+            path: uploadResult.dropbox_path,
+            results: uploadResult.results
+          });
+        });
       }
     }
+
 
     // Action 5: Calendar Event
     if (actions.calendar_event?.enabled) {
