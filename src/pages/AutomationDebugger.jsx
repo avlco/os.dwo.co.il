@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
+import { useTranslation } from 'react-i18next';
 import { base44 } from '@/api/base44Client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -22,6 +23,7 @@ import { Link } from 'react-router-dom';
 import { createPageUrl } from '../utils';
 
 export default function AutomationDebugger() {
+  const { t } = useTranslation();
   const [selectedRule, setSelectedRule] = useState(null);
   const [selectedMail, setSelectedMail] = useState(null);
   const [testResults, setTestResults] = useState(null);
@@ -170,16 +172,16 @@ export default function AutomationDebugger() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-slate-800 dark:text-slate-200">
-            Automation Debugger
+            {t('automation_debugger.title')}
           </h1>
           <p className="text-slate-500 dark:text-slate-400 mt-1">
-            כלי דיאגנוסטיקה מתקדם לחוקים ומיילים
+            {t('automation_debugger.subtitle')}
           </p>
         </div>
         <Link to={createPageUrl('MailRoom')}>
           <Button variant="outline" className="gap-2">
             <ArrowRight className="w-4 h-4" />
-            חזרה לחדר דואר
+            {t('mail_rules.back_to_mailroom')}
           </Button>
         </Link>
       </div>
@@ -189,7 +191,7 @@ export default function AutomationDebugger() {
         <div className="space-y-6 lg:col-span-1">
           <Card>
             <CardHeader>
-              <CardTitle className="text-lg">1. בחר חוק לבדיקה</CardTitle>
+              <CardTitle className="text-lg">{t('automation_debugger.select_rule')}</CardTitle>
             </CardHeader>
             <CardContent className="p-0">
               <ScrollArea className="h-[300px]">
@@ -202,7 +204,7 @@ export default function AutomationDebugger() {
                     >
                       <p className="font-medium text-sm">{rule.name}</p>
                       <div className="flex items-center gap-2 mt-1">
-                        <Badge variant="outline" className="text-xs">{rule.is_active ? 'פעיל' : 'לא פעיל'}</Badge>
+                        <Badge variant="outline" className="text-xs">{rule.is_active ? t('common.active') : t('common.inactive')}</Badge>
                       </div>
                     </div>
                   ))}
@@ -213,7 +215,7 @@ export default function AutomationDebugger() {
 
           <Card>
             <CardHeader>
-              <CardTitle className="text-lg">2. בחר מייל לבדיקה</CardTitle>
+              <CardTitle className="text-lg">{t('automation_debugger.select_mail')}</CardTitle>
             </CardHeader>
             <CardContent className="p-0">
               <ScrollArea className="h-[300px]">
@@ -244,15 +246,15 @@ export default function AutomationDebugger() {
               {/* Client Side Analysis */}
               <Card>
                 <CardHeader className="flex flex-row items-center justify-between pb-2">
-                  <CardTitle className="text-lg">ניתוח מקומי (Client-Side)</CardTitle>
+                  <CardTitle className="text-lg">{t('automation_debugger.client_analysis')}</CardTitle>
                   <Button onClick={() => handleTest(selectedRule, selectedMail)} size="sm" variant="outline">
-                    רענן בדיקה
+                    {t('automation_debugger.refresh_test')}
                   </Button>
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-4">
                     <div className="bg-slate-50 dark:bg-slate-900 p-4 rounded-lg">
-                      <h3 className="font-semibold mb-2">שלב 1: Catch (סינון)</h3>
+                      <h3 className="font-semibold mb-2">{t('automation_debugger.catch_phase')}</h3>
                       <div className="space-y-1 text-sm">
                         {testResults?.matches.map((m, i) => <div key={i} className="text-green-700 dark:text-green-400">{m}</div>)}
                         {testResults?.failures.map((f, i) => <div key={i} className="text-red-600 dark:text-red-400">{f}</div>)}
@@ -260,23 +262,23 @@ export default function AutomationDebugger() {
                       
                       {testResults?.isMatch ? (
                          <div className="mt-2 flex items-center text-green-600 font-bold gap-2">
-                           <CheckCircle className="w-5 h-5" /> המייל מתאים לחוק
+                           <CheckCircle className="w-5 h-5" /> {t('automation_debugger.mail_matches')}
                          </div>
                       ) : (
                          <div className="mt-2 flex items-center text-red-600 font-bold gap-2">
-                           <XCircle className="w-5 h-5" /> המייל לא מתאים
+                           <XCircle className="w-5 h-5" /> {t('automation_debugger.mail_not_matches')}
                          </div>
                       )}
                     </div>
 
                     <div className="bg-slate-50 dark:bg-slate-900 p-4 rounded-lg">
-                      <h3 className="font-semibold mb-2">שלב 2: Map (חילוץ)</h3>
+                      <h3 className="font-semibold mb-2">{t('automation_debugger.map_phase')}</h3>
                       {testResults?.mapPreview && testResults.mapPreview.length > 0 ? (
                         <div className="space-y-1 text-sm text-slate-700 dark:text-slate-300">
                           {testResults.mapPreview.map((m, i) => <div key={i}>{m}</div>)}
                         </div>
                       ) : (
-                        <p className="text-sm text-slate-500">לא הוגדרו כללי חילוץ או שלא נמצאו נתונים.</p>
+                        <p className="text-sm text-slate-500">{t('automation_debugger.no_extraction_rules')}</p>
                       )}
                     </div>
                   </div>
@@ -288,27 +290,25 @@ export default function AutomationDebugger() {
                 <CardHeader className="flex flex-row items-center justify-between pb-2 bg-blue-50/50 dark:bg-blue-900/10">
                   <div className="flex items-center gap-2">
                     <Zap className="w-5 h-5 text-blue-600" />
-                    <CardTitle className="text-lg">סימולציית שרת (Server-Side)</CardTitle>
+                    <CardTitle className="text-lg">{t('automation_debugger.server_simulation')}</CardTitle>
                   </div>
                   <Button 
                     onClick={runServerSimulation} 
                     disabled={simulateRuleMutation.isPending}
                     className="bg-blue-600 hover:bg-blue-700"
                   >
-                    {simulateRuleMutation.isPending ? 'מריץ סימולציה...' : 'הפעל סימולציה מלאה'}
+                    {simulateRuleMutation.isPending ? t('automation_debugger.running') : t('automation_debugger.run_simulation')}
                   </Button>
                 </CardHeader>
                 <CardContent className="pt-4">
                   {!simulationResult ? (
                     <p className="text-slate-500 text-center py-4">
-                      לחץ על הכפתור כדי לבצע הרצה "יבשה" (Dry Run) בשרת.
-                      <br/>
-                      הפעולה תבדוק את ה-Dispatch ותחזיר את הפעולות שהיו מבוצעות, ללא שינוי בנתונים.
+                      {t('automation_debugger.dry_run_desc')}
                     </p>
                   ) : simulationResult.error ? (
                     <div className="p-4 bg-red-50 text-red-700 rounded-lg border border-red-200">
                       <div className="flex items-center gap-2 font-bold mb-2">
-                        <AlertCircle className="w-5 h-5" /> שגיאה בביצוע:
+                        <AlertCircle className="w-5 h-5" /> {t('automation_debugger.execution_error')}
                       </div>
                       <pre className="text-xs whitespace-pre-wrap">{simulationResult.error}</pre>
                     </div>
@@ -316,17 +316,17 @@ export default function AutomationDebugger() {
                     <div className="space-y-4">
                       <div className="grid grid-cols-2 gap-4">
                         <div className="p-3 bg-white border rounded shadow-sm">
-                           <span className="text-xs text-slate-500">זמן ריצה</span>
+                           <span className="text-xs text-slate-500">{t('automation_debugger.execution_time')}</span>
                            <p className="font-mono">{simulationResult.execution_time_ms}ms</p>
                         </div>
                         <div className="p-3 bg-white border rounded shadow-sm">
-                           <span className="text-xs text-slate-500">סטטוס</span>
-                           <p className="font-bold text-blue-600">Simulated Success</p>
+                           <span className="text-xs text-slate-500">{t('automation_debugger.status')}</span>
+                           <p className="font-bold text-blue-600">{t('automation_debugger.simulated_success')}</p>
                         </div>
                       </div>
 
                       <div>
-                        <h4 className="font-semibold mb-2 text-sm">פעולות שהיו מבוצעות:</h4>
+                        <h4 className="font-semibold mb-2 text-sm">{t('automation_debugger.actions_performed')}</h4>
                         <div className="space-y-2">
                           {simulationResult.results?.map((res, idx) => (
                             <div key={idx} className={`p-3 rounded border ${res.status === 'success' ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'}`}>
@@ -342,9 +342,8 @@ export default function AutomationDebugger() {
                                   {JSON.stringify(res.data, null, 2)}
                                 </pre>
                               )}
-                              {/* הצגת הערות מיוחדות */}
                               {res.status === 'test_skipped' && (
-                                <p className="text-xs text-slate-500 mt-1">פעולה זו דורשת כתיבה ל-DB ולכן דולגה במצב טסט.</p>
+                                <p className="text-xs text-slate-500 mt-1">{t('automation_debugger.test_skipped')}</p>
                               )}
                             </div>
                           ))}
@@ -358,7 +357,7 @@ export default function AutomationDebugger() {
           ) : (
             <div className="h-full flex flex-col items-center justify-center text-slate-400 border-2 border-dashed rounded-xl min-h-[400px]">
               <Settings className="w-16 h-16 mb-4 opacity-20" />
-              <p className="text-lg">בחר חוק ומייל מהתפריט הצדדי כדי להתחיל</p>
+              <p className="text-lg">{t('automation_debugger.select_rule_and_mail')}</p>
             </div>
           )}
         </div>

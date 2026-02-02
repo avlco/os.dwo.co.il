@@ -248,24 +248,24 @@ export default function ApprovalQueue() {
 
   const columns = [
     {
-      header: 'סטטוס',
+      header: t('approval_queue.status_col'),
       render: (row) => (
         <div className="flex items-center gap-2">
           {getStatusBadge(row.status)}
           {isExpired(row) && row.status === 'pending' && (
             <Badge className="bg-gray-100 text-gray-600">
               <Clock className="w-3 h-3 mr-1" />
-              פג תוקף
+              {t('approval_queue.expired')}
             </Badge>
           )}
         </div>
       ),
     },
     {
-      header: 'סוג פעולה',
+      header: t('approval_queue.action_type_col'),
       render: (row) => {
         const label = row.activity_type === 'automation_log'
-          ? (row.metadata?.rule_name || row.title || 'לוג אוטומציה')
+          ? (row.metadata?.rule_name || row.title || t('approval_queue.automation_log_tab'))
           : getActionTypeLabel(row.metadata?.action_type);
         return (
           <div className="flex items-center gap-2">
@@ -278,7 +278,7 @@ export default function ApprovalQueue() {
       },
     },
     {
-      header: 'תיק',
+      header: t('approval_queue.case_col'),
       render: (row) => (
         <div className="flex items-center gap-2 text-sm">
           <Briefcase className="w-4 h-4 text-slate-500" />
@@ -287,7 +287,7 @@ export default function ApprovalQueue() {
       ),
     },
     {
-      header: 'לקוח',
+      header: t('approval_queue.client_col'),
       render: (row) => (
         <span className="text-sm dark:text-slate-300">
           {getClientName(row.client_id || row.metadata?.client_id)}
@@ -295,7 +295,7 @@ export default function ApprovalQueue() {
       ),
     },
     {
-      header: 'מייל מקורי',
+      header: t('approval_queue.original_mail_col'),
       render: (row) => (
         <div className="flex items-center gap-2 text-sm">
           <Mail className="w-4 h-4 text-slate-500" />
@@ -306,18 +306,18 @@ export default function ApprovalQueue() {
       ),
     },
     {
-      header: 'מבוקש על ידי',
+      header: t('approval_queue.requested_by_col'),
       render: (row) => (
         <div className="flex items-center gap-2 text-sm">
           <User className="w-4 h-4 text-slate-500" />
           <span className="dark:text-slate-400">
-            {row.metadata?.requested_by?.split('@')[0] || row.metadata?.approver_email?.split('@')[0] || row.created_by?.split('@')[0] || 'מערכת'}
+            {row.metadata?.requested_by?.split('@')[0] || row.metadata?.approver_email?.split('@')[0] || row.created_by?.split('@')[0] || t('approval_queue.system_label', 'System')}
           </span>
         </div>
       ),
     },
     {
-      header: 'תאריך',
+      header: t('approval_queue.date_col'),
       render: (row) => {
         const dateToShow = row.activity_type === 'automation_log' && row.metadata?.logged_at
           ? row.metadata.logged_at
@@ -330,7 +330,7 @@ export default function ApprovalQueue() {
       },
     },
     {
-      header: 'פעולות',
+      header: t('approval_queue.actions_col'),
       render: (row) => (
         <div className="flex items-center gap-2">
           {row.status === 'pending' && !isExpired(row) && (
@@ -343,7 +343,7 @@ export default function ApprovalQueue() {
                 disabled={approveMutation.isPending}
               >
                 <CheckCircle className="w-4 h-4 mr-1" />
-                אשר
+                {t('common.approve', 'Approve')}
               </Button>
               <Button
                 size="sm"
@@ -353,7 +353,7 @@ export default function ApprovalQueue() {
                 disabled={rejectMutation.isPending}
               >
                 <XCircle className="w-4 h-4 mr-1" />
-                דחה
+                {t('common.reject', 'Reject')}
               </Button>
             </>
           )}
@@ -362,7 +362,7 @@ export default function ApprovalQueue() {
             variant="ghost"
             onClick={() => openDetailsDialog(row)}
           >
-            פרטים
+            {t('common.details', 'Details')}
           </Button>
         </div>
       ),
@@ -394,9 +394,9 @@ export default function ApprovalQueue() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-slate-800 dark:text-slate-200">תור אישורים</h1>
+          <h1 className="text-2xl font-bold text-slate-800 dark:text-slate-200">{t('approval_queue.title')}</h1>
           <p className="text-slate-500 dark:text-slate-400 mt-1">
-            {pendingBatches + pendingLegacy} בקשות ממתינות
+            {t('approval_queue.pending_requests', { count: pendingBatches + pendingLegacy })}
           </p>
         </div>
         <Button
@@ -405,7 +405,7 @@ export default function ApprovalQueue() {
           className="gap-2"
         >
           <ArrowRight className="w-4 h-4" />
-          חזרה לחדר דואר
+          {t('approval_queue.back_to_mailroom')}
         </Button>
       </div>
 
@@ -416,10 +416,10 @@ export default function ApprovalQueue() {
             <SelectValue />
           </SelectTrigger>
           <SelectContent className="dark:bg-slate-800 dark:border-slate-700">
-            <SelectItem value="pending" className="dark:text-slate-200">ממתינים</SelectItem>
-            <SelectItem value="completed" className="dark:text-slate-200">אושרו</SelectItem>
-            <SelectItem value="cancelled" className="dark:text-slate-200">נדחו/נכשלו</SelectItem>
-            <SelectItem value="all" className="dark:text-slate-200">הכל</SelectItem>
+            <SelectItem value="pending" className="dark:text-slate-200">{t('approval_queue.pending_tab')}</SelectItem>
+            <SelectItem value="completed" className="dark:text-slate-200">{t('approval_queue.executed_tab')}</SelectItem>
+            <SelectItem value="cancelled" className="dark:text-slate-200">{t('approval_queue.failed_tab')}</SelectItem>
+            <SelectItem value="all" className="dark:text-slate-200">{t('common.all')}</SelectItem>
           </SelectContent>
         </Select>
       </div>
@@ -430,10 +430,10 @@ export default function ApprovalQueue() {
           <CardContent className="pt-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-slate-600 dark:text-slate-400">ממתינים</p>
+                <p className="text-sm text-slate-600 dark:text-slate-400">{t('approval_queue.pending_count')}</p>
                 <p className="text-2xl font-bold dark:text-slate-200">
                   {pendingBatches}
-                  {pendingLegacy > 0 && <span className="text-sm text-slate-400 mr-1">(+{pendingLegacy} ישנים)</span>}
+                  {pendingLegacy > 0 && <span className="text-sm text-slate-400 mr-1">(+{pendingLegacy} {t('approval_queue.old_requests')})</span>}
                 </p>
               </div>
               <Clock className="w-8 h-8 text-yellow-600" />
@@ -444,7 +444,7 @@ export default function ApprovalQueue() {
           <CardContent className="pt-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-slate-600 dark:text-slate-400">בוצעו</p>
+                <p className="text-sm text-slate-600 dark:text-slate-400">{t('approval_queue.executed_count')}</p>
                 <p className="text-2xl font-bold text-green-600">
                   {executedBatches}
                 </p>
@@ -457,7 +457,7 @@ export default function ApprovalQueue() {
           <CardContent className="pt-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-slate-600 dark:text-slate-400">בוטלו/נכשלו</p>
+                <p className="text-sm text-slate-600 dark:text-slate-400">{t('approval_queue.failed_count')}</p>
                 <p className="text-2xl font-bold text-red-600">
                   {failedBatches}
                 </p>
@@ -473,12 +473,12 @@ export default function ApprovalQueue() {
         <TabsList>
           <TabsTrigger value="batches" className="gap-2">
             <Package className="w-4 h-4" />
-            חבילות אישור ({batches.length})
+            {t('approval_queue.batches_tab')} ({batches.length})
           </TabsTrigger>
           {legacyApprovals.length > 0 && (
             <TabsTrigger value="legacy" className="gap-2">
               <AlertTriangle className="w-4 h-4" />
-              יומן אוטומציה ({legacyApprovals.length})
+              {t('approval_queue.automation_log_tab')} ({legacyApprovals.length})
             </TabsTrigger>
           )}
         </TabsList>
@@ -488,8 +488,8 @@ export default function ApprovalQueue() {
           {batches.length === 0 && !batchesLoading ? (
             <EmptyState
               icon={CheckCircle}
-              title="אין חבילות אישור"
-              description="כל החבילות טופלו"
+              title={t('approval_queue.no_batches')}
+              description={t('approval_queue.all_processed')}
             />
           ) : (
             <div className="space-y-3">
@@ -508,11 +508,11 @@ export default function ApprovalQueue() {
                             {isExpired && ['pending', 'editing'].includes(batch.status) && (
                               <Badge className="bg-orange-100 text-orange-700">
                                 <Clock className="w-3 h-3 mr-1" />
-                                פג תוקף
+                                {t('approval_queue.expired')}
                               </Badge>
                             )}
                             <span className="text-sm text-slate-500">
-                              {enabledActions}/{totalActions} פעולות
+                              {enabledActions}/{totalActions} {t('approval_queue.actions_count')}
                             </span>
                           </div>
                           
@@ -532,8 +532,8 @@ export default function ApprovalQueue() {
                           </div>
                           
                           <p className="text-xs text-slate-500">
-                            נוצר: {format(new Date(batch.created_date), 'dd/MM/yyyy HH:mm', { locale: he })}
-                            {batch.approved_at && ` | אושר: ${format(new Date(batch.approved_at), 'dd/MM/yyyy HH:mm', { locale: he })}`}
+                            {t('approval_queue.created_at')} {format(new Date(batch.created_date), 'dd/MM/yyyy HH:mm', { locale: he })}
+                            {batch.approved_at && ` | ${t('common.approved', 'Approved')}: ${format(new Date(batch.approved_at), 'dd/MM/yyyy HH:mm', { locale: he })}`}
                           </p>
                         </div>
                         
@@ -551,7 +551,7 @@ export default function ApprovalQueue() {
                                 className="gap-1"
                               >
                                 <Edit className="w-4 h-4" />
-                                עריכה
+                                {t('approval_queue.edit')}
                               </Button>
                             </>
                           )}
@@ -561,7 +561,7 @@ export default function ApprovalQueue() {
                               variant="ghost"
                               onClick={() => navigate(createPageUrl('ApprovalBatchEdit') + `?batchId=${batch.id}`)}
                             >
-                              פרטים
+                              {t('common.details', 'Details')}
                             </Button>
                           )}
                         </div>
@@ -579,8 +579,8 @@ export default function ApprovalQueue() {
           {legacyApprovals.length === 0 ? (
             <EmptyState
               icon={CheckCircle}
-              title="אין פעילות אוטומציה"
-              description="אין רשומות יומן אוטומציה להצגה"
+              title={t('approval_queue.no_automation_activity')}
+              description={t('approval_queue.no_logs')}
             />
           ) : (
             <>
@@ -588,7 +588,7 @@ export default function ApprovalQueue() {
                 columns={columns}
                 data={legacyApprovals}
                 isLoading={legacyLoading}
-                emptyMessage="אין תוצאות"
+                emptyMessage={t('common.no_results', 'No results')}
               />
             </>
           )}

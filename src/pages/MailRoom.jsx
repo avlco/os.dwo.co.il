@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query';
 import { base44 } from '@/api/base44Client';
+import { useTranslation } from 'react-i18next';
 import { PageHeader } from "../components/ui/PageHeader";
 import { Button } from "../components/ui/button";
 import { Mail, RefreshCw, CheckCircle, Clock, Loader2, Settings, Activity, Zap, AlertCircle, CheckCircle2, XCircle, Bug, Inbox, Filter, ListChecks } from 'lucide-react';
@@ -10,12 +11,15 @@ import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../components/ui/tabs";
 import { useToast } from "../components/ui/use-toast";
 import { format } from 'date-fns';
-import { he } from 'date-fns/locale';
+import { he, enUS } from 'date-fns/locale';
 import { Skeleton } from "../components/ui/skeleton";
 import MailThreadCard from "../components/mailroom/MailThreadCard";
 import AutomationLogCard from "../components/mailroom/AutomationLogCard";
 
 export default function MailRoom() {
+  const { t, i18n } = useTranslation();
+  const isRTL = i18n.language === 'he';
+  const dateLocale = isRTL ? he : enUS;
   const queryClient = useQueryClient();
   const { toast } = useToast();
   
@@ -55,8 +59,8 @@ export default function MailRoom() {
     onSuccess: (data) => {
       const count = data?.synced || 0;
       toast({ 
-        title: "סנכרון הושלם", 
-        description: count > 0 ? `נוספו ${count} מיילים חדשים.` : "לא נמצאו מיילים חדשים." 
+        title: t('mail_room.sync_completed', 'Sync Completed'), 
+        description: count > 0 ? t('mail_room.new_mails_added', { count }, `${count} new emails added.`) : t('mail_room.no_new_mails', 'No new emails found.') 
       });
       setLastSyncTime(new Date());
       setNextSyncIn(300);
@@ -67,8 +71,8 @@ export default function MailRoom() {
     onError: (err) => {
       toast({ 
         variant: "destructive", 
-        title: "שגיאת סנכרון", 
-        description: err.message || "נכשל בסנכרון מיילים." 
+        title: t('mail_room.sync_error', 'Sync Error'), 
+        description: err.message || t('mail_room.sync_failed', 'Failed to sync emails.') 
       });
     }
   });
@@ -184,7 +188,7 @@ export default function MailRoom() {
 
   const handleRefresh = async () => {
     await refetch();
-    toast({ description: "הנתונים רועננו" });
+    toast({ description: t('mail_room.data_refreshed', 'Data refreshed') });
   };
 
   const isLoading = isLoadingMails || isLoadingLogs;
@@ -192,62 +196,62 @@ export default function MailRoom() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="חדר דואר"
-        subtitle="ניהול ועיבוד מיילים אוטומטי"
+        title={t('mail_room.title')}
+        subtitle={t('mail_room.subtitle')}
         icon={<Mail className="w-6 h-6" />}
       />
 
-      {/* כרטיסי סטטיסטיקות */}
+      {/* Stats Cards */}
       <div className="grid gap-4 md:grid-cols-4">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium">דואר נכנס</CardTitle>
+            <CardTitle className="text-sm font-medium">{t('mail_room.inbox_tab')}</CardTitle>
             <Inbox className="w-4 h-4 text-blue-500" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{stats.inboxCount}</div>
-            <p className="text-xs text-slate-500 mt-1">שיחות חדשות</p>
+            <p className="text-xs text-slate-500 mt-1">{t('mail_room.new_conversations')}</p>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium">מיילים לאוטומציה</CardTitle>
+            <CardTitle className="text-sm font-medium">{t('mail_room.automation_mails_tab')}</CardTitle>
             <Filter className="w-4 h-4 text-amber-500" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{stats.automationCount}</div>
-            <p className="text-xs text-slate-500 mt-1">זוהו לעיבוד</p>
+            <p className="text-xs text-slate-500 mt-1">{t('mail_room.identified_for_processing')}</p>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium">אחוז הצלחה</CardTitle>
+            <CardTitle className="text-sm font-medium">{t('common.success_rate')}</CardTitle>
             <CheckCircle2 className="w-4 h-4 text-green-600" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-green-600">{stats.successRate}%</div>
-            <p className="text-xs text-slate-500 mt-1">{stats.successLogs} מתוך {stats.totalLogs}</p>
+            <p className="text-xs text-slate-500 mt-1">{stats.successLogs} {t('mail_room.out_of')} {stats.totalLogs}</p>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium">כישלונות</CardTitle>
+            <CardTitle className="text-sm font-medium">{t('common.failures')}</CardTitle>
             <AlertCircle className="w-4 h-4 text-red-500" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-red-600">{stats.failedLogs}</div>
-            <p className="text-xs text-slate-500 mt-1">אוטומציות שנכשלו</p>
+            <p className="text-xs text-slate-500 mt-1">{t('common.failed_automations')}</p>
           </CardContent>
         </Card>
       </div>
 
-      {/* כרטיס ראשי */}
+      {/* Main Card */}
       <Card>
         <CardContent className="pt-6">
-          {/* כפתורי פעולה */}
+          {/* Action Buttons */}
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-3">
               <Button
@@ -257,9 +261,9 @@ export default function MailRoom() {
                 className="gap-2"
               >
                 {syncMutation.isPending ? (
-                  <><Loader2 className="w-4 h-4 animate-spin" />מסנכרן...</>
+                  <><Loader2 className="w-4 h-4 animate-spin" />{t('common.loading')}</>
                 ) : (
-                  <><RefreshCw className="w-4 h-4" />סנכרן עכשיו</>
+                  <><RefreshCw className="w-4 h-4" />{t('common.sync_now')}</>
                 )}
               </Button>
               <Button onClick={handleRefresh} size="sm" variant="outline">
@@ -267,52 +271,52 @@ export default function MailRoom() {
               </Button>
               <Link to={createPageUrl('ApprovalQueue')}>
                 <Button variant="outline" size="sm" className="gap-2">
-                  <CheckCircle className="w-4 h-4" />תור אישורים
+                  <CheckCircle className="w-4 h-4" />{t('mail_room.approval_queue')}
                 </Button>
               </Link>
               <Link to={createPageUrl('AutomationRules')}>
                 <Button variant="outline" size="sm" className="gap-2">
-                  <Settings className="w-4 h-4" />חוקי אוטומציה
+                  <Settings className="w-4 h-4" />{t('mail_room.automation_rules')}
                 </Button>
               </Link>
               <Link to={createPageUrl('AutomationDebugger')}>
                 <Button variant="outline" size="sm" className="gap-2">
-                  <Bug className="w-4 h-4" />דיבאג
+                  <Bug className="w-4 h-4" />{t('mail_room.debug')}
                 </Button>
               </Link>
             </div>
             
-            {/* טיימר סנכרון */}
+            {/* Sync Timer */}
             <div className="text-sm text-slate-500 flex items-center gap-2">
               <Clock className="w-4 h-4" />
               {lastSyncTime ? (
-                <span>סנכרון אחרון: {format(lastSyncTime, 'HH:mm', { locale: he })}</span>
+                <span>{t('mail_room.last_sync', 'Last sync')}: {format(lastSyncTime, 'HH:mm', { locale: dateLocale })}</span>
               ) : (
-                <span>טרם בוצע סנכרון</span>
+                <span>{t('common.not_synced_yet')}</span>
               )}
               <span className="text-slate-400">|</span>
-              <span className="font-medium">הבא בעוד: {formatTime(nextSyncIn)}</span>
+              <span className="font-medium">{t('common.next_in')} {formatTime(nextSyncIn)}</span>
             </div>
           </div>
 
-          {/* לשוניות */}
+          {/* Tabs */}
           <Tabs value={activeTab} onValueChange={setActiveTab}>
             <TabsList className="grid w-full grid-cols-3">
               <TabsTrigger value="inbox" className="gap-2">
                 <Inbox className="w-4 h-4" />
-                דואר נכנס ({stats.inboxCount})
+                {t('mail_room.inbox_tab')} ({stats.inboxCount})
               </TabsTrigger>
               <TabsTrigger value="automation" className="gap-2">
                 <Filter className="w-4 h-4" />
-                מיילים לאוטומציה ({stats.automationCount})
+                {t('mail_room.automation_mails_tab')} ({stats.automationCount})
               </TabsTrigger>
               <TabsTrigger value="logs" className="gap-2">
                 <ListChecks className="w-4 h-4" />
-                יומן אוטומציה ({stats.totalLogs})
+                {t('mail_room.automation_log_tab')} ({stats.totalLogs})
               </TabsTrigger>
             </TabsList>
 
-            {/* תוכן: דואר נכנס */}
+            {/* Inbox Content */}
             <TabsContent value="inbox" className="mt-4">
               {isLoading ? (
                 <div className="space-y-3">
@@ -321,8 +325,8 @@ export default function MailRoom() {
               ) : filteredThreads.length === 0 ? (
                 <div className="text-center py-12 text-slate-500">
                   <Inbox className="w-12 h-12 mx-auto mb-4 opacity-50" />
-                  <p>אין מיילים חדשים</p>
-                  <p className="text-sm mt-2">כל המיילים עברו עיבוד או נמצאים בלשוניות אחרות</p>
+                  <p>{t('mail_room.no_emails')}</p>
+                  <p className="text-sm mt-2">{t('mail_room.all_processed_hint', 'All emails have been processed or are in other tabs')}</p>
                 </div>
               ) : (
                 <div className="space-y-3">
@@ -337,7 +341,7 @@ export default function MailRoom() {
               )}
             </TabsContent>
 
-            {/* תוכן: מיילים לאוטומציה */}
+            {/* Automation Mails Content */}
             <TabsContent value="automation" className="mt-4">
               {isLoading ? (
                 <div className="space-y-3">
@@ -346,8 +350,8 @@ export default function MailRoom() {
               ) : filteredThreads.length === 0 ? (
                 <div className="text-center py-12 text-slate-500">
                   <Filter className="w-12 h-12 mx-auto mb-4 opacity-50" />
-                  <p>אין מיילים שזוהו לאוטומציה</p>
-                  <p className="text-sm mt-2">מיילים שיענו לחוקי אוטומציה יופיעו כאן</p>
+                  <p>{t('mail_room.no_automation_mails', 'No emails identified for automation')}</p>
+                  <p className="text-sm mt-2">{t('mail_room.automation_mails_hint', 'Emails matching automation rules will appear here')}</p>
                 </div>
               ) : (
                 <div className="space-y-3">
@@ -362,7 +366,7 @@ export default function MailRoom() {
               )}
             </TabsContent>
 
-            {/* תוכן: יומן אוטומציה */}
+            {/* Automation Log Content */}
             <TabsContent value="logs" className="mt-4">
               {isLoadingLogs ? (
                 <div className="space-y-3">
@@ -371,8 +375,8 @@ export default function MailRoom() {
               ) : recentLogs.length === 0 ? (
                 <div className="text-center py-12 text-slate-500">
                   <Activity className="w-12 h-12 mx-auto mb-4 opacity-50" />
-                  <p>אין פעילות אוטומציה עדיין</p>
-                  <p className="text-sm mt-2">כאשר חוקי אוטומציה ירוצו, הפעילות תוצג כאן</p>
+                  <p>{t('approval_queue.no_automation_activity')}</p>
+                  <p className="text-sm mt-2">{t('mail_room.automation_log_hint', 'When automation rules run, activity will be displayed here')}</p>
                 </div>
               ) : (
                 <div className="space-y-3">

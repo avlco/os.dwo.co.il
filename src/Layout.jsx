@@ -241,13 +241,13 @@ function LayoutContent({ children, currentPageName }) {
                         size="sm" 
                         className="h-auto p-0 text-xs text-blue-600 dark:text-blue-400 hover:underline"
                       >
-                        סמן הכל כנקרא
+                        {t('common.mark_all_as_read')}
                       </Button>
                     </div>
                     <div className="space-y-2">
                       {/* Empty state */}
                       <div className="text-sm text-slate-500 dark:text-slate-400 text-center py-8">
-                        אין הודעות חדשות
+                        {t('common.no_new_notifications')}
                       </div>
                       
                       {/* Example notifications (you can remove these later) */}
@@ -267,7 +267,7 @@ function LayoutContent({ children, currentPageName }) {
                   <div className="p-2">
                     <Link to={createPageUrl('Settings')}>
                       <Button variant="ghost" className="w-full justify-center text-sm dark:text-slate-200 dark:hover:bg-slate-700">
-                        הגדרות הודעות
+                        {t('common.notification_settings')}
                       </Button>
                     </Link>
                   </div>
