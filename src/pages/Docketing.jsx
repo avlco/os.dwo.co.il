@@ -200,9 +200,9 @@ export default function Docketing() {
                           key={day.toISOString()}
                           onClick={() => {
                             setSelectedDate(day);
-                            if (dayDeadlines.length === 0) {
-                              openCreateDialog(day);
-                            }
+                          }}
+                          onDoubleClick={() => {
+                            openCreateDialog(day);
                           }}
                           className={`
                             aspect-square p-1 rounded-lg text-sm transition-colors relative

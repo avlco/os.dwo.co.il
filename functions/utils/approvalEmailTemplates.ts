@@ -62,12 +62,29 @@ export function renderApprovalEmail(data) {
   const dir = isRTL ? 'rtl' : 'ltr';
   const align = isRTL ? 'right' : 'left';
 
-  // Build actions list
+  // Build actions list with details
   const enabledActions = (batch.actions_current || []).filter(a => a.enabled);
   const actionsList = enabledActions
     .map(a => {
       const label = t.actionLabels[a.action_type] || a.action_type;
-      return `<li style="padding: 4px 0;">${label}</li>`;
+      const config = a.config || {};
+      let details = '';
+      
+      // Add action-specific details
+      if (a.action_type === 'billing' && config.hours) {
+        details = ` <span style="color: #64748b; font-size: 12px;">(${config.hours} ${language === 'he' ? 'שעות' : 'hours'})</span>`;
+      } else if (a.action_type === 'calendar_event' && config.title_template) {
+        details = ` <span style="color: #64748b; font-size: 12px;">(${config.title_template})</span>`;
+      } else if (a.action_type === 'create_alert' && config.alert_type) {
+        const alertTypes = { reminder: language === 'he' ? 'תזכורת' : 'Reminder', deadline: language === 'he' ? 'מועד' : 'Deadline', urgent: language === 'he' ? 'דחוף' : 'Urgent' };
+        details = ` <span style="color: #64748b; font-size: 12px;">(${alertTypes[config.alert_type] || config.alert_type})</span>`;
+      } else if (a.action_type === 'save_file' && config.document_type) {
+        details = ` <span style="color: #64748b; font-size: 12px;">(${config.document_type})</span>`;
+      }
+      
+      return `<li style="padding: 6px 0; border-bottom: 1px solid #e2e8f0;">
+        <strong style="color: #1e293b;">${label}</strong>${details}
+      </li>`;
     })
     .join('');
 
@@ -128,7 +145,7 @@ export function renderApprovalEmail(data) {
           <h3 style="margin: 0 0 12px 0; color: #1e293b; font-size: 16px; font-weight: 600;">
             ${t.actions} (${actionsCountText})
           </h3>
-          <ul style="margin: 0; padding: ${isRTL ? '0 20px 0 0' : '0 0 0 20px'}; color: #475569; font-size: 14px; list-style-type: disc;">
+          <ul style="margin: 0; padding: 0; color: #475569; font-size: 14px; list-style-type: none; background: #f8fafc; border-radius: 8px; overflow: hidden;">
             ${actionsList}
           </ul>
         </div>

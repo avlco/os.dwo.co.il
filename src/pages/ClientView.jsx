@@ -173,9 +173,54 @@ export default function ClientView() {
   const paymentTerms = [{ value: 'immediate', label: 'מיידי' }, { value: 'net_30', label: 'שוטף + 30' }, { value: 'net_60', label: 'שוטף + 60' }];
   const currencies = [{ value: 'ILS', label: '₪ ILS' }, { value: 'USD', label: '$ USD' }, { value: 'EUR', label: '€ EUR' }];
 
+  // Helper: Get case type icon
+  const getCaseTypeIcon = (type) => {
+    const icons = {
+      patent: '💡',
+      trademark: '®️',
+      design: '🎨',
+      copyright: '©️',
+      litigation: '⚖️',
+      opposition: '🛡️'
+    };
+    return icons[type] || '📁';
+  };
+
+  // Helper: Get country flag
+  const getCountryFlag = (territory) => {
+    const flags = {
+      'IL': '🇮🇱', 'US': '🇺🇸', 'EU': '🇪🇺', 'GB': '🇬🇧', 'DE': '🇩🇪', 
+      'FR': '🇫🇷', 'CN': '🇨🇳', 'JP': '🇯🇵', 'KR': '🇰🇷', 'IN': '🇮🇳',
+      'AU': '🇦🇺', 'CA': '🇨🇦', 'BR': '🇧🇷', 'RU': '🇷🇺', 'MX': '🇲🇽'
+    };
+    return flags[territory?.toUpperCase()] || '🌍';
+  };
+
   const caseColumns = [
-    { header: 'מספר תיק', accessorKey: 'case_number', cell: ({ row }) => <span className="font-bold">{row.original.case_number}</span> },
+    { 
+      header: 'סוג', 
+      accessorKey: 'case_type', 
+      cell: ({ row }) => (
+        <span className="text-lg" title={row.original.case_type}>
+          {getCaseTypeIcon(row.original.case_type)}
+        </span>
+      )
+    },
+    { 
+      header: 'מספר תיק', 
+      accessorKey: 'case_number', 
+      cell: ({ row }) => <span className="font-bold">{row.original.case_number}</span> 
+    },
     { header: 'כותרת', accessorKey: 'title' },
+    { 
+      header: 'מדינה', 
+      accessorKey: 'territory', 
+      cell: ({ row }) => (
+        <span className="text-lg" title={row.original.territory}>
+          {getCountryFlag(row.original.territory)}
+        </span>
+      )
+    },
     { header: 'סטטוס', accessorKey: 'status', cell: ({ row }) => <StatusBadge status={row.original.status} /> }
   ];
 
