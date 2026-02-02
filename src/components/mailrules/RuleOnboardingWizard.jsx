@@ -73,11 +73,11 @@ const actionTemplates = [
     icon: Calendar,
     defaultConfig: { days_offset: 30, deadline_type: 'office_action_response' }
   },
-  { 
-    type: 'upload_to_dropbox', 
-    label: { he: 'העלאה ל-Dropbox', en: 'Upload to Dropbox' },
+    { 
+    type: 'save_file', 
+    label: { he: 'שמירת קבצים ב-Dropbox', en: 'Save Files to Dropbox' },
     icon: Cloud,
-    defaultConfig: { dropbox_folder_path: '/Cases/{{case_number}}' }
+    defaultConfig: { document_type: 'other' }
   },
   { 
     type: 'create_calendar_event', 
