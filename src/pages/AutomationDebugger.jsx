@@ -306,7 +306,7 @@ export default function AutomationDebugger() {
                       {t('automation_debugger.dry_run_desc')}
                     </p>
                   ) : simulationResult.error ? (
-                    <div className="p-4 bg-red-50 text-red-700 rounded-lg border border-red-200">
+                    <div className="p-4 bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300 rounded-lg border border-red-200 dark:border-red-700">
                       <div className="flex items-center gap-2 font-bold mb-2">
                         <AlertCircle className="w-5 h-5" /> {t('automation_debugger.execution_error')}
                       </div>
@@ -315,13 +315,13 @@ export default function AutomationDebugger() {
                   ) : (
                     <div className="space-y-4">
                       <div className="grid grid-cols-2 gap-4">
-                        <div className="p-3 bg-white border rounded shadow-sm">
-                           <span className="text-xs text-slate-500">{t('automation_debugger.execution_time')}</span>
-                           <p className="font-mono">{simulationResult.execution_time_ms}ms</p>
+                        <div className="p-3 bg-white dark:bg-slate-900 border dark:border-slate-700 rounded shadow-sm">
+                           <span className="text-xs text-slate-500 dark:text-slate-400">{t('automation_debugger.execution_time')}</span>
+                           <p className="font-mono dark:text-slate-200">{simulationResult.execution_time_ms}ms</p>
                         </div>
-                        <div className="p-3 bg-white border rounded shadow-sm">
-                           <span className="text-xs text-slate-500">{t('automation_debugger.status')}</span>
-                           <p className="font-bold text-blue-600">{t('automation_debugger.simulated_success')}</p>
+                        <div className="p-3 bg-white dark:bg-slate-900 border dark:border-slate-700 rounded shadow-sm">
+                           <span className="text-xs text-slate-500 dark:text-slate-400">{t('automation_debugger.status')}</span>
+                           <p className="font-bold text-blue-600 dark:text-blue-400">{t('automation_debugger.simulated_success')}</p>
                         </div>
                       </div>
 
@@ -329,7 +329,7 @@ export default function AutomationDebugger() {
                         <h4 className="font-semibold mb-2 text-sm">{t('automation_debugger.actions_performed')}</h4>
                         <div className="space-y-2">
                           {simulationResult.results?.map((res, idx) => (
-                            <div key={idx} className={`p-3 rounded border ${res.status === 'success' ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'}`}>
+                            <div key={idx} className={`p-3 rounded border ${res.status === 'success' ? 'bg-green-50 border-green-200 dark:bg-green-900/20 dark:border-green-700' : 'bg-red-50 border-red-200 dark:bg-red-900/20 dark:border-red-700'}`}>
                               <div className="flex justify-between">
                                 <span className="font-bold text-sm uppercase">{res.action}</span>
                                 <Badge variant={res.status === 'success' ? 'outline' : 'destructive'}>{res.status}</Badge>
@@ -338,7 +338,7 @@ export default function AutomationDebugger() {
                                 <p className="text-xs text-red-600 mt-1">{res.error}</p>
                               )}
                               {res.data && (
-                                <pre className="text-[10px] mt-2 bg-white/50 p-1 rounded overflow-auto">
+                                <pre className="text-[10px] mt-2 bg-white/50 dark:bg-slate-800/50 dark:text-slate-300 p-1 rounded overflow-auto">
                                   {JSON.stringify(res.data, null, 2)}
                                 </pre>
                               )}
@@ -355,9 +355,9 @@ export default function AutomationDebugger() {
               </Card>
             </>
           ) : (
-            <div className="h-full flex flex-col items-center justify-center text-slate-400 border-2 border-dashed rounded-xl min-h-[400px]">
+            <div className="h-full flex flex-col items-center justify-center text-slate-400 dark:text-slate-500 border-2 border-dashed dark:border-slate-700 rounded-xl min-h-[400px]">
               <Settings className="w-16 h-16 mb-4 opacity-20" />
-              <p className="text-lg">{t('automation_debugger.select_rule_and_mail')}</p>
+              <p className="text-lg dark:text-slate-400">{t('automation_debugger.select_rule_and_mail')}</p>
             </div>
           )}
         </div>

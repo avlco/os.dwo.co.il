@@ -56,11 +56,11 @@ export default function AutomationLogCard({ log, relatedMail }) {
   };
 
   const getStatusBadge = () => {
-    if (isSuccess) return { label: 'הצליח', color: 'bg-green-100 text-green-800' };
-    if (isPartialSuccess) return { label: 'הצליח חלקית', color: 'bg-amber-100 text-amber-800' };
-    if (isCancelled) return { label: 'בוטל', color: 'bg-gray-100 text-gray-700' };
-    if (isPending) return { label: 'ממתין לאישור', color: 'bg-blue-100 text-blue-800' };
-    return { label: 'נכשל', color: 'bg-red-100 text-red-800' };
+    if (isSuccess) return { label: 'הצליח', color: 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300' };
+    if (isPartialSuccess) return { label: 'הצליח חלקית', color: 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300' };
+    if (isCancelled) return { label: 'בוטל', color: 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300' };
+    if (isPending) return { label: 'ממתין לאישור', color: 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300' };
+    return { label: 'נכשל', color: 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300' };
   };
 
   const statusBadge = getStatusBadge();
@@ -119,35 +119,35 @@ export default function AutomationLogCard({ log, relatedMail }) {
                     if (typeof action === 'string') {
                       if (action.includes('✅')) {
                         actionStatusText = '✅';
-                        actionBadgeClass = 'bg-green-50 border-green-200';
+                        actionBadgeClass = 'bg-green-50 border-green-200 dark:bg-green-900/30 dark:border-green-700 dark:text-green-300';
                       } else if (action.includes('⏸️') || action.includes('Batch')) {
                         actionStatusText = '⏳';
-                        actionBadgeClass = 'bg-blue-50 border-blue-200';
+                        actionBadgeClass = 'bg-blue-50 border-blue-200 dark:bg-blue-900/30 dark:border-blue-700 dark:text-blue-300';
                       } else if (action.includes('⏭️')) {
                         actionStatusText = '⏭️';
-                        actionBadgeClass = 'bg-gray-50 border-gray-200';
+                        actionBadgeClass = 'bg-gray-50 border-gray-200 dark:bg-gray-800 dark:border-gray-600 dark:text-gray-300';
                       } else {
                         actionStatusText = '❌';
-                        actionBadgeClass = 'bg-red-50 border-red-200';
+                        actionBadgeClass = 'bg-red-50 border-red-200 dark:bg-red-900/30 dark:border-red-700 dark:text-red-300';
                       }
                     } else {
                       switch (action.status) {
                         case 'success':
                           actionStatusText = '✅';
-                          actionBadgeClass = 'bg-green-50 border-green-200';
+                          actionBadgeClass = 'bg-green-50 border-green-200 dark:bg-green-900/30 dark:border-green-700 dark:text-green-300';
                           break;
                         case 'pending_batch':
                           actionStatusText = '⏳';
-                          actionBadgeClass = 'bg-blue-50 border-blue-200';
+                          actionBadgeClass = 'bg-blue-50 border-blue-200 dark:bg-blue-900/30 dark:border-blue-700 dark:text-blue-300';
                           break;
                         case 'skipped':
                           actionStatusText = '⏭️';
-                          actionBadgeClass = 'bg-gray-50 border-gray-200';
+                          actionBadgeClass = 'bg-gray-50 border-gray-200 dark:bg-gray-800 dark:border-gray-600 dark:text-gray-300';
                           break;
                         case 'failed':
                         default:
                           actionStatusText = '❌';
-                          actionBadgeClass = 'bg-red-50 border-red-200';
+                          actionBadgeClass = 'bg-red-50 border-red-200 dark:bg-red-900/30 dark:border-red-700 dark:text-red-300';
                           break;
                       }
                     }
