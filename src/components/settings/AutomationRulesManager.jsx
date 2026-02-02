@@ -634,37 +634,6 @@ export default function AutomationRulesManager() {
                 )}
               </div>
 
-                    {/* English Alert */}
-                    <div className="mt-4 pt-4 border-t border-slate-200 dark:border-slate-700">
-                        <div className="flex items-center gap-2 mb-3">
-                            <Switch 
-                              checked={currentRule.action_bundle.create_alert.enable_english || false} 
-                              onCheckedChange={c => updateAction('create_alert', 'enable_english', c)} 
-                            />
-                            <Label className="text-sm text-blue-600 dark:text-blue-400 font-medium">{t('automation_rules.add_english_version')}</Label>
-                        </div>
-                        {currentRule.action_bundle.create_alert.enable_english && (
-                            <div className="space-y-3 p-3 bg-slate-50 dark:bg-slate-900 rounded border border-slate-200 dark:border-slate-700">
-                                <div>
-                                    <Label className="text-sm">English Message</Label>
-                                    <TokenInput 
-                                      value={currentRule.action_bundle.create_alert.message_template_en || ''} 
-                                      onChange={v => updateAction('create_alert', 'message_template_en', v)} 
-                                      placeholder="Alert for case {Case_No}" 
-                                    />
-                                </div>
-                            </div>
-                        )}
-                    </div>
-
-                    <div>
-                      <Label className="text-sm">{t('automation_rules.recipients')}</Label>
-                      <RecipientsSelect value={currentRule.action_bundle.create_alert.recipients} onChange={v => updateAction('create_alert', 'recipients', v)} />
-                    </div>
-                  </div>
-                )}
-              </div>
-
               {/* Calendar Event */}
               <div className="p-4 border dark:border-slate-700 rounded-lg space-y-4">
                 <div className="flex items-center gap-2">
@@ -730,12 +699,12 @@ export default function AutomationRulesManager() {
                     </div>
 
                     <div>
-                      <Label className="text-sm">משתתפים</Label>
+                      <Label className="text-sm">{t('automation_rules.participants')}</Label>
                       <RecipientsSelect value={currentRule.action_bundle.calendar_event.attendees} onChange={v => updateAction('calendar_event', 'attendees', v)} />
                     </div>
                     <div className="flex items-center gap-2">
                       <Checkbox checked={currentRule.action_bundle.calendar_event.create_meet_link} onCheckedChange={c => updateAction('calendar_event', 'create_meet_link', c)} />
-                      <Label className="text-sm">צור קישור וידאו</Label>
+                      <Label className="text-sm">{t('automation_rules.create_video_link')}</Label>
                     </div>
                   </div>
                 )}
