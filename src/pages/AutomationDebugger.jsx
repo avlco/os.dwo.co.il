@@ -253,7 +253,7 @@ export default function AutomationDebugger() {
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-4">
-                    <div className="bg-slate-50 dark:bg-slate-900 p-4 rounded-lg">
+                    <div className="bg-slate-50 dark:bg-slate-800 p-4 rounded-lg">
                       <h3 className="font-semibold mb-2">{t('automation_debugger.catch_phase')}</h3>
                       <div className="space-y-1 text-sm">
                         {testResults?.matches.map((m, i) => <div key={i} className="text-green-700 dark:text-green-400">{m}</div>)}
@@ -271,7 +271,7 @@ export default function AutomationDebugger() {
                       )}
                     </div>
 
-                    <div className="bg-slate-50 dark:bg-slate-900 p-4 rounded-lg">
+                    <div className="bg-slate-50 dark:bg-slate-800 p-4 rounded-lg">
                       <h3 className="font-semibold mb-2">{t('automation_debugger.map_phase')}</h3>
                       {testResults?.mapPreview && testResults.mapPreview.length > 0 ? (
                         <div className="space-y-1 text-sm text-slate-700 dark:text-slate-300">
@@ -315,11 +315,11 @@ export default function AutomationDebugger() {
                   ) : (
                     <div className="space-y-4">
                       <div className="grid grid-cols-2 gap-4">
-                        <div className="p-3 bg-white dark:bg-slate-900 border dark:border-slate-700 rounded shadow-sm">
+                        <div className="p-3 bg-white dark:bg-slate-800 border dark:border-slate-700 rounded shadow-sm">
                            <span className="text-xs text-slate-500 dark:text-slate-400">{t('automation_debugger.execution_time')}</span>
                            <p className="font-mono dark:text-slate-200">{simulationResult.execution_time_ms}ms</p>
                         </div>
-                        <div className="p-3 bg-white dark:bg-slate-900 border dark:border-slate-700 rounded shadow-sm">
+                        <div className="p-3 bg-white dark:bg-slate-800 border dark:border-slate-700 rounded shadow-sm">
                            <span className="text-xs text-slate-500 dark:text-slate-400">{t('automation_debugger.status')}</span>
                            <p className="font-bold text-blue-600 dark:text-blue-400">{t('automation_debugger.simulated_success')}</p>
                         </div>

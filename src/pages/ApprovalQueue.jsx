@@ -412,7 +412,7 @@ export default function ApprovalQueue() {
       {/* Filters */}
       <div className="flex gap-4 items-center">
         <Select value={filterStatus} onValueChange={setFilterStatus}>
-          <SelectTrigger className="w-48 bg-white dark:bg-slate-800 dark:border-slate-700">
+          <SelectTrigger className="w-48 bg-white dark:bg-slate-800 dark:border-slate-700 dark:text-slate-200">
             <SelectValue />
           </SelectTrigger>
           <SelectContent className="dark:bg-slate-800 dark:border-slate-700">
@@ -499,7 +499,7 @@ export default function ApprovalQueue() {
                 const totalActions = (batch.actions_current || []).length;
                 
                 return (
-                  <Card key={batch.id} className="hover:shadow-md transition-shadow">
+                  <Card key={batch.id} className="hover:shadow-md transition-shadow dark:bg-slate-800 dark:border-slate-700">
                     <CardContent className="pt-4">
                       <div className="flex items-start justify-between">
                         <div className="flex-1 space-y-2">
@@ -668,7 +668,7 @@ export default function ApprovalQueue() {
               {selectedApproval.metadata?.action_config && (
                 <div>
                   <Label className="text-sm text-slate-600 dark:text-slate-400">פרטי הפעולה</Label>
-                  <pre className="mt-2 p-3 bg-slate-50 dark:bg-slate-900 rounded text-xs overflow-auto max-h-40 dark:text-slate-300">
+                  <pre className="mt-2 p-3 bg-slate-50 dark:bg-slate-800 rounded text-xs overflow-auto max-h-40 dark:text-slate-300">
                     {JSON.stringify(selectedApproval.metadata.action_config, null, 2)}
                   </pre>
                 </div>

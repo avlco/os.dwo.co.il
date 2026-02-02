@@ -416,7 +416,7 @@ return response;
 
                     {/* Read-only view for non-editable */}
                     {(!isEditable || !action.enabled) && action.config && (
-                      <pre className="text-xs bg-slate-50 dark:bg-slate-800 p-2 rounded overflow-auto max-h-32">
+                      <pre className="text-xs bg-slate-50 dark:bg-slate-800 p-2 rounded overflow-auto max-h-32 dark:text-slate-300">
                         {JSON.stringify(action.config, null, 2)}
                       </pre>
                     )}
@@ -469,7 +469,7 @@ return response;
 
       {/* Actions Buttons */}
       {isEditable && (
-        <div className="flex gap-4 justify-end sticky bottom-4 bg-white dark:bg-slate-900 p-4 rounded-lg shadow-lg border">
+        <div className="flex gap-4 justify-end sticky bottom-4 bg-white dark:bg-slate-800 p-4 rounded-lg shadow-lg border dark:border-slate-700">
           <Button
             variant="outline"
             onClick={handleCancel}
