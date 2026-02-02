@@ -253,8 +253,8 @@ export default function AutomationDebugger() {
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-4">
-                    <div className="bg-slate-50 dark:bg-slate-800 p-4 rounded-lg">
-                      <h3 className="font-semibold mb-2">{t('automation_debugger.catch_phase')}</h3>
+                    <div className="bg-slate-50 dark:bg-card p-4 rounded-lg border dark:border-slate-700">
+  <h3 className="font-semibold mb-2">שלב 1: Catch (סינון)</h3>
                       <div className="space-y-1 text-sm">
                         {testResults?.matches.map((m, i) => <div key={i} className="text-green-700 dark:text-green-400">{m}</div>)}
                         {testResults?.failures.map((f, i) => <div key={i} className="text-red-600 dark:text-red-400">{f}</div>)}
