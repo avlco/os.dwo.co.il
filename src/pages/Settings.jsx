@@ -5,7 +5,7 @@ import { useTranslation } from 'react-i18next';
 import { useTheme } from '../components/ThemeProvider';
 import PageHeader from '../components/ui/PageHeader';
 import UserManagement from '../components/settings/UserManagement';
-import AutomationRulesManager from '../components/settings/AutomationRulesManager';
+
 import IntegrationsTab from '../components/settings/IntegrationsTab';
 import DocumentTaxonomyManager from '../components/settings/DocumentTaxonomyManager';
 import {
@@ -22,7 +22,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
-import { Textarea } from "@/components/ui/textarea";
+
 import { Switch } from "@/components/ui/switch";
 import {
   Select,
@@ -40,7 +40,6 @@ export default function Settings() {
   const [profile, setProfile] = useState({
     full_name: '',
     phone: '',
-    signature: '',
   });
   const [notifications, setNotifications] = useState({
     email_new_task: true,
@@ -60,7 +59,6 @@ export default function Settings() {
       setProfile({
         full_name: userData.full_name || '',
         phone: userData.phone || '',
-        signature: userData.signature || '',
       });
     } catch (e) {
       console.error('Error loading user:', e);
