@@ -47,7 +47,7 @@ export default function TaskControlPanel({
         <CardHeader className="pb-3">
           <div className="flex items-center justify-between">
             <CardTitle className="text-lg dark:text-slate-200">
-              {isRTL ? 'פרטי המשימה' : 'Task Details'}
+              {t('workbench.task_details')}
             </CardTitle>
             <div className="flex gap-2">
               <StatusBadge status={task?.status} />
@@ -57,7 +57,7 @@ export default function TaskControlPanel({
           {ruleName && (
             <div className="flex items-center gap-2 mt-2">
               <Badge variant="outline" className="text-xs dark:border-slate-600 dark:text-slate-400">
-                {isRTL ? 'חוק:' : 'Rule:'} {ruleName}
+                {t('workbench.rule_label')}: {ruleName}
               </Badge>
             </div>
           )}
@@ -69,17 +69,17 @@ export default function TaskControlPanel({
               <div className="flex items-center gap-2 mb-2">
                 <AlertCircle className="w-4 h-4 text-blue-600 dark:text-blue-400" />
                 <span className="text-sm font-medium text-blue-800 dark:text-blue-300">
-                  {isRTL ? 'זיהוי אוטומטי' : 'Auto Detection'}
+                  {t('workbench.auto_detection')}
                 </span>
               </div>
               {inferredCase && (
                 <p className="text-sm text-blue-700 dark:text-blue-400">
-                  {isRTL ? 'תיק:' : 'Case:'} {inferredCase.case_number} - {inferredCase.title}
+                  {t('workbench.case_label')}: {inferredCase.case_number} - {inferredCase.title}
                 </p>
               )}
               {inferredClient && (
                 <p className="text-sm text-blue-700 dark:text-blue-400">
-                  {isRTL ? 'לקוח:' : 'Client:'} {inferredClient.name}
+                  {t('workbench.client_label')}: {inferredClient.name}
                 </p>
               )}
             </div>
@@ -89,14 +89,14 @@ export default function TaskControlPanel({
           <div className="space-y-2">
             <Label className="flex items-center gap-2 dark:text-slate-300">
               <Briefcase className="w-4 h-4" />
-              {isRTL ? 'תיק מקושר' : 'Linked Case'}
+              {t('workbench.linked_case')}
             </Label>
             <Select 
               value={formData.case_id} 
               onValueChange={(v) => setFormData({ ...formData, case_id: v })}
             >
               <SelectTrigger className="dark:bg-slate-900 dark:border-slate-600">
-                <SelectValue placeholder={isRTL ? 'בחר תיק' : 'Select case'} />
+                <SelectValue placeholder={t('workbench.select_case')} />
               </SelectTrigger>
               <SelectContent className="dark:bg-slate-800 dark:border-slate-700 max-h-60">
                 {cases.map(c => (
@@ -112,14 +112,14 @@ export default function TaskControlPanel({
           <div className="space-y-2">
             <Label className="flex items-center gap-2 dark:text-slate-300">
               <Users className="w-4 h-4" />
-              {isRTL ? 'לקוח מקושר' : 'Linked Client'}
+              {t('workbench.linked_client')}
             </Label>
             <Select 
               value={formData.client_id} 
               onValueChange={(v) => setFormData({ ...formData, client_id: v })}
             >
               <SelectTrigger className="dark:bg-slate-900 dark:border-slate-600">
-                <SelectValue placeholder={isRTL ? 'בחר לקוח' : 'Select client'} />
+                <SelectValue placeholder={t('workbench.select_client')} />
               </SelectTrigger>
               <SelectContent className="dark:bg-slate-800 dark:border-slate-700 max-h-60">
                 {clients.map(c => (
@@ -138,7 +138,7 @@ export default function TaskControlPanel({
         <Card className="flex-shrink-0 dark:bg-slate-800 dark:border-slate-700">
           <CardHeader className="pb-3">
             <CardTitle className="text-lg dark:text-slate-200">
-              {isRTL ? 'פעולות מוצעות' : 'Suggested Actions'}
+              {t('workbench.suggested_actions')}
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
@@ -160,7 +160,7 @@ export default function TaskControlPanel({
       <Card className="flex-shrink-0 dark:bg-slate-800 dark:border-slate-700">
         <CardHeader className="pb-3">
           <CardTitle className="text-lg dark:text-slate-200">
-            {isRTL ? 'הערות' : 'Notes'}
+            {t('workbench.notes')}
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -168,7 +168,7 @@ export default function TaskControlPanel({
             value={formData.notes}
             onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
             rows={3}
-            placeholder={isRTL ? 'הוסף הערות...' : 'Add notes...'}
+            placeholder={t('workbench.notes_placeholder')}
             className="dark:bg-slate-900 dark:border-slate-600 dark:text-slate-200"
           />
         </CardContent>
@@ -178,7 +178,7 @@ export default function TaskControlPanel({
       <div className="flex flex-col gap-3 flex-shrink-0 pt-2 pb-4">
         <Button onClick={onSave} variant="outline" className="w-full gap-2 dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-700">
           <Save className="w-4 h-4" />
-          {isRTL ? 'שמור' : 'Save'}
+          {t('common.save_changes')}
         </Button>
         <Button 
           onClick={onApprove} 
@@ -186,7 +186,7 @@ export default function TaskControlPanel({
           disabled={isApproving}
         >
           <CheckCircle2 className="w-4 h-4" />
-          {isRTL ? 'אשר ובצע' : 'Approve & Execute'}
+          {t('workbench.approve_execute')}
         </Button>
         <Button 
           variant="ghost" 
@@ -194,7 +194,7 @@ export default function TaskControlPanel({
           onClick={onSkip}
         >
           <Archive className="w-4 h-4" />
-          {isRTL ? 'דלג' : 'Skip'}
+          {t('workbench.skip')}
         </Button>
       </div>
     </div>
