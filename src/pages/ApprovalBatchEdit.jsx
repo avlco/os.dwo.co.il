@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { createPageUrl } from '../utils';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { base44 } from '@/api/base44Client';
@@ -49,20 +50,21 @@ const ACTION_ICONS = {
   create_deadline: Clock
 };
 
-const ACTION_LABELS = {
-  send_email: 'שליחת מייל',
-  create_task: 'יצירת משימה',
-  billing: 'חיוב שעות',
-  calendar_event: 'אירוע ביומן',
-  save_file: 'שמירת קבצים',
-  create_alert: 'יצירת התרעה',
-  create_deadline: 'יצירת מועד'
-};
-
 export default function ApprovalBatchEdit() {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { toast } = useToast();
+  
+  const ACTION_LABELS = {
+    send_email: t('approval_batch_edit.action_send_email'),
+    create_task: t('approval_batch_edit.action_create_task'),
+    billing: t('approval_batch_edit.action_billing'),
+    calendar_event: t('approval_batch_edit.action_calendar_event'),
+    save_file: t('approval_batch_edit.action_save_file'),
+    create_alert: t('approval_batch_edit.action_create_alert'),
+    create_deadline: t('approval_batch_edit.action_create_deadline')
+  };
   
   const params = new URLSearchParams(window.location.search);
   const batchId = params.get('batchId');
@@ -110,12 +112,12 @@ return response;
     onSuccess: () => {
       queryClient.invalidateQueries(['approval-batch', batchId]);
       setHasChanges(false);
-      toast({ title: 'נשמר בהצלחה', description: 'השינויים נשמרו' });
+      toast({ title: t('approval_batch_edit.saved_success'), description: t('approval_batch_edit.changes_saved') });
     },
     onError: (error) => {
       toast({ 
         variant: 'destructive', 
-        title: 'שגיאה בשמירה', 
+        title: t('approval_batch_edit.save_error'), 
         description: error.message 
       });
     }
@@ -146,22 +148,22 @@ return response;
       
       if (response.success) {
         toast({ 
-          title: 'אושר בהצלחה!', 
-          description: `${response.execution_summary?.success || 0} פעולות בוצעו` 
+          title: t('approval_batch_edit.approved_success'), 
+          description: `${response.execution_summary?.success || 0} ${t('approval_batch_edit.actions_executed')}` 
         });
         navigate(createPageUrl('ApprovalQueue'));
       } else {
         toast({ 
           variant: 'destructive',
-          title: 'האישור הושלם עם שגיאות', 
-          description: `${response.execution_summary?.failed || 0} פעולות נכשלו` 
+          title: t('approval_batch_edit.approved_with_errors'), 
+          description: `${response.execution_summary?.failed || 0} ${t('approval_batch_edit.actions_failed_count')}` 
         });
       }
     },
     onError: (error) => {
       toast({ 
         variant: 'destructive', 
-        title: 'שגיאה באישור', 
+        title: t('approval_batch_edit.approve_error'), 
         description: error.message 
       });
     }
@@ -182,13 +184,13 @@ return response;
     onSuccess: () => {
       queryClient.invalidateQueries(['approval-batch', batchId]);
       queryClient.invalidateQueries(['approvals']);
-      toast({ title: 'בוטל', description: 'הבאטש בוטל' });
+      toast({ title: t('approval_batch_edit.cancelled'), description: t('approval_batch_edit.batch_cancelled') });
       navigate(createPageUrl('ApprovalQueue'));
     },
     onError: (error) => {
       toast({ 
         variant: 'destructive', 
-        title: 'שגיאה בביטול', 
+        title: t('approval_batch_edit.cancel_error'), 
         description: error.message 
       });
     }
@@ -223,32 +225,32 @@ return response;
     if (enabledCount === 0) {
       toast({ 
         variant: 'destructive', 
-        title: 'אין פעולות מופעלות', 
-        description: 'יש לבחור לפחות פעולה אחת לביצוע' 
+        title: t('approval_batch_edit.no_enabled_actions'), 
+        description: t('approval_batch_edit.select_one_action') 
       });
       return;
     }
     
-    if (!confirm(`האם לאשר ולבצע ${enabledCount} פעולות?`)) return;
+    if (!confirm(t('approval_batch_edit.confirm_approve', { count: enabledCount }))) return;
     approveMutation.mutate();
   }
 
   // Handle cancel
   function handleCancel() {
-    if (!confirm('האם לבטל את כל הפעולות?')) return;
+    if (!confirm(t('approval_batch_edit.confirm_cancel'))) return;
     cancelMutation.mutate();
   }
 
   // Status badge
   function getStatusBadge(status) {
     const variants = {
-      pending: { color: 'bg-yellow-100 text-yellow-700', label: 'ממתין' },
-      editing: { color: 'bg-blue-100 text-blue-700', label: 'בעריכה' },
-      approved: { color: 'bg-green-100 text-green-700', label: 'אושר' },
-      executing: { color: 'bg-purple-100 text-purple-700', label: 'מבצע' },
-      executed: { color: 'bg-green-100 text-green-700', label: 'בוצע' },
-      cancelled: { color: 'bg-gray-100 text-gray-700', label: 'בוטל' },
-      failed: { color: 'bg-red-100 text-red-700', label: 'נכשל' }
+      pending: { color: 'bg-yellow-100 text-yellow-700', label: t('status_labels.pending') },
+      editing: { color: 'bg-blue-100 text-blue-700', label: t('status_labels.editing') },
+      approved: { color: 'bg-green-100 text-green-700', label: t('common.approved', 'Approved') },
+      executing: { color: 'bg-purple-100 text-purple-700', label: t('common.executing', 'Executing') },
+      executed: { color: 'bg-green-100 text-green-700', label: t('status_labels.executed') },
+      cancelled: { color: 'bg-gray-100 text-gray-700', label: t('status_labels.cancelled') },
+      failed: { color: 'bg-red-100 text-red-700', label: t('status_labels.failed') }
     };
     const v = variants[status] || variants.pending;
     return <Badge className={v.color}>{v.label}</Badge>;
@@ -258,9 +260,9 @@ return response;
   if (!batchId) {
     return (
       <div className="p-6 text-center">
-        <p className="text-slate-600">לא סופק מזהה באטש</p>
+        <p className="text-slate-600">{t('approval_batch_edit.no_batch_id')}</p>
         <Button onClick={() => navigate(createPageUrl('ApprovalQueue'))} className="mt-4">
-          חזרה לתור האישורים
+          {t('approval_batch_edit.back_to_queue')}
         </Button>
       </div>
     );
@@ -280,7 +282,7 @@ return response;
         <XCircle className="w-12 h-12 mx-auto text-red-500 mb-4" />
         <p className="text-red-600">{error.message}</p>
         <Button onClick={() => navigate(createPageUrl('ApprovalQueue'))} className="mt-4">
-          חזרה לתור האישורים
+          {t('approval_batch_edit.back_to_queue')}
         </Button>
       </div>
     );
@@ -296,7 +298,7 @@ return response;
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-slate-800 dark:text-slate-200">
-            עריכת אישור
+            {t('approval_batch_edit.title')}
           </h1>
           <p className="text-slate-500 dark:text-slate-400 mt-1">
             {batch?.automation_rule_name}
@@ -308,7 +310,7 @@ return response;
           className="gap-2"
         >
           <ArrowRight className="w-4 h-4" />
-          חזרה
+          {t('approval_batch_edit.back')}
         </Button>
       </div>
 
@@ -316,7 +318,7 @@ return response;
       <Card>
         <CardHeader>
           <div className="flex items-center justify-between">
-            <CardTitle className="text-lg">פרטי הבאטש</CardTitle>
+            <CardTitle className="text-lg">{t('approval_batch_edit.batch_details')}</CardTitle>
             {getStatusBadge(batch?.status)}
           </div>
         </CardHeader>
@@ -324,34 +326,34 @@ return response;
           <div className="grid grid-cols-2 gap-4 text-sm">
             <div className="flex items-center gap-2">
               <Mail className="w-4 h-4 text-slate-500" />
-              <span className="text-slate-600 dark:text-slate-400">נושא:</span>
+              <span className="text-slate-600 dark:text-slate-400">{t('approval_batch_edit.subject_label')}</span>
               <span className="font-medium dark:text-slate-200">{batch?.mail_subject || '-'}</span>
             </div>
             <div className="flex items-center gap-2">
               <User className="w-4 h-4 text-slate-500" />
-              <span className="text-slate-600 dark:text-slate-400">מאת:</span>
+              <span className="text-slate-600 dark:text-slate-400">{t('approval_batch_edit.from_label')}</span>
               <span className="font-medium dark:text-slate-200">{batch?.mail_from || '-'}</span>
             </div>
             {batch?.case_name && (
               <div className="flex items-center gap-2">
                 <Briefcase className="w-4 h-4 text-slate-500" />
-                <span className="text-slate-600 dark:text-slate-400">תיק:</span>
+                <span className="text-slate-600 dark:text-slate-400">{t('approval_batch_edit.case_label')}</span>
                 <span className="font-medium dark:text-slate-200">{batch.case_name}</span>
               </div>
             )}
             {batch?.client_name && (
               <div className="flex items-center gap-2">
                 <User className="w-4 h-4 text-slate-500" />
-                <span className="text-slate-600 dark:text-slate-400">לקוח:</span>
+                <span className="text-slate-600 dark:text-slate-400">{t('approval_batch_edit.client_label')}</span>
                 <span className="font-medium dark:text-slate-200">{batch.client_name}</span>
               </div>
             )}
             <div className="flex items-center gap-2">
               <Clock className="w-4 h-4 text-slate-500" />
-              <span className="text-slate-600 dark:text-slate-400">תוקף:</span>
+              <span className="text-slate-600 dark:text-slate-400">{t('approval_batch_edit.expiry_label')}</span>
               <span className={`font-medium ${isExpired ? 'text-red-600' : 'dark:text-slate-200'}`}>
                 {batch?.expires_at ? format(new Date(batch.expires_at), 'dd/MM/yyyy HH:mm') : '-'}
-                {isExpired && ' (פג תוקף)'}
+                {isExpired && ` (${t('approval_batch_edit.expired')})`}
               </span>
             </div>
           </div>
@@ -360,7 +362,7 @@ return response;
             <div className="bg-amber-50 dark:bg-amber-900/20 p-3 rounded-lg flex items-center gap-2">
               <AlertTriangle className="w-5 h-5 text-amber-600" />
               <span className="text-amber-700 dark:text-amber-400 text-sm">
-                קישור האישור המהיר פג תוקף. ניתן לאשר מכאן.
+                {t('approval_batch_edit.expiry_warning')}
               </span>
             </div>
           )}
@@ -370,7 +372,7 @@ return response;
       {/* Actions */}
       <div className="space-y-4">
         <h2 className="text-lg font-semibold text-slate-800 dark:text-slate-200">
-          פעולות ({actions.filter(a => a.enabled).length}/{actions.length} פעילות)
+          {t('approval_batch_edit.actions_header')} ({actions.filter(a => a.enabled).length}/{actions.length} {t('approval_batch_edit.actions_active')})
         </h2>
 
         {actions.map((action, index) => {
@@ -430,7 +432,7 @@ return response;
         <Card className="border-green-200 bg-green-50 dark:bg-green-900/20">
           <CardHeader>
             <CardTitle className="text-lg text-green-700 dark:text-green-400">
-              סיכום ביצוע
+              {t('approval_batch_edit.execution_summary')}
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -439,25 +441,25 @@ return response;
                 <p className="text-2xl font-bold text-slate-800 dark:text-slate-200">
                   {batch.execution_summary.total}
                 </p>
-                <p className="text-sm text-slate-600 dark:text-slate-400">סה"כ</p>
+                <p className="text-sm text-slate-600 dark:text-slate-400">{t('approval_batch_edit.total_label')}</p>
               </div>
               <div>
                 <p className="text-2xl font-bold text-green-600">
                   {batch.execution_summary.success}
                 </p>
-                <p className="text-sm text-slate-600 dark:text-slate-400">הצלחות</p>
+                <p className="text-sm text-slate-600 dark:text-slate-400">{t('approval_batch_edit.success_label')}</p>
               </div>
               <div>
                 <p className="text-2xl font-bold text-red-600">
                   {batch.execution_summary.failed}
                 </p>
-                <p className="text-sm text-slate-600 dark:text-slate-400">נכשלו</p>
+                <p className="text-sm text-slate-600 dark:text-slate-400">{t('approval_batch_edit.failed_label')}</p>
               </div>
               <div>
                 <p className="text-2xl font-bold text-slate-500">
                   {batch.execution_summary.skipped}
                 </p>
-                <p className="text-sm text-slate-600 dark:text-slate-400">דולגו</p>
+                <p className="text-sm text-slate-600 dark:text-slate-400">{t('approval_batch_edit.skipped_label')}</p>
               </div>
             </div>
           </CardContent>
@@ -474,7 +476,7 @@ return response;
             className="text-red-600 border-red-200 hover:bg-red-50"
           >
             <XCircle className="w-4 h-4 mr-2" />
-            ביטול
+            {t('approval_batch_edit.cancel_button')}
           </Button>
           
           {hasChanges && (
@@ -488,7 +490,7 @@ return response;
               ) : (
                 <Save className="w-4 h-4 mr-2" />
               )}
-              שמור שינויים
+              {t('approval_batch_edit.save_changes')}
             </Button>
           )}
           
@@ -502,7 +504,7 @@ return response;
             ) : (
               <Play className="w-4 h-4 mr-2" />
             )}
-            אשר ובצע ({actions.filter(a => a.enabled).length})
+            {t('approval_batch_edit.approve_execute')} ({actions.filter(a => a.enabled).length})
           </Button>
         </div>
       )}
@@ -519,11 +521,11 @@ function ActionEditor({ action, onChange }) {
       return (
         <div className="space-y-3">
           <div>
-            <Label className="text-xs text-slate-500">נמען (לא ניתן לשינוי)</Label>
+            <Label className="text-xs text-slate-500">{t('approval_batch_edit.recipient_readonly')}</Label>
             <Input value={config.to || ''} disabled className="bg-slate-50" />
           </div>
           <div>
-            <Label className="text-xs text-slate-500">נושא</Label>
+            <Label className="text-xs text-slate-500">{t('approval_batch_edit.subject_field')}</Label>
             <Input
               value={config.subject || ''}
               onChange={(e) => onChange({ subject: e.target.value })}
@@ -531,7 +533,7 @@ function ActionEditor({ action, onChange }) {
             />
           </div>
           <div>
-            <Label className="text-xs text-slate-500">תוכן</Label>
+            <Label className="text-xs text-slate-500">{t('approval_batch_edit.content_field')}</Label>
             <Textarea
               value={config.body || ''}
               onChange={(e) => onChange({ body: e.target.value })}
@@ -546,7 +548,7 @@ function ActionEditor({ action, onChange }) {
         <div className="space-y-3">
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <Label className="text-xs text-slate-500">שעות</Label>
+              <Label className="text-xs text-slate-500">{t('approval_batch_edit.hours_field')}</Label>
               <Select
                 value={String(config.hours || 0.25)}
                 onValueChange={(v) => onChange({ hours: parseFloat(v) })}
@@ -556,13 +558,13 @@ function ActionEditor({ action, onChange }) {
                 </SelectTrigger>
                 <SelectContent>
                   {[0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2, 2.5, 3, 4, 5, 6, 8, 10, 12, 16, 20, 24].map(h => (
-                    <SelectItem key={h} value={String(h)}>{h} שעות</SelectItem>
+                    <SelectItem key={h} value={String(h)}>{h} {t('case_view.hours_label')}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             </div>
             <div>
-              <Label className="text-xs text-slate-500">תעריף שעתי</Label>
+              <Label className="text-xs text-slate-500">{t('approval_batch_edit.hourly_rate_field')}</Label>
               <Input
                 type="number"
                 value={config.rate || config.hourly_rate || 800}
@@ -571,7 +573,7 @@ function ActionEditor({ action, onChange }) {
             </div>
           </div>
           <div>
-            <Label className="text-xs text-slate-500">תיאור</Label>
+            <Label className="text-xs text-slate-500">{t('approval_batch_edit.description_field')}</Label>
             <Input
               value={config.description || ''}
               onChange={(e) => onChange({ description: e.target.value })}
@@ -584,14 +586,14 @@ function ActionEditor({ action, onChange }) {
       return (
         <div className="space-y-3">
           <div>
-            <Label className="text-xs text-slate-500">כותרת</Label>
+            <Label className="text-xs text-slate-500">{t('approval_batch_edit.title_field')}</Label>
             <Input
               value={config.title || ''}
               onChange={(e) => onChange({ title: e.target.value })}
             />
           </div>
           <div>
-            <Label className="text-xs text-slate-500">תיאור</Label>
+            <Label className="text-xs text-slate-500">{t('approval_batch_edit.description_field')}</Label>
             <Textarea
               value={config.description || ''}
               onChange={(e) => onChange({ description: e.target.value })}
@@ -599,7 +601,7 @@ function ActionEditor({ action, onChange }) {
             />
           </div>
           <div>
-            <Label className="text-xs text-slate-500">תאריך יעד</Label>
+            <Label className="text-xs text-slate-500">{t('approval_batch_edit.due_date_field')}</Label>
             <Input
               type="date"
               value={config.due_date || ''}
@@ -613,7 +615,7 @@ function ActionEditor({ action, onChange }) {
       return (
         <div className="space-y-3">
           <div>
-            <Label className="text-xs text-slate-500">כותרת</Label>
+            <Label className="text-xs text-slate-500">{t('approval_batch_edit.title_field')}</Label>
             <Input
               value={config.title || config.title_template || ''}
               onChange={(e) => onChange({ title: e.target.value })}
@@ -621,7 +623,7 @@ function ActionEditor({ action, onChange }) {
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <Label className="text-xs text-slate-500">תאריך</Label>
+              <Label className="text-xs text-slate-500">{t('approval_batch_edit.date_field')}</Label>
               <Input
                 type="date"
                 value={config.start_date || ''}
@@ -629,7 +631,7 @@ function ActionEditor({ action, onChange }) {
               />
             </div>
             <div>
-              <Label className="text-xs text-slate-500">משך (דקות)</Label>
+              <Label className="text-xs text-slate-500">{t('approval_batch_edit.duration_minutes')}</Label>
               <Input
                 type="number"
                 value={config.duration_minutes || 60}
@@ -644,7 +646,7 @@ function ActionEditor({ action, onChange }) {
       return (
         <div className="space-y-3">
           <div>
-            <Label className="text-xs text-slate-500">נתיב ב-Dropbox (לא ניתן לשינוי)</Label>
+            <Label className="text-xs text-slate-500">{t('approval_batch_edit.dropbox_path_readonly')}</Label>
             <Input value={config.path || config.dropbox_folder_path || ''} disabled className="bg-slate-50" />
           </div>
         </div>

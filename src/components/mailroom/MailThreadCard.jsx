@@ -17,19 +17,22 @@ import {
   FileText
 } from 'lucide-react';
 
-const statusConfig = {
-  pending: { label: 'חדש', color: 'bg-blue-100 text-blue-800', icon: Mail },
-  matched_for_automation: { label: 'לאוטומציה', color: 'bg-amber-100 text-amber-800', icon: Zap },
-  awaiting_approval: { label: 'ממתין לאישור', color: 'bg-yellow-100 text-yellow-800', icon: Clock },
-  automation_complete: { label: 'אוטומציה הושלמה', color: 'bg-green-100 text-green-800', icon: CheckCircle2 },
-  automation_failed: { label: 'אוטומציה נכשלה', color: 'bg-red-100 text-red-800', icon: XCircle },
-  automation_cancelled: { label: 'אוטומציה בוטלה', color: 'bg-gray-100 text-gray-700', icon: XCircle },
-  manual_task_created: { label: 'משימה נוצרה', color: 'bg-purple-100 text-purple-800', icon: FileText },
-  processed: { label: 'עובד', color: 'bg-green-100 text-green-800', icon: CheckCircle2 },
-  archived: { label: 'ארכיון', color: 'bg-gray-100 text-gray-800', icon: Mail }
-};
+import { useTranslation } from 'react-i18next';
 
 export default function MailThreadCard({ thread, automationLogs = [] }) {
+  const { t } = useTranslation();
+  
+  const statusConfig = {
+    pending: { label: t('mail_thread.new_label'), color: 'bg-blue-100 text-blue-800', icon: Mail },
+    matched_for_automation: { label: t('mail_thread.for_automation'), color: 'bg-amber-100 text-amber-800', icon: Zap },
+    awaiting_approval: { label: t('mail_thread.awaiting_approval'), color: 'bg-yellow-100 text-yellow-800', icon: Clock },
+    automation_complete: { label: t('mail_thread.automation_complete'), color: 'bg-green-100 text-green-800', icon: CheckCircle2 },
+    automation_failed: { label: t('mail_thread.automation_failed'), color: 'bg-red-100 text-red-800', icon: XCircle },
+    automation_cancelled: { label: t('mail_thread.automation_cancelled'), color: 'bg-gray-100 text-gray-700', icon: XCircle },
+    manual_task_created: { label: t('mail_thread.task_created'), color: 'bg-purple-100 text-purple-800', icon: FileText },
+    processed: { label: t('mail_thread.processed'), color: 'bg-green-100 text-green-800', icon: CheckCircle2 },
+    archived: { label: t('mail_thread.archived'), color: 'bg-gray-100 text-gray-800', icon: Mail }
+  };
   const { latestMail, mails, threadId } = thread;
   const mailCount = mails.length;
   const hasMultiple = mailCount > 1;
@@ -76,7 +79,7 @@ export default function MailThreadCard({ thread, automationLogs = [] }) {
             <div className="flex-1 min-w-0">
               <div className="flex items-start justify-between gap-2">
                 <h3 className="font-medium text-slate-800 dark:text-slate-100 truncate">
-                  {latestMail.subject || '(ללא נושא)'}
+                  {latestMail.subject || t('mail_view.no_subject')}
                 </h3>
                 <span className="text-xs text-slate-500 dark:text-slate-400 whitespace-nowrap">
                   {latestMail.received_at ? format(new Date(latestMail.received_at), 'dd/MM HH:mm', { locale: he }) : '-'}
