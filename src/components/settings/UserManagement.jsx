@@ -62,9 +62,9 @@ export default function UserManagement({ currentUser }) {
 
   return (
     <div className="space-y-6">
-      <Card>
+      <Card className="dark:bg-slate-800 dark:border-slate-700">
         <CardHeader>
-          <CardTitle className="flex items-center gap-2">
+          <CardTitle className="flex items-center gap-2 dark:text-slate-100">
             <UserPlus className="w-5 h-5" />
             {t('settings.invite_users')}
           </CardTitle>
@@ -73,7 +73,7 @@ export default function UserManagement({ currentUser }) {
           <form onSubmit={handleInvite} className="space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label>{t('settings.invite_email')}</Label>
+                <Label className="dark:text-slate-300">{t('settings.invite_email')}</Label>
                 <Input
                   type="email"
                   value={inviteEmail}
@@ -84,14 +84,14 @@ export default function UserManagement({ currentUser }) {
                 />
               </div>
               <div className="space-y-2">
-                <Label>{t('settings.invite_role')}</Label>
+                <Label className="dark:text-slate-300">{t('settings.invite_role')}</Label>
                 <Select value={inviteRole} onValueChange={setInviteRole}>
-                  <SelectTrigger className="dark:bg-slate-800 dark:border-slate-700">
+                  <SelectTrigger className="dark:bg-slate-900 dark:border-slate-600 dark:text-slate-200">
                     <SelectValue />
                   </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="user">{t('settings.user_role')}</SelectItem>
-                    <SelectItem value="admin">{t('settings.admin_role')}</SelectItem>
+                  <SelectContent className="dark:bg-slate-800 dark:border-slate-700">
+                    <SelectItem value="user" className="dark:text-slate-200">{t('settings.user_role')}</SelectItem>
+                    <SelectItem value="admin" className="dark:text-slate-200">{t('settings.admin_role')}</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -108,9 +108,9 @@ export default function UserManagement({ currentUser }) {
         </CardContent>
       </Card>
 
-      <Card>
+      <Card className="dark:bg-slate-800 dark:border-slate-700">
         <CardHeader>
-          <CardTitle className="flex items-center gap-2">
+          <CardTitle className="flex items-center gap-2 dark:text-slate-100">
             <Users className="w-5 h-5" />
             {t('settings.existing_users')}
           </CardTitle>

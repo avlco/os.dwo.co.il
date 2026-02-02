@@ -148,14 +148,14 @@ export default function IntegrationsTab() {
     const isConnected = activeIntegrations.includes(key);
     
     return (
-      <Card key={key}>
+      <Card key={key} className="dark:bg-slate-800 dark:border-slate-700">
         <CardHeader className="flex flex-row items-center justify-between pb-2">
-          <CardTitle className="text-lg font-medium flex items-center gap-2">
+          <CardTitle className="text-lg font-medium flex items-center gap-2 dark:text-slate-200">
             {icon} {name}
           </CardTitle>
           {isConnected ? 
             <Badge className="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-100">{t('integrations.connected')}</Badge> : 
-            <Badge variant="outline">{t('integrations.not_connected')}</Badge>
+            <Badge variant="outline" className="dark:border-slate-600 dark:text-slate-300">{t('integrations.not_connected')}</Badge>
           }
         </CardHeader>
         <CardContent>
@@ -163,13 +163,13 @@ export default function IntegrationsTab() {
             {isConnected ? (
               <Button 
                 variant="outline" 
-                className="text-red-600 hover:text-red-700 hover:bg-red-50" 
+                className="text-red-600 hover:text-red-700 hover:bg-red-50 dark:text-red-400 dark:hover:text-red-300 dark:hover:bg-red-900/20 dark:border-red-800" 
                 onClick={() => disconnect(key)}
               >
                 <XCircle className="w-4 h-4 mr-2" /> {t('integrations.disconnect')}
               </Button>
             ) : (
-              <Button onClick={() => startAuth(key)} disabled={isLoading}>
+              <Button onClick={() => startAuth(key)} disabled={isLoading} className="bg-slate-800 hover:bg-slate-700 dark:bg-slate-600 dark:hover:bg-slate-500">
                 {isLoading ? (
                   <Loader2 className="w-4 h-4 mr-2 animate-spin"/>
                 ) : (
@@ -187,7 +187,7 @@ export default function IntegrationsTab() {
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
-        <h3 className="text-lg font-medium">{t('integrations.title')}</h3>
+        <h3 className="text-lg font-medium dark:text-slate-100">{t('integrations.title')}</h3>
         <Button 
           variant="ghost" 
           size="sm" 
