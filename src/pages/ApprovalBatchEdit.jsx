@@ -410,6 +410,7 @@ return response;
                       <ActionEditor
                         action={action}
                         onChange={(updates) => updateActionConfig(index, updates)}
+                        t={t}
                       />
                     )}
 
@@ -513,7 +514,7 @@ return response;
 }
 
 // Action-specific editor component
-function ActionEditor({ action, onChange }) {
+function ActionEditor({ action, onChange, t }) {
   const config = action.config || {};
 
   switch (action.action_type) {
