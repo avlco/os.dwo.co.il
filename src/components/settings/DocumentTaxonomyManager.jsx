@@ -203,15 +203,15 @@ export default function DocumentTaxonomyManager() {
           <div>
             <CardTitle className="text-xl dark:text-slate-100 flex items-center gap-2">
               <FolderTree className="w-5 h-5" />
-              ניהול טקסונומיית מסמכים
+              {t('document_taxonomy.title')}
             </CardTitle>
             <CardDescription className="dark:text-slate-400 mt-1">
-              הגדר את מבנה התיקיות החכם לשמירת מסמכים ב-Dropbox
+              {t('document_taxonomy.description', 'Define the smart folder structure for saving documents in Dropbox')}
             </CardDescription>
           </div>
           <Button onClick={() => openEdit()} className="gap-2">
             <Plus className="w-4 h-4" />
-            הוסף פריט
+            {t('document_taxonomy.add_new')}
           </Button>
         </CardHeader>
         
@@ -228,16 +228,16 @@ export default function DocumentTaxonomyManager() {
               />
             </div>
             <Select value={filterLevel} onValueChange={setFilterLevel}>
-              <SelectTrigger className="w-40 dark:bg-slate-900 dark:border-slate-600">
-                <Filter className="w-4 h-4 ml-2" />
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent className="dark:bg-slate-800">
-                <SelectItem value="all">כל הרמות</SelectItem>
-                <SelectItem value="domain">תחומים</SelectItem>
-                <SelectItem value="country">מדינות</SelectItem>
-                <SelectItem value="document_type">סוגי מסמכים</SelectItem>
-              </SelectContent>
+            <SelectTrigger className="w-40 dark:bg-slate-900 dark:border-slate-600">
+              <Filter className="w-4 h-4 ml-2" />
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent className="dark:bg-slate-800">
+              <SelectItem value="all">{t('document_taxonomy.all_levels', 'All Levels')}</SelectItem>
+              <SelectItem value="domain">{t('document_taxonomy.domain')}</SelectItem>
+              <SelectItem value="country">{t('document_taxonomy.country')}</SelectItem>
+              <SelectItem value="document_type">{t('document_taxonomy.document_type')}</SelectItem>
+            </SelectContent>
             </Select>
           </div>
 
@@ -246,21 +246,21 @@ export default function DocumentTaxonomyManager() {
             <div className="p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
               <div className="flex items-center gap-2 mb-1">
                 <FolderTree className="w-4 h-4 text-blue-600 dark:text-blue-400" />
-                <span className="text-sm font-medium text-blue-800 dark:text-blue-200">תחומים</span>
+                <span className="text-sm font-medium text-blue-800 dark:text-blue-200">{t('document_taxonomy.domain')}</span>
               </div>
               <div className="text-2xl font-bold text-blue-900 dark:text-blue-100">{domains.length}</div>
             </div>
             <div className="p-4 bg-green-50 dark:bg-green-900/20 rounded-lg border border-green-200 dark:border-green-800">
               <div className="flex items-center gap-2 mb-1">
                 <Globe className="w-4 h-4 text-green-600 dark:text-green-400" />
-                <span className="text-sm font-medium text-green-800 dark:text-green-200">מדינות</span>
+                <span className="text-sm font-medium text-green-800 dark:text-green-200">{t('document_taxonomy.country')}</span>
               </div>
               <div className="text-2xl font-bold text-green-900 dark:text-green-100">{countries.length}</div>
             </div>
             <div className="p-4 bg-purple-50 dark:bg-purple-900/20 rounded-lg border border-purple-200 dark:border-purple-800">
               <div className="flex items-center gap-2 mb-1">
                 <FileText className="w-4 h-4 text-purple-600 dark:text-purple-400" />
-                <span className="text-sm font-medium text-purple-800 dark:text-purple-200">סוגי מסמכים</span>
+                <span className="text-sm font-medium text-purple-800 dark:text-purple-200">{t('document_taxonomy.document_type')}</span>
               </div>
               <div className="text-2xl font-bold text-purple-900 dark:text-purple-100">{documentTypes.length}</div>
             </div>
@@ -351,7 +351,7 @@ export default function DocumentTaxonomyManager() {
         <DialogContent className="max-w-md dark:bg-slate-800">
           <DialogHeader>
             <DialogTitle className="dark:text-slate-100">
-              {currentItem.id ? 'עריכת פריט' : 'הוספת פריט חדש'}
+              {currentItem.id ? t('common.edit') : t('document_taxonomy.add_new')}
             </DialogTitle>
           </DialogHeader>
 
@@ -458,10 +458,10 @@ export default function DocumentTaxonomyManager() {
 
           <DialogFooter>
             <Button variant="outline" onClick={() => setIsEditModalOpen(false)}>
-              ביטול
+              {t('common.cancel')}
             </Button>
             <Button onClick={handleSave}>
-              {currentItem.id ? 'עדכן' : 'צור'}
+              {currentItem.id ? t('common.update') : t('common.create')}
             </Button>
           </DialogFooter>
         </DialogContent>

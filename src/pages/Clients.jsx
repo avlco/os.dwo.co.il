@@ -482,7 +482,7 @@ export default function Clients() {
     },
     {
       id: 'assigned_lawyer',
-      header: 'עו"ד מטפל',
+      header: t('clients.assigned_lawyer'),
       cell: ({ row }) => {
         const r = row.original;
         return r.assigned_lawyer_id ? (
@@ -497,7 +497,7 @@ export default function Clients() {
     },
     {
       id: 'hourly_rate',
-      header: 'תעריף שעתי',
+      header: t('clients.hourly_rate'),
       cell: ({ row }) => {
         const r = row.original;
         return (
@@ -517,7 +517,7 @@ export default function Clients() {
             variant="secondary"
             className="bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300"
           >
-            {getCasesCount(r.id)} תיקים
+            {t('clients.cases_label', { count: getCasesCount(r.id) })}
           </Badge>
         );
       },
@@ -565,7 +565,7 @@ export default function Clients() {
                 className="flex items-center gap-2 dark:text-slate-200 dark:hover:bg-slate-700"
               >
                 <Eye className="w-4 h-4" />
-                צפייה
+                {t('common.view')}
               </DropdownMenuItem>
               <DropdownMenuItem
                 onClick={(e) => {
@@ -588,7 +588,7 @@ export default function Clients() {
                   className="flex items-center gap-2 text-amber-600 dark:text-amber-400 dark:hover:bg-slate-700"
                 >
                   <Archive className="w-4 h-4" />
-                  ארכיון
+                  {t('common.archive')}
                 </DropdownMenuItem>
               ) : (
                 <DropdownMenuItem
@@ -599,7 +599,7 @@ export default function Clients() {
                   className="flex items-center gap-2 text-green-600 dark:text-green-400 dark:hover:bg-slate-700"
                 >
                   <RefreshCcw className="w-4 h-4" />
-                  שחזור
+                  {t('common.restore')}
                 </DropdownMenuItem>
               )}
             </DropdownMenuContent>
@@ -614,7 +614,7 @@ export default function Clients() {
       <div className="flex items-center justify-between">
         <PageHeader
           title={t('clients.title')}
-          subtitle={`${clients.length} לקוחות במערכת`}
+          subtitle={t('clients.clients_count', { count: clients.length })}
           action={openCreateDialog}
           actionLabel={t('clients.new_client')}
         />
@@ -624,7 +624,7 @@ export default function Clients() {
           className="gap-2"
         >
           <Upload className="w-4 h-4" />
-          ייבוא/ייצוא
+          {t('clients.import_export')}
         </Button>
       </div>
 
@@ -661,7 +661,7 @@ export default function Clients() {
           onClick={() => setShowArchived(!showArchived)}
           className="ml-2"
         >
-          {showArchived ? 'הסתר' : 'הצג'} ארכיון
+          {showArchived ? t('common.hide_archive') : t('common.show_archive')}
         </Button>
       </div>
 

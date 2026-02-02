@@ -1,4 +1,5 @@
 import React, { useState, useRef } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   Dialog,
   DialogContent,
@@ -34,6 +35,7 @@ export default function ImportExportDialog({
   existingData = [],
   isLoading = false
 }) {
+  const { t } = useTranslation();
   const [activeTab, setActiveTab] = useState('export');
   const [importFile, setImportFile] = useState(null);
   const [importData, setImportData] = useState(null);
@@ -47,9 +49,9 @@ export default function ImportExportDialog({
   const mimeType = isJson ? 'application/json' : 'text/csv';
 
   const entityLabels = {
-    clients: 'לקוחות',
-    cases: 'תיקים',
-    automations: 'אוטומציות'
+    clients: t('import_export.clients'),
+    cases: t('import_export.cases'),
+    automations: t('import_export.automations')
   };
 
   const resetImport = () => {
@@ -278,7 +280,7 @@ export default function ImportExportDialog({
       <DialogContent className="max-w-3xl max-h-[85vh] overflow-hidden flex flex-col dark:bg-slate-800 dark:border-slate-700">
         <DialogHeader>
           <DialogTitle className="dark:text-slate-200">
-            ייבוא/ייצוא {entityLabels[entityType]}
+            {t('import_export.title')} {entityLabels[entityType]}
           </DialogTitle>
         </DialogHeader>
 
@@ -286,11 +288,11 @@ export default function ImportExportDialog({
           <TabsList className="grid grid-cols-2">
             <TabsTrigger value="export" className="gap-2">
               <Download className="w-4 h-4" />
-              ייצוא
+              {t('import_export.export_tab')}
             </TabsTrigger>
             <TabsTrigger value="import" className="gap-2">
               <Upload className="w-4 h-4" />
-              ייבוא
+              {t('import_export.import_tab')}
             </TabsTrigger>
           </TabsList>
 
@@ -299,18 +301,18 @@ export default function ImportExportDialog({
             <Alert>
               <Info className="w-4 h-4" />
               <AlertDescription>
-                ייצוא יוריד קובץ {fileExtension.toUpperCase()} עם כל ה{entityLabels[entityType]} במערכת ({existingData.length} רשומות).
+                {t('import_export.export_description', { entity: entityLabels[entityType], count: existingData.length })}
               </AlertDescription>
             </Alert>
 
             <div className="flex gap-3">
               <Button onClick={handleExport} disabled={isLoading || existingData.length === 0} className="gap-2">
                 {isLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
-                ייצא {entityLabels[entityType]}
+                {t('import_export.export_button', { entity: entityLabels[entityType] })}
               </Button>
               <Button variant="outline" onClick={handleDownloadTemplate} className="gap-2">
                 <FileText className="w-4 h-4" />
-                הורד תבנית
+                {t('common.download_template')}
               </Button>
             </div>
           </TabsContent>
@@ -339,10 +341,10 @@ export default function ImportExportDialog({
                   />
                   {isJson ? <FileJson className="w-12 h-12 mx-auto mb-4 text-slate-400" /> : <FileText className="w-12 h-12 mx-auto mb-4 text-slate-400" />}
                   <p className="text-slate-600 dark:text-slate-400 mb-2">
-                    לחץ לבחירת קובץ או גרור לכאן
+                    {t('common.click_to_select_file')}
                   </p>
                   <p className="text-sm text-slate-500">
-                    פורמט: {fileExtension.toUpperCase()}
+                    {t('common.format_json').replace('JSON', fileExtension.toUpperCase())}
                   </p>
                 </div>
 
@@ -355,7 +357,7 @@ export default function ImportExportDialog({
 
                 <Button variant="outline" onClick={handleDownloadTemplate} className="gap-2">
                   <FileText className="w-4 h-4" />
-                  הורד תבנית לדוגמה
+                  {t('common.download_template')}
                 </Button>
               </>
             ) : (
@@ -366,10 +368,10 @@ export default function ImportExportDialog({
                       checked={selectedCount === importPreview.length}
                       onCheckedChange={toggleSelectAll}
                     />
-                    <Label>בחר הכל ({selectedCount}/{importPreview.length})</Label>
+                    <Label>{t('import_export.select_all', 'Select All')} ({selectedCount}/{importPreview.length})</Label>
                   </div>
                   <Button variant="ghost" size="sm" onClick={resetImport}>
-                    בחר קובץ אחר
+                    {t('import_export.choose_other_file', 'Choose Another File')}
                   </Button>
                 </div>
 
@@ -401,7 +403,7 @@ export default function ImportExportDialog({
         {activeTab === 'import' && importPreview && (
           <DialogFooter className="border-t dark:border-slate-700 pt-4">
             <Button variant="outline" onClick={() => onOpenChange(false)}>
-              ביטול
+              {t('common.cancel')}
             </Button>
             <Button 
               onClick={handleImportConfirm} 
@@ -409,7 +411,7 @@ export default function ImportExportDialog({
               className="gap-2"
             >
               {isLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
-              ייבא {selectedCount} פריטים
+              {t('import_export.import_button', { count: selectedCount }, `Import ${selectedCount} items`)}
             </Button>
           </DialogFooter>
         )}
@@ -419,16 +421,17 @@ export default function ImportExportDialog({
 }
 
 function ImportPreviewItem({ item, selected, onSelect, entityType }) {
+  const { t } = useTranslation();
   const [expanded, setExpanded] = useState(false);
 
   const getActionBadge = () => {
     if (item.action === 'create') {
-      return <Badge className="bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300">חדש</Badge>;
+      return <Badge className="bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300">{t('common.new_record')}</Badge>;
     }
     if (item.action === 'update') {
-      return <Badge className="bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300">עדכון</Badge>;
+      return <Badge className="bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300">{t('common.update')}</Badge>;
     }
-    return <Badge className="bg-slate-100 text-slate-600">דילוג</Badge>;
+    return <Badge className="bg-slate-100 text-slate-600">{t('import_export.skip', 'Skip')}</Badge>;
   };
 
   return (
@@ -449,7 +452,7 @@ function ImportPreviewItem({ item, selected, onSelect, entityType }) {
                 className="text-sm text-blue-600 dark:text-blue-400 hover:underline"
                 onClick={() => setExpanded(!expanded)}
               >
-                {expanded ? 'הסתר' : 'הצג'} {item.conflicts.length} שינויים
+                {expanded ? t('import_export.hide_changes', 'Hide') : t('import_export.show_changes', 'Show')} {item.conflicts.length} {t('import_export.changes', 'changes')}
               </button>
               
               {expanded && (

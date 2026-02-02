@@ -447,7 +447,7 @@ export default function Cases() {
     },
     {
       id: 'assigned_lawyer',
-      header: 'עו"ד מטפל',
+      header: t('cases.assigned_lawyer'),
       cell: ({ row }) => {
         const r = row.original;
         return r.assigned_lawyer_id ? (
@@ -476,7 +476,7 @@ export default function Cases() {
     },
     {
       id: 'deadlines',
-      header: 'מועדים',
+      header: t('cases.deadlines'),
       cell: ({ row }) => {
         const r = row.original;
         return (
@@ -484,13 +484,13 @@ export default function Cases() {
             {r.expiry_date && (
               <div className="flex items-center gap-1 text-orange-600">
                 <Calendar className="w-3 h-3" />
-                <span>פקיעה: {format(new Date(r.expiry_date), 'dd/MM/yyyy')}</span>
+                <span>{t('common.expiry')}: {format(new Date(r.expiry_date), 'dd/MM/yyyy')}</span>
               </div>
             )}
             {r.renewal_date && (
               <div className="flex items-center gap-1 text-blue-600">
                 <Calendar className="w-3 h-3" />
-                <span>חידוש: {format(new Date(r.renewal_date), 'dd/MM/yyyy')}</span>
+                <span>{t('common.renewal')}: {format(new Date(r.renewal_date), 'dd/MM/yyyy')}</span>
               </div>
             )}
             {!r.expiry_date && !r.renewal_date && (
@@ -555,7 +555,7 @@ export default function Cases() {
       <div className="flex items-center justify-between">
         <PageHeader
           title={t('cases.title')}
-          subtitle={`${cases.length} תיקים במערכת`}
+          subtitle={t('cases.cases_count', { count: cases.length })}
           action={openCreateDialog}
           actionLabel={t('cases.new_case')}
         />
@@ -565,7 +565,7 @@ export default function Cases() {
           className="gap-2"
         >
           <Upload className="w-4 h-4" />
-          ייבוא/ייצוא
+          {t('cases.import_export')}
         </Button>
       </div>
 
@@ -629,13 +629,13 @@ export default function Cases() {
         <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto dark:bg-slate-800 dark:border-slate-700">
           <DialogHeader>
             <DialogTitle className="dark:text-slate-200">
-              {editingCase ? 'עריכת תיק' : 'תיק חדש'}
+              {editingCase ? t('cases.edit_case') : t('cases.new_case')}
             </DialogTitle>
           </DialogHeader>
           <form onSubmit={handleSubmit} className="space-y-6 mt-4">
             <div className="grid grid-cols-3 gap-4">
               <div className="space-y-2">
-                <Label className="dark:text-slate-300">מספר תיק *</Label>
+                <Label className="dark:text-slate-300">{t('cases.case_number_required')}</Label>
                 <Input
                   value={formData.case_number}
                   onChange={(e) => setFormData({ ...formData, case_number: e.target.value })}
@@ -645,7 +645,7 @@ export default function Cases() {
                 />
               </div>
               <div className="space-y-2">
-                <Label className="dark:text-slate-300">סוג תיק *</Label>
+                <Label className="dark:text-slate-300">{t('cases.case_type_required')}</Label>
                 <Select
                   value={formData.case_type}
                   onValueChange={(v) => setFormData({ ...formData, case_type: v })}
@@ -663,7 +663,7 @@ export default function Cases() {
                 </Select>
               </div>
               <div className="space-y-2">
-                <Label className="dark:text-slate-300">דחיפות</Label>
+                <Label className="dark:text-slate-300">{t('cases.priority_level')}</Label>
                 <Select
                   value={formData.priority_level}
                   onValueChange={(v) => setFormData({ ...formData, priority_level: v })}
@@ -687,11 +687,11 @@ export default function Cases() {
             </div>
 
             <div className="space-y-2">
-              <Label className="dark:text-slate-300">נושא התיק / תיאור המצאה *</Label>
+              <Label className="dark:text-slate-300">{t('cases.case_title_field')}</Label>
               <Input
                 value={formData.title}
                 onChange={(e) => setFormData({ ...formData, title: e.target.value })}
-                placeholder="לדוגמה: שיטה לזיהוי פנים באמצעות AI"
+                placeholder={t('cases.case_title_placeholder')}
                 required
                 className="dark:bg-slate-900 dark:border-slate-600"
               />
@@ -699,13 +699,13 @@ export default function Cases() {
 
             <div className="grid grid-cols-3 gap-4">
               <div className="space-y-2">
-                <Label className="dark:text-slate-300">לקוח</Label>
+                <Label className="dark:text-slate-300">{t('cases.client')}</Label>
                 <Select
                   value={formData.client_id || undefined}
                   onValueChange={(v) => setFormData({ ...formData, client_id: v })}
                 >
                   <SelectTrigger className="dark:bg-slate-900 dark:border-slate-600">
-                    <SelectValue placeholder="בחר לקוח" />
+                    <SelectValue placeholder={t('cases.select_client')} />
                   </SelectTrigger>
                   <SelectContent className="dark:bg-slate-800 dark:border-slate-700">
                     {clients.map(client => (
@@ -717,13 +717,13 @@ export default function Cases() {
                 </Select>
               </div>
               <div className="space-y-2">
-                <Label className="dark:text-slate-300">עו"ד מטפל</Label>
+                <Label className="dark:text-slate-300">{t('cases.assigned_lawyer')}</Label>
                 <Select
                   value={formData.assigned_lawyer_id || undefined}
                   onValueChange={(v) => setFormData({ ...formData, assigned_lawyer_id: v })}
                 >
                   <SelectTrigger className="dark:bg-slate-900 dark:border-slate-600">
-                    <SelectValue placeholder="בחר עו״ד" />
+                    <SelectValue placeholder={t('cases.select_lawyer')} />
                   </SelectTrigger>
                   <SelectContent className="dark:bg-slate-800 dark:border-slate-700">
                     {users.map(user => (
@@ -735,7 +735,7 @@ export default function Cases() {
                 </Select>
               </div>
               <div className="space-y-2">
-                <Label className="dark:text-slate-300">סטטוס *</Label>
+                <Label className="dark:text-slate-300">{t('cases.status_required')}</Label>
                 <Select
                   value={formData.status}
                   onValueChange={(v) => setFormData({ ...formData, status: v })}
@@ -756,16 +756,16 @@ export default function Cases() {
 
             <div className="grid grid-cols-3 gap-4">
               <div className="space-y-2">
-                <Label className="dark:text-slate-300">מספר בקשה רשמי</Label>
+                <Label className="dark:text-slate-300">{t('cases.application_number')}</Label>
                 <Input
                   value={formData.application_number}
                   onChange={(e) => setFormData({ ...formData, application_number: e.target.value })}
-                  placeholder="IL123456"
+                  placeholder={t('cases.application_number_placeholder')}
                   className="dark:bg-slate-900 dark:border-slate-600"
                 />
               </div>
               <div className="space-y-2">
-                <Label className="dark:text-slate-300">תאריך הגשה</Label>
+                <Label className="dark:text-slate-300">{t('cases.filing_date')}</Label>
                 <Input
                   type="date"
                   value={formData.filing_date}
@@ -774,7 +774,7 @@ export default function Cases() {
                 />
               </div>
               <div className="space-y-2">
-                <Label className="dark:text-slate-300">מדינה</Label>
+                <Label className="dark:text-slate-300">{t('cases.country')}</Label>
                 <Input
                   value={formData.territory}
                   onChange={(e) => setFormData({ ...formData, territory: e.target.value })}
@@ -786,7 +786,7 @@ export default function Cases() {
 
             <div className="grid grid-cols-3 gap-4">
               <div className="space-y-2">
-                <Label className="dark:text-slate-300">מועד פקיעה</Label>
+                <Label className="dark:text-slate-300">{t('cases.expiry_date')}</Label>
                 <Input
                   type="date"
                   value={formData.expiry_date}
@@ -795,7 +795,7 @@ export default function Cases() {
                 />
               </div>
               <div className="space-y-2">
-                <Label className="dark:text-slate-300">מועד חידוש</Label>
+                <Label className="dark:text-slate-300">{t('cases.renewal_date')}</Label>
                 <Input
                   type="date"
                   value={formData.renewal_date}
@@ -804,7 +804,7 @@ export default function Cases() {
                 />
               </div>
               <div className="space-y-2">
-                <Label className="dark:text-slate-300">תעריף שעתי (אופציונלי)</Label>
+                <Label className="dark:text-slate-300">{t('cases.hourly_rate_optional')}</Label>
                 <Input
                   type="number"
                   step="0.01"
@@ -817,7 +817,7 @@ export default function Cases() {
             </div>
 
             <div className="space-y-2">
-              <Label className="dark:text-slate-300">הערות</Label>
+              <Label className="dark:text-slate-300">{t('cases.notes')}</Label>
               <Textarea
                 value={formData.notes}
                 onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
@@ -833,14 +833,14 @@ export default function Cases() {
                 onClick={() => setIsDialogOpen(false)}
                 className="dark:border-slate-600"
               >
-                ביטול
+                {t('common.cancel')}
               </Button>
               <Button
                 type="submit"
                 className="bg-slate-800 hover:bg-slate-700 dark:bg-slate-700"
                 disabled={createMutation.isPending || updateMutation.isPending}
               >
-                {editingCase ? 'עדכן' : 'צור'}
+                {editingCase ? t('common.update') : t('common.create')}
               </Button>
             </div>
           </form>

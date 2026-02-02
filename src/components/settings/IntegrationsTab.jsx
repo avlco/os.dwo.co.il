@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -8,6 +9,7 @@ import { useToast } from "@/components/ui/use-toast";
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 
 export default function IntegrationsTab() {
+  const { t } = useTranslation();
   const { toast } = useToast();
   const queryClient = useQueryClient();
   
@@ -151,8 +153,8 @@ export default function IntegrationsTab() {
             {icon} {name}
           </CardTitle>
           {isConnected ? 
-            <Badge className="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-100">מחובר</Badge> : 
-            <Badge variant="outline">לא מחובר</Badge>
+            <Badge className="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-100">{t('integrations.connected')}</Badge> : 
+            <Badge variant="outline">{t('integrations.not_connected')}</Badge>
           }
         </CardHeader>
         <CardContent>
@@ -163,7 +165,7 @@ export default function IntegrationsTab() {
                 className="text-red-600 hover:text-red-700 hover:bg-red-50" 
                 onClick={() => disconnect(key)}
               >
-                <XCircle className="w-4 h-4 mr-2" /> התנתק
+                <XCircle className="w-4 h-4 mr-2" /> {t('integrations.disconnect')}
               </Button>
             ) : (
               <Button onClick={() => startAuth(key)} disabled={isLoading}>
@@ -172,7 +174,7 @@ export default function IntegrationsTab() {
                 ) : (
                   <Cloud className="w-4 h-4 mr-2"/>
                 )}
-                חבר חשבון
+                {t('integrations.connect')}
               </Button>
             )}
           </div>
@@ -184,7 +186,7 @@ export default function IntegrationsTab() {
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
-        <h3 className="text-lg font-medium">אינטגרציות מערכת</h3>
+        <h3 className="text-lg font-medium">{t('integrations.title')}</h3>
         <Button 
           variant="ghost" 
           size="sm" 
@@ -192,7 +194,7 @@ export default function IntegrationsTab() {
           disabled={isFetchingStatus}
         >
           <RefreshCw className={`w-4 h-4 mr-2 ${isFetchingStatus ? 'animate-spin' : ''}`}/>
-          רענן סטטוס
+          {t('integrations.refresh_status', 'Refresh Status')}
         </Button>
       </div>
       <div className="grid gap-4 md:grid-cols-2">
