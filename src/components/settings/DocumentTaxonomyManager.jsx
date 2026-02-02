@@ -357,7 +357,7 @@ export default function DocumentTaxonomyManager() {
 
           <div className="space-y-4">
             <div>
-              <Label className="dark:text-slate-300">רמה</Label>
+              <Label className="dark:text-slate-300">{t('document_taxonomy.level_field')}</Label>
               <Select 
                 value={currentItem.level} 
                 onValueChange={(v) => setCurrentItem({ ...currentItem, level: v, parent_id: '' })}
@@ -382,17 +382,17 @@ export default function DocumentTaxonomyManager() {
             </div>
 
             <div>
-              <Label className="dark:text-slate-300">שם (עברית) *</Label>
+              <Label className="dark:text-slate-300">{t('document_taxonomy.hebrew_name')}</Label>
               <Input
                 value={currentItem.name}
                 onChange={(e) => setCurrentItem({ ...currentItem, name: e.target.value })}
-                placeholder="למשל: פטנטים"
+                placeholder={t('document_taxonomy.hebrew_name_placeholder')}
                 className="dark:bg-slate-900 dark:border-slate-600"
               />
             </div>
 
             <div>
-              <Label className="dark:text-slate-300">שם (אנגלית)</Label>
+              <Label className="dark:text-slate-300">{t('document_taxonomy.english_name')}</Label>
               <Input
                 value={currentItem.name_en || ''}
                 onChange={(e) => setCurrentItem({ ...currentItem, name_en: e.target.value })}
@@ -402,31 +402,31 @@ export default function DocumentTaxonomyManager() {
             </div>
 
             <div>
-              <Label className="dark:text-slate-300">קוד קצר *</Label>
+              <Label className="dark:text-slate-300">{t('document_taxonomy.short_code')}</Label>
               <Input
                 value={currentItem.code}
                 onChange={(e) => setCurrentItem({ ...currentItem, code: e.target.value.toUpperCase() })}
-                placeholder="למשל: PAT"
+                placeholder={t('document_taxonomy.short_code_placeholder')}
                 maxLength={10}
                 className="dark:bg-slate-900 dark:border-slate-600 font-mono"
               />
               <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                קוד קצר לשימוש בנתיבים (עד 10 תווים)
+                {t('document_taxonomy.short_code_hint')}
               </p>
             </div>
 
             {getParentOptions().length > 0 && (
               <div>
-                <Label className="dark:text-slate-300">שייך לתחום</Label>
+                <Label className="dark:text-slate-300">{t('document_taxonomy.parent_domain', 'Parent Domain')}</Label>
                 <Select 
                   value={currentItem.parent_id || ''} 
                   onValueChange={(v) => setCurrentItem({ ...currentItem, parent_id: v })}
                 >
                   <SelectTrigger className="dark:bg-slate-900 dark:border-slate-600">
-                    <SelectValue placeholder="בחר תחום (אופציונלי)" />
+                    <SelectValue placeholder={t('document_taxonomy.select_domain_optional', 'Select domain (optional)')} />
                   </SelectTrigger>
                   <SelectContent className="dark:bg-slate-800">
-                    <SelectItem value={null} className="dark:text-slate-200">ללא</SelectItem>
+                    <SelectItem value={null} className="dark:text-slate-200">{t('common.none')}</SelectItem>
                     {getParentOptions().map((parent) => (
                       <SelectItem key={parent.id} value={parent.id} className="dark:text-slate-200">
                         {parent.name} ({parent.code})
@@ -438,7 +438,7 @@ export default function DocumentTaxonomyManager() {
             )}
 
             <div>
-              <Label className="dark:text-slate-300">סדר מיון</Label>
+              <Label className="dark:text-slate-300">{t('document_taxonomy.sort_order')}</Label>
               <Input
                 type="number"
                 value={currentItem.sort_order}
@@ -452,7 +452,7 @@ export default function DocumentTaxonomyManager() {
                 checked={currentItem.is_active}
                 onCheckedChange={(c) => setCurrentItem({ ...currentItem, is_active: c })}
               />
-              <Label className="dark:text-slate-300">פעיל</Label>
+              <Label className="dark:text-slate-300">{t('common.active')}</Label>
             </div>
           </div>
 

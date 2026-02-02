@@ -148,6 +148,7 @@ function TokenTextarea({ value, onChange, placeholder, className }) {
 }
 
 function RecipientsSelect({ value = [], onChange }) {
+  const { t } = useTranslation();
   const toggleRecipient = (recipient) => {
     if (value.includes(recipient)) {
       onChange(value.filter(r => r !== recipient));
@@ -155,9 +156,15 @@ function RecipientsSelect({ value = [], onChange }) {
       onChange([...value, recipient]);
     }
   };
+  
+  const RECIPIENT_OPTIONS_I18N = [
+    { value: 'client', label: t('automation_rules.client') },
+    { value: 'lawyer', label: t('automation_rules.responsible_lawyer') },
+  ];
+  
   return (
     <div className="flex flex-wrap gap-2">
-      {RECIPIENT_OPTIONS.map(opt => (
+      {RECIPIENT_OPTIONS_I18N.map(opt => (
         <Badge key={opt.value} variant={value.includes(opt.value) ? "default" : "outline"} className="cursor-pointer" onClick={() => toggleRecipient(opt.value)}>
           {opt.label}
         </Badge>
@@ -167,18 +174,25 @@ function RecipientsSelect({ value = [], onChange }) {
 }
 
 function TimingSelector({ direction, offset, unit, onDirectionChange, onOffsetChange, onUnitChange }) {
+  const { t } = useTranslation();
   return (
     <div className="flex items-center gap-2 flex-wrap">
       <Select value={direction} onValueChange={onDirectionChange}>
         <SelectTrigger className="w-24"><SelectValue /></SelectTrigger>
-        <SelectContent><SelectItem value="before">לפני</SelectItem><SelectItem value="after">אחרי</SelectItem></SelectContent>
+        <SelectContent>
+          <SelectItem value="before">{t('automation_rules.before', 'Before')}</SelectItem>
+          <SelectItem value="after">{t('automation_rules.after')}</SelectItem>
+        </SelectContent>
       </Select>
       <Input type="number" value={offset} onChange={e => onOffsetChange(parseInt(e.target.value) || 0)} className="w-20" />
       <Select value={unit} onValueChange={onUnitChange}>
         <SelectTrigger className="w-24"><SelectValue /></SelectTrigger>
-        <SelectContent><SelectItem value="days">ימים</SelectItem><SelectItem value="weeks">שבועות</SelectItem></SelectContent>
+        <SelectContent>
+          <SelectItem value="days">{t('automation_rules.days')}</SelectItem>
+          <SelectItem value="weeks">{t('automation_rules.weeks', 'Weeks')}</SelectItem>
+        </SelectContent>
       </Select>
-      <span className="text-sm text-slate-500">מתאריך המייל</span>
+      <span className="text-sm text-slate-500">{t('automation_rules.from_mail_date')}</span>
     </div>
   );
 }
@@ -374,7 +388,7 @@ export default function AutomationRulesManager() {
           <div className="flex gap-2">
             <Button variant="outline" onClick={() => setIsImportExportOpen(true)} className="gap-2">
               <Upload className="w-4 h-4" />
-              ייבוא/ייצוא
+              {t('common.import_export')}
             </Button>
 
             <Button variant="outline" onClick={() => {
@@ -382,7 +396,7 @@ export default function AutomationRulesManager() {
               setSendersInput('');
               setIsEditModalOpen(true);
             }}>
-              <Plus className="w-4 h-4 ml-1" /> הגדרה ידנית
+              <Plus className="w-4 h-4 ml-1" /> {t('automation_rules.manual_setup')}
             </Button>
           </div>
         </CardHeader>
@@ -402,18 +416,18 @@ export default function AutomationRulesManager() {
                     <p className="font-medium dark:text-slate-200">{rule.name}</p>
                     {rule.require_approval && (
                       <Badge variant="outline" className="text-xs gap-1">
-                        <ShieldCheck className="w-3 h-3" /> דורש אישור
+                        <ShieldCheck className="w-3 h-3" /> {t('automation_rules.requires_approval')}
                       </Badge>
                     )}
                     {!rule.is_active && (
                       <Badge variant="secondary" className="text-xs">
-                        לא פעיל
+                        {t('common.inactive')}
                       </Badge>
                     )}
                   </div>
                   <p className="text-sm text-slate-500">
-                    {rule.map_config?.length || 0} כללי חילוץ • 
-                    {Object.values(rule.action_bundle || {}).filter(a => a?.enabled).length} פעולות
+                    {rule.map_config?.length || 0} {t('automation_rules.extraction_rules')} • 
+                    {Object.values(rule.action_bundle || {}).filter(a => a?.enabled).length} {t('common.actions')}
                   </p>
                 </div>
                 
@@ -447,7 +461,7 @@ export default function AutomationRulesManager() {
           <div className="flex items-center justify-between p-3 bg-slate-50 dark:bg-slate-900 rounded-lg mb-4">
             <div className="flex items-center gap-2">
               <ShieldCheck className="w-5 h-5 text-blue-600" />
-              <span className="font-medium">דרוש אישור לפני ביצוע</span>
+              <span className="font-medium">{t('automation_rules.require_approval')}</span>
             </div>
             <Switch 
               checked={currentRule.require_approval} 
@@ -456,9 +470,9 @@ export default function AutomationRulesManager() {
           </div>
           {currentRule.require_approval && (
             <div className="mb-4">
-              <Label>מאשר</Label>
+              <Label>{t('automation_rules.approver')}</Label>
               <Select value={currentRule.approver_email} onValueChange={v => setCurrentRule({...currentRule, approver_email: v})}>
-                <SelectTrigger><SelectValue placeholder="בחר עו״ד מאשר" /></SelectTrigger>
+                <SelectTrigger><SelectValue placeholder={t('automation_rules.select_approver')} /></SelectTrigger>
                 <SelectContent>
                   {users.map(user => (
                     <SelectItem key={user.id} value={user.email}>{user.full_name} ({user.email})</SelectItem>
@@ -470,32 +484,32 @@ export default function AutomationRulesManager() {
 
           <Tabs value={activeTab} onValueChange={setActiveTab}>
             <TabsList className="grid grid-cols-3">
-              <TabsTrigger value="catch">1. מסננת</TabsTrigger>
-              <TabsTrigger value="map">2. מפענח</TabsTrigger>
-              <TabsTrigger value="actions">3. פעולות</TabsTrigger>
+              <TabsTrigger value="catch">{t('automation_rules.filter_tab')}</TabsTrigger>
+              <TabsTrigger value="map">{t('automation_rules.extractor_tab')}</TabsTrigger>
+              <TabsTrigger value="actions">{t('automation_rules.actions_tab')}</TabsTrigger>
             </TabsList>
 
             <TabsContent value="catch" className="space-y-4 pt-4">
               <div>
-                <Label>שם החוק</Label>
-                <Input value={currentRule.name} onChange={e => setCurrentRule({...currentRule, name: e.target.value})} placeholder="למשל: הודעות רשמיות - סימני מסחר" />
+                <Label>{t('automation_rules.rule_name')}</Label>
+                <Input value={currentRule.name} onChange={e => setCurrentRule({...currentRule, name: e.target.value})} placeholder={t('automation_rules.rule_name_placeholder')} />
               </div>
               <div>
-                <Label>שולח (From)</Label>
-                <Input value={sendersInput} onChange={e => setSendersInput(e.target.value)} placeholder="כתובות מייל מופרדות בפסיקים" />
+                <Label>{t('automation_rules.sender_from')}</Label>
+                <Input value={sendersInput} onChange={e => setSendersInput(e.target.value)} placeholder={t('automation_rules.sender_placeholder')} />
               </div>
               <div>
-                <Label>טקסט בנושא</Label>
-                <Input value={currentRule.catch_config.subject_contains} onChange={e => setCurrentRule({...currentRule, catch_config: {...currentRule.catch_config, subject_contains: e.target.value}})} placeholder="למשל: הודעה על קיבול" />
+                <Label>{t('automation_rules.subject_text')}</Label>
+                <Input value={currentRule.catch_config.subject_contains} onChange={e => setCurrentRule({...currentRule, catch_config: {...currentRule.catch_config, subject_contains: e.target.value}})} placeholder={t('automation_rules.subject_text_placeholder')} />
               </div>
               <div>
-                <Label>טקסט בגוף המייל</Label>
-                <Input value={currentRule.catch_config.body_contains} onChange={e => setCurrentRule({...currentRule, catch_config: {...currentRule.catch_config, body_contains: e.target.value}})} placeholder="מילות מפתח בגוף ההודעה" />
+                <Label>{t('automation_rules.body_text')}</Label>
+                <Input value={currentRule.catch_config.body_contains} onChange={e => setCurrentRule({...currentRule, catch_config: {...currentRule.catch_config, body_contains: e.target.value}})} placeholder={t('automation_rules.body_keywords')} />
               </div>
             </TabsContent>
 
             <TabsContent value="map" className="space-y-4 pt-4">
-              <p className="text-sm text-slate-500 dark:text-slate-400">הגדר כללי חילוץ: חפש טקסט עוגן וקח את מה שאחריו</p>
+              <p className="text-sm text-slate-500 dark:text-slate-400">{t('automation_rules.define_extraction')}</p>
               
               <div className="space-y-3">
                 {currentRule.map_config.map((row, index) => (
@@ -503,12 +517,12 @@ export default function AutomationRulesManager() {
                     <Select value={row.source} onValueChange={v => updateMapRow(index, 'source', v)}>
                       <SelectTrigger className="w-28"><SelectValue /></SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="subject">נושא</SelectItem>
-                        <SelectItem value="body">גוף</SelectItem>
-                        <SelectItem value="attachment">קבצים</SelectItem>
+                        <SelectItem value="subject">{t('automation_rules.source_subject')}</SelectItem>
+                        <SelectItem value="body">{t('automation_rules.source_body', 'Body')}</SelectItem>
+                        <SelectItem value="attachment">{t('automation_rules.source_attachments', 'Attachments')}</SelectItem>
                       </SelectContent>
                     </Select>
-                    <Input value={row.anchor_text} onChange={e => updateMapRow(index, 'anchor_text', e.target.value)} placeholder="טקסט עוגן (למשל: תיק מס':)" className="flex-1" />
+                    <Input value={row.anchor_text} onChange={e => updateMapRow(index, 'anchor_text', e.target.value)} placeholder={t('automation_rules.anchor_text_placeholder')} className="flex-1" />
                     <Select value={row.target_field} onValueChange={v => updateMapRow(index, 'target_field', v)}>
                       <SelectTrigger className="w-44"><SelectValue /></SelectTrigger>
                       <SelectContent>
@@ -523,7 +537,7 @@ export default function AutomationRulesManager() {
                   </div>
                 ))}
               </div>
-              <Button variant="outline" onClick={addMapRow} className="w-full gap-2"><Plus className="w-4 h-4" /> הוסף כלל חילוץ</Button>
+              <Button variant="outline" onClick={addMapRow} className="w-full gap-2"><Plus className="w-4 h-4" /> {t('automation_rules.add_extraction_rule')}</Button>
             </TabsContent>
 
             <TabsContent value="actions" className="space-y-6 pt-4">
@@ -532,21 +546,21 @@ export default function AutomationRulesManager() {
               <div className="p-4 border dark:border-slate-700 rounded-lg space-y-4">
                 <div className="flex items-center gap-2">
                   <Checkbox checked={currentRule.action_bundle.billing.enabled} onCheckedChange={c => updateAction('billing', 'enabled', c)} />
-                  <Label className="font-medium">💰 חיוב שעות</Label>
+                  <Label className="font-medium">{t('automation_rules.action_billing')}</Label>
                 </div>
                 {currentRule.action_bundle.billing.enabled && (
                   <div className="grid grid-cols-2 gap-3 pr-6">
                     <div>
-                      <Label className="text-sm">שעות</Label>
+                      <Label className="text-sm">{t('automation_rules.hours')}</Label>
                       <Input type="number" step="0.25" value={currentRule.action_bundle.billing.hours} onChange={e => updateAction('billing', 'hours', parseFloat(e.target.value) || 0)} />
                     </div>
                     <div>
-                      <Label className="text-sm">תעריף לשעה (₪)</Label>
+                      <Label className="text-sm">{t('automation_rules.hourly_rate')}</Label>
                       <Input type="number" value={currentRule.action_bundle.billing.hourly_rate} onChange={e => updateAction('billing', 'hourly_rate', parseFloat(e.target.value) || 0)} />
                     </div>
                     <div className="col-span-2">
-                      <Label className="text-sm">תיאור</Label>
-                      <TokenInput value={currentRule.action_bundle.billing.description_template} onChange={v => updateAction('billing', 'description_template', v)} placeholder="עיבוד דואר: {Mail_Subject}" />
+                      <Label className="text-sm">{t('common.description')}</Label>
+                      <TokenInput value={currentRule.action_bundle.billing.description_template} onChange={v => updateAction('billing', 'description_template', v)} placeholder={t('automation_rules.processing_placeholder')} />
                     </div>
                   </div>
                 )}
@@ -556,25 +570,25 @@ export default function AutomationRulesManager() {
               <div className="p-4 border dark:border-slate-700 rounded-lg space-y-4">
                 <div className="flex items-center gap-2">
                   <Checkbox checked={currentRule.action_bundle.create_alert.enabled} onCheckedChange={c => updateAction('create_alert', 'enabled', c)} />
-                  <Label className="font-medium">🚨 התרעה / דוקטינג</Label>
+                  <Label className="font-medium">{t('automation_rules.action_alert')}</Label>
                 </div>
                 {currentRule.action_bundle.create_alert.enabled && (
                   <div className="space-y-3 pr-6">
                     <div className="grid grid-cols-2 gap-3">
                       <div>
-                        <Label className="text-sm">סוג</Label>
+                        <Label className="text-sm">{t('automation_rules.alert_type')}</Label>
                         <Select value={currentRule.action_bundle.create_alert.alert_type} onValueChange={v => updateAction('create_alert', 'alert_type', v)}>
                           <SelectTrigger><SelectValue /></SelectTrigger>
                           <SelectContent>
-                            <SelectItem value="reminder">תזכורת</SelectItem>
-                            <SelectItem value="deadline">מועד פקיעה</SelectItem>
-                            <SelectItem value="urgent">דחוף</SelectItem>
+                            <SelectItem value="reminder">{t('automation_rules.type_reminder')}</SelectItem>
+                            <SelectItem value="deadline">{t('automation_rules.type_deadline', 'Deadline')}</SelectItem>
+                            <SelectItem value="urgent">{t('priority_labels.urgent')}</SelectItem>
                           </SelectContent>
                         </Select>
                       </div>
                     </div>
                     <div>
-                      <Label className="text-sm">תזמון</Label>
+                      <Label className="text-sm">{t('automation_rules.timing')}</Label>
                       <TimingSelector
                         direction={currentRule.action_bundle.create_alert.timing_direction}
                         offset={currentRule.action_bundle.create_alert.timing_offset}
@@ -585,8 +599,8 @@ export default function AutomationRulesManager() {
                       />
                     </div>
                     <div>
-                      <Label className="text-sm">הודעה</Label>
-                      <TokenInput value={currentRule.action_bundle.create_alert.message_template} onChange={v => updateAction('create_alert', 'message_template', v)} placeholder="נדרשת תגובה בתיק {Case_No}" />
+                      <Label className="text-sm">{t('automation_rules.message')}</Label>
+                      <TokenInput value={currentRule.action_bundle.create_alert.message_template} onChange={v => updateAction('create_alert', 'message_template', v)} placeholder={t('automation_rules.message_placeholder')} />
                     </div>
                     
                     {/* English Alert */}
@@ -596,7 +610,7 @@ export default function AutomationRulesManager() {
                               checked={currentRule.action_bundle.create_alert.enable_english || false} 
                               onCheckedChange={c => updateAction('create_alert', 'enable_english', c)} 
                             />
-                            <Label className="text-sm text-blue-600 dark:text-blue-400 font-medium">הוסף גרסה באנגלית</Label>
+                            <Label className="text-sm text-blue-600 dark:text-blue-400 font-medium">{t('automation_rules.add_english_version')}</Label>
                         </div>
                         {currentRule.action_bundle.create_alert.enable_english && (
                             <div className="space-y-3 p-3 bg-slate-50 dark:bg-slate-900 rounded border border-slate-200 dark:border-slate-700">
@@ -613,7 +627,38 @@ export default function AutomationRulesManager() {
                     </div>
 
                     <div>
-                      <Label className="text-sm">נמענים</Label>
+                      <Label className="text-sm">{t('automation_rules.recipients')}</Label>
+                      <RecipientsSelect value={currentRule.action_bundle.create_alert.recipients} onChange={v => updateAction('create_alert', 'recipients', v)} />
+                    </div>
+                  </div>
+                )}
+              </div>
+
+                    {/* English Alert */}
+                    <div className="mt-4 pt-4 border-t border-slate-200 dark:border-slate-700">
+                        <div className="flex items-center gap-2 mb-3">
+                            <Switch 
+                              checked={currentRule.action_bundle.create_alert.enable_english || false} 
+                              onCheckedChange={c => updateAction('create_alert', 'enable_english', c)} 
+                            />
+                            <Label className="text-sm text-blue-600 dark:text-blue-400 font-medium">{t('automation_rules.add_english_version')}</Label>
+                        </div>
+                        {currentRule.action_bundle.create_alert.enable_english && (
+                            <div className="space-y-3 p-3 bg-slate-50 dark:bg-slate-900 rounded border border-slate-200 dark:border-slate-700">
+                                <div>
+                                    <Label className="text-sm">English Message</Label>
+                                    <TokenInput 
+                                      value={currentRule.action_bundle.create_alert.message_template_en || ''} 
+                                      onChange={v => updateAction('create_alert', 'message_template_en', v)} 
+                                      placeholder="Alert for case {Case_No}" 
+                                    />
+                                </div>
+                            </div>
+                        )}
+                    </div>
+
+                    <div>
+                      <Label className="text-sm">{t('automation_rules.recipients')}</Label>
                       <RecipientsSelect value={currentRule.action_bundle.create_alert.recipients} onChange={v => updateAction('create_alert', 'recipients', v)} />
                     </div>
                   </div>
@@ -624,24 +669,24 @@ export default function AutomationRulesManager() {
               <div className="p-4 border dark:border-slate-700 rounded-lg space-y-4">
                 <div className="flex items-center gap-2">
                   <Checkbox checked={currentRule.action_bundle.calendar_event.enabled} onCheckedChange={c => updateAction('calendar_event', 'enabled', c)} />
-                  <Label className="font-medium">📅 אירוע ביומן</Label>
+                  <Label className="font-medium">{t('automation_rules.action_calendar')}</Label>
                 </div>
                 {currentRule.action_bundle.calendar_event.enabled && (
                   <div className="space-y-3 pr-6">
                     <div>
-                      <Label className="text-sm">שם האירוע</Label>
-                      <TokenInput value={currentRule.action_bundle.calendar_event.title_template} onChange={v => updateAction('calendar_event', 'title_template', v)} placeholder="מועד אחרון - {Case_No}" />
+                      <Label className="text-sm">{t('automation_rules.event_name')}</Label>
+                      <TokenInput value={currentRule.action_bundle.calendar_event.title_template} onChange={v => updateAction('calendar_event', 'title_template', v)} placeholder={t('automation_rules.event_name_placeholder')} />
                     </div>
                     <div>
-                      <Label className="text-sm">תיאור האירוע (עברית)</Label>
+                      <Label className="text-sm">{t('automation_rules.event_description_hebrew')}</Label>
                       <TokenTextarea 
                         value={currentRule.action_bundle.calendar_event.description_template || ''} 
                         onChange={v => updateAction('calendar_event', 'description_template', v)} 
-                        placeholder="פרטים נוספים ליומן..." 
+                        placeholder={t('automation_rules.event_details_placeholder')} 
                       />
                     </div>
                     <div>
-                      <Label className="text-sm">תזמון</Label>
+                      <Label className="text-sm">{t('automation_rules.timing')}</Label>
                       <TimingSelector
                         direction={currentRule.action_bundle.calendar_event.timing_direction}
                         offset={currentRule.action_bundle.calendar_event.timing_offset}
@@ -659,7 +704,7 @@ export default function AutomationRulesManager() {
                           checked={currentRule.action_bundle.calendar_event.enable_english || false} 
                           onCheckedChange={c => updateAction('calendar_event', 'enable_english', c)} 
                         />
-                        <Label className="text-sm text-blue-600 dark:text-blue-400 font-medium">הוסף גרסה באנגלית</Label>
+                        <Label className="text-sm text-blue-600 dark:text-blue-400 font-medium">{t('automation_rules.add_english_version')}</Label>
                       </div>
                       
                       {currentRule.action_bundle.calendar_event.enable_english && (
@@ -700,21 +745,21 @@ export default function AutomationRulesManager() {
               <div className="p-4 border dark:border-slate-700 rounded-lg space-y-4">
                 <div className="flex items-center gap-2">
                   <Checkbox checked={currentRule.action_bundle.send_email.enabled} onCheckedChange={c => updateAction('send_email', 'enabled', c)} />
-                  <Label className="font-medium">📧 שליחת מייל</Label>
+                  <Label className="font-medium">{t('automation_rules.action_email')}</Label>
                 </div>
                 {currentRule.action_bundle.send_email.enabled && (
                   <div className="space-y-3 pr-6">
                     <div>
-                      <Label className="text-sm">נמענים</Label>
+                      <Label className="text-sm">{t('automation_rules.recipients')}</Label>
                       <RecipientsSelect value={currentRule.action_bundle.send_email.recipients} onChange={v => updateAction('send_email', 'recipients', v)} />
                     </div>
                     <div>
-                      <Label className="text-sm">נושא</Label>
-                      <TokenInput value={currentRule.action_bundle.send_email.subject_template} onChange={v => updateAction('send_email', 'subject_template', v)} placeholder="עדכון בתיק {Case_No}" />
+                      <Label className="text-sm">{t('automation_rules.email_subject')}</Label>
+                      <TokenInput value={currentRule.action_bundle.send_email.subject_template} onChange={v => updateAction('send_email', 'subject_template', v)} placeholder={t('automation_rules.email_subject_placeholder')} />
                     </div>
                     <div>
-                      <Label className="text-sm">תוכן</Label>
-                      <TokenTextarea value={currentRule.action_bundle.send_email.body_template} onChange={v => updateAction('send_email', 'body_template', v)} placeholder="שלום {Client_Name},&#10;&#10;התקבלה הודעה בתיק..." />
+                      <Label className="text-sm">{t('automation_rules.content')}</Label>
+                      <TokenTextarea value={currentRule.action_bundle.send_email.body_template} onChange={v => updateAction('send_email', 'body_template', v)} placeholder={t('automation_rules.email_content_placeholder')} />
                     </div>
 
                     {/* English Email */}
@@ -724,7 +769,7 @@ export default function AutomationRulesManager() {
                           checked={currentRule.action_bundle.send_email.enable_english || false} 
                           onCheckedChange={c => updateAction('send_email', 'enable_english', c)} 
                         />
-                        <Label className="text-sm text-blue-600 dark:text-blue-400 font-medium">הוסף גרסה באנגלית</Label>
+                        <Label className="text-sm text-blue-600 dark:text-blue-400 font-medium">{t('automation_rules.add_english_version')}</Label>
                       </div>
                       
                       {currentRule.action_bundle.send_email.enable_english && (
@@ -757,41 +802,41 @@ export default function AutomationRulesManager() {
               <div className="p-4 border dark:border-slate-700 rounded-lg space-y-4">
                 <div className="flex items-center gap-2">
                   <Checkbox checked={currentRule.action_bundle.save_file.enabled} onCheckedChange={c => updateAction('save_file', 'enabled', c)} />
-                  <Label className="font-medium">🗂️ שמירת קבצים ב-Dropbox</Label>
+                  <Label className="font-medium">{t('automation_rules.action_save_file')}</Label>
                 </div>
                 {currentRule.action_bundle.save_file.enabled && (
                   <div className="pr-6 space-y-3">
                     <div>
-                      <Label className="text-sm">סוג מסמך</Label>
+                      <Label className="text-sm">{t('automation_rules.document_type')}</Label>
                       <select
                         className="w-full mt-1 p-2 border dark:border-slate-600 dark:bg-slate-800 rounded-md text-sm"
                         value={currentRule.action_bundle.save_file.document_type || 'other'}
                         onChange={e => updateAction('save_file', 'document_type', e.target.value)}
                       >
-                        <option value="office_action">הודעות רשמיות</option>
-                        <option value="response">תגובות</option>
-                        <option value="certificate">תעודות</option>
-                        <option value="correspondence">התכתבויות</option>
-                        <option value="invoice">חשבוניות</option>
-                        <option value="application">בקשות</option>
-                        <option value="assignment">הקצאות</option>
-                        <option value="license">רישיונות</option>
-                        <option value="renewal_notice">הודעות חידוש</option>
-                        <option value="search_report">דוחות חיפוש</option>
-                        <option value="other">אחר</option>
+                        <option value="office_action">{t('automation_rules.doc_type_office_action', 'Office Actions')}</option>
+                        <option value="response">{t('automation_rules.doc_type_response', 'Responses')}</option>
+                        <option value="certificate">{t('automation_rules.doc_type_certificate', 'Certificates')}</option>
+                        <option value="correspondence">{t('automation_rules.doc_type_correspondence', 'Correspondence')}</option>
+                        <option value="invoice">{t('automation_rules.doc_type_invoice', 'Invoices')}</option>
+                        <option value="application">{t('automation_rules.doc_type_application', 'Applications')}</option>
+                        <option value="assignment">{t('automation_rules.doc_type_assignment', 'Assignments')}</option>
+                        <option value="license">{t('automation_rules.doc_type_license', 'Licenses')}</option>
+                        <option value="renewal_notice">{t('automation_rules.doc_type_renewal', 'Renewal Notices')}</option>
+                        <option value="search_report">{t('automation_rules.doc_type_search', 'Search Reports')}</option>
+                        <option value="other">{t('automation_rules.other')}</option>
                       </select>
                     </div>
                     <div>
-                      <Label className="text-sm">תת-תיקייה (אופציונלי)</Label>
+                      <Label className="text-sm">{t('automation_rules.subfolder')}</Label>
                       <Input
                         value={currentRule.action_bundle.save_file.subfolder || ''}
                         onChange={e => updateAction('save_file', 'subfolder', e.target.value)}
-                        placeholder="לדוגמה: נספחים"
+                        placeholder={t('automation_rules.subfolder_placeholder')}
                         className="dark:bg-slate-800 dark:border-slate-600"
                       />
                     </div>
                     <p className="text-xs text-slate-400">
-                      💡 הנתיב נבנה אוטומטית לפי הגדרות מבנה התיקיות ב-Dropbox
+                      {t('automation_rules.dropbox_hint')}
                     </p>
                   </div>
                 )}
