@@ -185,10 +185,10 @@ export default function Dashboard() {
             ) : (
               <BarChart
                 data={[
-                  { name: t('dashboard.priority_low'), value: tasks.filter(t => t.priority === 'low').length },
-                  { name: t('dashboard.priority_medium'), value: tasks.filter(t => t.priority === 'medium').length },
-                  { name: t('dashboard.priority_high'), value: tasks.filter(t => t.priority === 'high').length },
-                  { name: t('dashboard.priority_critical'), value: tasks.filter(t => t.priority === 'critical').length },
+                  { name: t('dashboard.priority_low'), value: tasks.filter(task => task.priority === 'low').length },
+                  { name: t('dashboard.priority_medium'), value: tasks.filter(task => task.priority === 'medium').length },
+                  { name: t('dashboard.priority_high'), value: tasks.filter(task => task.priority === 'high').length },
+                  { name: t('dashboard.priority_critical'), value: tasks.filter(task => task.priority === 'critical').length },
                 ]}
                 dataKey="value"
                 xKey="name"
