@@ -463,7 +463,7 @@ export default function CaseView() {
                   {tasks.map((task) => (
                     <div 
                       key={task.id}
-                      className="flex items-center gap-4 p-4 bg-slate-50 dark:bg-slate-800 rounded-xl"
+                      className="flex items-center gap-4 p-4 bg-slate-50 dark:bg-card rounded-xl"
                     >
                       <div className="flex-1">
                         <p className="font-medium text-slate-800">{task.title}</p>
@@ -522,7 +522,7 @@ export default function CaseView() {
                   {timeEntries.map((entry) => (
                     <div 
                       key={entry.id}
-                      className="flex items-center gap-4 p-4 bg-slate-50 dark:bg-slate-800 rounded-xl"
+                      className="flex items-center gap-4 p-4 bg-slate-50 dark:bg-card rounded-xl"
                     >
                       <div className="flex-1">
                         <p className="font-medium text-slate-800">{entry.description}</p>
