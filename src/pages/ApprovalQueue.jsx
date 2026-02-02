@@ -597,7 +597,7 @@ export default function ApprovalQueue() {
 
       {/* Details/Rejection Dialog (for legacy approvals) */}
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-        <DialogContent className="max-w-2xl dark:bg-slate-800 dark:border-slate-700">
+        <DialogContent className="max-w-2xl">
           <DialogHeader>
             <DialogTitle className="dark:text-slate-200">
               {selectedApproval?.status === 'pending' ? 'דחיית בקשה (מערכת ישנה)' : 'פרטי בקשת אישור'}
