@@ -203,53 +203,53 @@ export default function MailRoom() {
 
       {/* Stats Cards */}
       <div className="grid gap-4 md:grid-cols-4">
-        <Card>
+        <Card className="dark:bg-slate-800 dark:border-slate-700">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium">{t('mail_room.inbox_tab')}</CardTitle>
+            <CardTitle className="text-sm font-medium dark:text-slate-200">{t('mail_room.inbox_tab')}</CardTitle>
             <Inbox className="w-4 h-4 text-blue-500" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{stats.inboxCount}</div>
-            <p className="text-xs text-slate-500 mt-1">{t('mail_room.new_conversations')}</p>
+            <div className="text-2xl font-bold dark:text-slate-100">{stats.inboxCount}</div>
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">{t('mail_room.new_conversations')}</p>
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="dark:bg-slate-800 dark:border-slate-700">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium">{t('mail_room.automation_mails_tab')}</CardTitle>
+            <CardTitle className="text-sm font-medium dark:text-slate-200">{t('mail_room.automation_mails_tab')}</CardTitle>
             <Filter className="w-4 h-4 text-amber-500" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{stats.automationCount}</div>
-            <p className="text-xs text-slate-500 mt-1">{t('mail_room.identified_for_processing')}</p>
+            <div className="text-2xl font-bold dark:text-slate-100">{stats.automationCount}</div>
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">{t('mail_room.identified_for_processing')}</p>
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="dark:bg-slate-800 dark:border-slate-700">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium">{t('common.success_rate')}</CardTitle>
+            <CardTitle className="text-sm font-medium dark:text-slate-200">{t('common.success_rate')}</CardTitle>
             <CheckCircle2 className="w-4 h-4 text-green-600" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-green-600">{stats.successRate}%</div>
-            <p className="text-xs text-slate-500 mt-1">{stats.successLogs} {t('mail_room.out_of')} {stats.totalLogs}</p>
+            <div className="text-2xl font-bold text-green-600 dark:text-green-400">{stats.successRate}%</div>
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">{stats.successLogs} {t('mail_room.out_of')} {stats.totalLogs}</p>
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="dark:bg-slate-800 dark:border-slate-700">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium">{t('common.failures')}</CardTitle>
+            <CardTitle className="text-sm font-medium dark:text-slate-200">{t('common.failures')}</CardTitle>
             <AlertCircle className="w-4 h-4 text-red-500" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-red-600">{stats.failedLogs}</div>
-            <p className="text-xs text-slate-500 mt-1">{t('common.failed_automations')}</p>
+            <div className="text-2xl font-bold text-red-600 dark:text-red-400">{stats.failedLogs}</div>
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">{t('common.failed_automations')}</p>
           </CardContent>
         </Card>
       </div>
 
       {/* Main Card */}
-      <Card>
+      <Card className="dark:bg-slate-800 dark:border-slate-700">
         <CardContent className="pt-6">
           {/* Action Buttons */}
           <div className="flex items-center justify-between mb-4">
@@ -287,7 +287,7 @@ export default function MailRoom() {
             </div>
             
             {/* Sync Timer */}
-            <div className="text-sm text-slate-500 flex items-center gap-2">
+            <div className="text-sm text-slate-500 dark:text-slate-400 flex items-center gap-2">
               <Clock className="w-4 h-4" />
               {lastSyncTime ? (
                 <span>{t('mail_room.last_sync', 'Last sync')}: {format(lastSyncTime, 'HH:mm', { locale: dateLocale })}</span>
@@ -301,16 +301,16 @@ export default function MailRoom() {
 
           {/* Tabs */}
           <Tabs value={activeTab} onValueChange={setActiveTab}>
-            <TabsList className="grid w-full grid-cols-3">
-              <TabsTrigger value="inbox" className="gap-2">
+            <TabsList className="grid w-full grid-cols-3 bg-slate-100 dark:bg-slate-900 border dark:border-slate-700">
+              <TabsTrigger value="inbox" className="gap-2 dark:text-slate-300 dark:data-[state=active]:bg-slate-700 dark:data-[state=active]:text-slate-100">
                 <Inbox className="w-4 h-4" />
                 {t('mail_room.inbox_tab')} ({stats.inboxCount})
               </TabsTrigger>
-              <TabsTrigger value="automation" className="gap-2">
+              <TabsTrigger value="automation" className="gap-2 dark:text-slate-300 dark:data-[state=active]:bg-slate-700 dark:data-[state=active]:text-slate-100">
                 <Filter className="w-4 h-4" />
                 {t('mail_room.automation_mails_tab')} ({stats.automationCount})
               </TabsTrigger>
-              <TabsTrigger value="logs" className="gap-2">
+              <TabsTrigger value="logs" className="gap-2 dark:text-slate-300 dark:data-[state=active]:bg-slate-700 dark:data-[state=active]:text-slate-100">
                 <ListChecks className="w-4 h-4" />
                 {t('mail_room.automation_log_tab')} ({stats.totalLogs})
               </TabsTrigger>
@@ -323,7 +323,7 @@ export default function MailRoom() {
                   {[1,2,3].map(i => <Skeleton key={i} className="h-24 w-full" />)}
                 </div>
               ) : filteredThreads.length === 0 ? (
-                <div className="text-center py-12 text-slate-500">
+                <div className="text-center py-12 text-slate-500 dark:text-slate-400">
                   <Inbox className="w-12 h-12 mx-auto mb-4 opacity-50" />
                   <p>{t('mail_room.no_emails')}</p>
                   <p className="text-sm mt-2">{t('mail_room.all_processed_hint', 'All emails have been processed or are in other tabs')}</p>
@@ -348,7 +348,7 @@ export default function MailRoom() {
                   {[1,2,3].map(i => <Skeleton key={i} className="h-24 w-full" />)}
                 </div>
               ) : filteredThreads.length === 0 ? (
-                <div className="text-center py-12 text-slate-500">
+                <div className="text-center py-12 text-slate-500 dark:text-slate-400">
                   <Filter className="w-12 h-12 mx-auto mb-4 opacity-50" />
                   <p>{t('mail_room.no_automation_mails', 'No emails identified for automation')}</p>
                   <p className="text-sm mt-2">{t('mail_room.automation_mails_hint', 'Emails matching automation rules will appear here')}</p>
@@ -373,7 +373,7 @@ export default function MailRoom() {
                   {[1,2,3].map(i => <Skeleton key={i} className="h-32 w-full" />)}
                 </div>
               ) : recentLogs.length === 0 ? (
-                <div className="text-center py-12 text-slate-500">
+                <div className="text-center py-12 text-slate-500 dark:text-slate-400">
                   <Activity className="w-12 h-12 mx-auto mb-4 opacity-50" />
                   <p>{t('approval_queue.no_automation_activity')}</p>
                   <p className="text-sm mt-2">{t('mail_room.automation_log_hint', 'When automation rules run, activity will be displayed here')}</p>
