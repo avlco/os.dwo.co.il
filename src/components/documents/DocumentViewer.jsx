@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { base44 } from '@/api/base44Client';
+import { useTranslation } from 'react-i18next';
 import { format } from 'date-fns';
-import { he } from 'date-fns/locale';
+import { he, enUS } from 'date-fns/locale';
 import {
   FileText,
   ExternalLink,
@@ -45,23 +46,10 @@ function formatFileSize(bytes) {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-// Document type labels
-const documentTypeLabels = {
-  application: 'בקשה',
-  office_action: 'דו"ח בחינה',
-  response: 'תגובה',
-  certificate: 'תעודה',
-  assignment: 'הסבה',
-  license: 'רישיון',
-  correspondence: 'התכתבות',
-  invoice: 'חשבונית',
-  renewal_notice: 'הודעת חידוש',
-  search_report: 'דוח חיפוש',
-  other: 'אחר'
-};
-
 // Preview Modal Component
 function DocumentPreviewModal({ document, isOpen, onClose }) {
+  const { t, i18n } = useTranslation();
+  const dateLocale = i18n.language === 'he' ? he : enUS;
   const [isLoading, setIsLoading] = useState(false);
   const [previewUrl, setPreviewUrl] = useState(null);
   const [error, setError] = useState(null);
@@ -123,10 +111,10 @@ function DocumentPreviewModal({ document, isOpen, onClose }) {
           ) : error ? (
             <div className="h-full flex flex-col items-center justify-center text-center p-4">
               <FileText className="w-16 h-16 text-slate-300 mb-4" />
-              <p className="text-slate-600 dark:text-slate-400 mb-2">לא ניתן לטעון את המסמך</p>
+              <p className="text-slate-600 dark:text-slate-400 mb-2">{t('documents.load_error', 'Cannot load document')}</p>
               <p className="text-sm text-slate-400">{error}</p>
               <Button variant="outline" className="mt-4" onClick={handleGetUrl}>
-                נסה שוב
+                {t('mail_view.try_again')}
               </Button>
             </div>
           ) : previewUrl ? (
@@ -140,7 +128,7 @@ function DocumentPreviewModal({ document, isOpen, onClose }) {
               <div className="h-full flex flex-col items-center justify-center text-center p-4">
                 {getFileIcon(document?.name, document?.mime_type)}
                 <p className="text-slate-600 dark:text-slate-400 mt-4 mb-2">
-                  לא ניתן להציג תצוגה מקדימה עבור סוג קובץ זה
+                  {t('documents.no_preview', 'Cannot display preview for this file type')}
                 </p>
                 <p className="text-sm text-slate-400 mb-4">{document?.name}</p>
               </div>
@@ -151,16 +139,16 @@ function DocumentPreviewModal({ document, isOpen, onClose }) {
         <div className="flex-shrink-0 flex justify-between items-center pt-4 border-t dark:border-slate-700">
           <div className="text-sm text-slate-500 dark:text-slate-400">
             {document?.file_size && <span>{formatFileSize(document.file_size)} • </span>}
-            {document?.created_date && format(new Date(document.created_date), 'dd/MM/yyyy HH:mm', { locale: he })}
+            {document?.created_date && format(new Date(document.created_date), 'dd/MM/yyyy HH:mm', { locale: dateLocale })}
           </div>
           <div className="flex gap-2">
             <Button variant="outline" onClick={onClose} className="dark:border-slate-600">
-              סגור
+              {t('common.close')}
             </Button>
             {previewUrl && (
               <Button onClick={handleOpenInDropbox} className="gap-2 bg-blue-600 hover:bg-blue-700">
                 <ExternalLink className="w-4 h-4" />
-                פתח ב-Dropbox
+                {t('documents.open_in_dropbox', 'Open in Dropbox')}
               </Button>
             )}
           </div>
@@ -172,8 +160,24 @@ function DocumentPreviewModal({ document, isOpen, onClose }) {
 
 // Main Component: Document List for Case or Client
 export default function DocumentViewer({ caseId, clientId, showTitle = true }) {
+  const { t, i18n } = useTranslation();
+  const dateLocale = i18n.language === 'he' ? he : enUS;
   const [selectedDocument, setSelectedDocument] = useState(null);
   const [previewOpen, setPreviewOpen] = useState(false);
+  
+  const documentTypeLabels = {
+    application: t('document_types.application', 'Application'),
+    office_action: t('document_types.office_action', 'Office Action'),
+    response: t('document_types.response', 'Response'),
+    certificate: t('document_types.certificate', 'Certificate'),
+    assignment: t('document_types.assignment', 'Assignment'),
+    license: t('document_types.license', 'License'),
+    correspondence: t('document_types.correspondence', 'Correspondence'),
+    invoice: t('document_types.invoice', 'Invoice'),
+    renewal_notice: t('document_types.renewal_notice', 'Renewal Notice'),
+    search_report: t('document_types.search_report', 'Search Report'),
+    other: t('automation_rules.other')
+  };
 
   // Query for documents from Document entity
   const { data: documents = [], isLoading: documentsLoading } = useQuery({
@@ -273,7 +277,7 @@ export default function DocumentViewer({ caseId, clientId, showTitle = true }) {
           <CardHeader>
             <CardTitle className="flex items-center gap-2 dark:text-slate-200">
               <Cloud className="w-5 h-5 text-blue-500" />
-              מסמכים
+              {t('case_view.documents_tab')}
               {allDocuments.length > 0 && (
                 <Badge variant="secondary" className="mr-2">
                   {allDocuments.length}
@@ -287,10 +291,10 @@ export default function DocumentViewer({ caseId, clientId, showTitle = true }) {
             <div className="text-center py-8">
               <FileText className="w-12 h-12 mx-auto text-slate-300 dark:text-slate-600 mb-3" />
               <p className="text-slate-500 dark:text-slate-400">
-                לא נמצאו מסמכים
+                {t('case_view.no_documents')}
               </p>
               <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">
-                מסמכים שיועלו ל-Dropbox יופיעו כאן
+                {t('case_view.documents_hint')}
               </p>
             </div>
           ) : (
@@ -315,7 +319,7 @@ export default function DocumentViewer({ caseId, clientId, showTitle = true }) {
                         </Badge>
                       )}
                       {doc.created_date && (
-                        <span>{format(new Date(doc.created_date), 'dd/MM/yyyy', { locale: he })}</span>
+                        <span>{format(new Date(doc.created_date), 'dd/MM/yyyy', { locale: dateLocale })}</span>
                       )}
                       {doc.file_size && (
                         <span>• {formatFileSize(doc.file_size)}</span>
@@ -329,7 +333,7 @@ export default function DocumentViewer({ caseId, clientId, showTitle = true }) {
                       size="icon" 
                       className="h-8 w-8"
                       onClick={() => handleViewDocument(doc)}
-                      title="צפה במסמך"
+                      title={t('common.view')}
                     >
                       <Eye className="w-4 h-4 text-slate-500" />
                     </Button>
@@ -338,7 +342,7 @@ export default function DocumentViewer({ caseId, clientId, showTitle = true }) {
                       size="icon" 
                       className="h-8 w-8"
                       onClick={() => handleOpenInDropbox(doc)}
-                      title="פתח ב-Dropbox"
+                      title={t('documents.open_in_dropbox', 'Open in Dropbox')}
                     >
                       <ExternalLink className="w-4 h-4 text-slate-500" />
                     </Button>

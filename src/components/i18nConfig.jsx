@@ -208,7 +208,9 @@ const translations = {
         type_reminder: "תזכורת",
         timing: "תזמון",
         after: "אחרי",
+        before: "לפני",
         days: "ימים",
+        weeks: "שבועות",
         from_mail_date: "מתאריך המייל",
         message: "הודעה",
         message_placeholder: "נדרשת תגובה בתיק {Case_No}",
@@ -234,6 +236,18 @@ const translations = {
         subfolder: "תת-תיקייה (אופציונלי)",
         subfolder_placeholder: "לדוגמה: נספחים",
         dropbox_hint: "💡 הנתיב נבנה אוטומטית לפי הגדרות מבנה התיקיות ב-Dropbox"
+      },
+      document_types: {
+        application: "בקשה",
+        office_action: "דו\"ח בחינה",
+        response: "תגובה",
+        certificate: "תעודה",
+        assignment: "הסבה",
+        license: "רישיון",
+        correspondence: "התכתבות",
+        invoice: "חשבונית",
+        renewal_notice: "הודעת חידוש",
+        search_report: "דוח חיפוש"
       },
       wizard: {
         title: "אשף הגדרת חוקים",
@@ -1305,7 +1319,9 @@ const translations = {
         type_reminder: "Reminder",
         timing: "Timing",
         after: "After",
+        before: "Before",
         days: "Days",
+        weeks: "Weeks",
         from_mail_date: "From email date",
         message: "Message",
         message_placeholder: "Response required in case {Case_No}",
@@ -1331,6 +1347,18 @@ const translations = {
         subfolder: "Subfolder (optional)",
         subfolder_placeholder: "e.g., Attachments",
         dropbox_hint: "💡 The path is built automatically according to the folder structure settings in Dropbox"
+      },
+      document_types: {
+        application: "Application",
+        office_action: "Office Action",
+        response: "Response",
+        certificate: "Certificate",
+        assignment: "Assignment",
+        license: "License",
+        correspondence: "Correspondence",
+        invoice: "Invoice",
+        renewal_notice: "Renewal Notice",
+        search_report: "Search Report"
       },
       wizard: {
         title: "Rule Setup Wizard",
