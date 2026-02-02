@@ -757,16 +757,46 @@ export default function AutomationRulesManager() {
                 )}
               </div>
 
-              {/* Save File */}
+                            {/* Save File */}
               <div className="p-4 border dark:border-slate-700 rounded-lg space-y-3">
                 <div className="flex items-center gap-2">
                   <Checkbox checked={currentRule.action_bundle.save_file.enabled} onCheckedChange={c => updateAction('save_file', 'enabled', c)} />
-                  <Label className="font-medium">🗂️ שמירת קבצים</Label>
+                  <Label className="font-medium">🗂️ שמירת קבצים ב-Dropbox</Label>
                 </div>
                 {currentRule.action_bundle.save_file.enabled && (
-                  <div className="pr-6">
-                    <Label className="text-sm">נתיב יעד</Label>
-                    <TokenInput value={currentRule.action_bundle.save_file.path_template} onChange={v => updateAction('save_file', 'path_template', v)} placeholder="Clients/{Client_Name}/{Case_Type}/{Official_No}" />
+                  <div className="pr-6 space-y-3">
+                    <div>
+                      <Label className="text-sm">סוג מסמך</Label>
+                      <select
+                        className="w-full mt-1 p-2 border dark:border-slate-600 dark:bg-slate-800 rounded-md text-sm"
+                        value={currentRule.action_bundle.save_file.document_type || 'other'}
+                        onChange={e => updateAction('save_file', 'document_type', e.target.value)}
+                      >
+                        <option value="office_action">הודעות רשמיות</option>
+                        <option value="response">תגובות</option>
+                        <option value="certificate">תעודות</option>
+                        <option value="correspondence">התכתבויות</option>
+                        <option value="invoice">חשבוניות</option>
+                        <option value="application">בקשות</option>
+                        <option value="assignment">הקצאות</option>
+                        <option value="license">רישיונות</option>
+                        <option value="renewal_notice">הודעות חידוש</option>
+                        <option value="search_report">דוחות חיפוש</option>
+                        <option value="other">אחר</option>
+                      </select>
+                    </div>
+                    <div>
+                      <Label className="text-sm">תת-תיקייה (אופציונלי)</Label>
+                      <Input
+                        value={currentRule.action_bundle.save_file.subfolder || ''}
+                        onChange={e => updateAction('save_file', 'subfolder', e.target.value)}
+                        placeholder="לדוגמה: נספחים"
+                        className="dark:bg-slate-800 dark:border-slate-600"
+                      />
+                    </div>
+                    <p className="text-xs text-slate-400">
+                      💡 הנתיב נבנה אוטומטית לפי הגדרות מבנה התיקיות ב-Dropbox
+                    </p>
                   </div>
                 )}
               </div>
