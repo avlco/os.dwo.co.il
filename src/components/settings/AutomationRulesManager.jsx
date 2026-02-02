@@ -376,10 +376,7 @@ export default function AutomationRulesManager() {
               <Upload className="w-4 h-4" />
               ייבוא/ייצוא
             </Button>
-            <Button onClick={() => setIsWizardOpen(true)} className="gap-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700">
-              <Wand2 className="w-4 h-4" />
-              {t('settings.new_rule')} (אשף)
-            </Button>
+
             <Button variant="outline" onClick={() => {
               setCurrentRule(JSON.parse(JSON.stringify(defaultRule)));
               setSendersInput('');
@@ -810,19 +807,7 @@ export default function AutomationRulesManager() {
         </DialogContent>
       </Dialog>
 
-      {isWizardOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80">
-          <div className="w-full max-w-4xl p-4">
-            <RuleOnboardingWizard 
-              onClose={() => setIsWizardOpen(false)}
-              onRuleCreated={() => {
-                setIsWizardOpen(false);
-                toast.success(t('settings.rule_created_success'));
-              }}
-            />
-          </div>
-        </div>
-      )}
+
 
       <ImportExportDialog
         open={isImportExportOpen}

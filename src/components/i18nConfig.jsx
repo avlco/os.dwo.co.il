@@ -26,7 +26,8 @@ const translations = {
         open_sidebar: "פתח תפריט",
         expand_sidebar: "הרחב תפריט",
         collapse_sidebar: "צמצם תפריט",
-        notifications: "התראות"
+        notifications: "התראות",
+        cancel: "ביטול"
       },
       settings: {
         title: "הגדרות",
@@ -553,7 +554,8 @@ const translations = {
         open_sidebar: "Open sidebar",
         expand_sidebar: "Expand sidebar",
         collapse_sidebar: "Collapse sidebar",
-        notifications: "Notifications"
+        notifications: "Notifications",
+        cancel: "Cancel"
       },
       settings: {
         title: "Settings",

@@ -118,12 +118,7 @@ export default function Settings() {
               {t('settings.user_management')}
             </TabsTrigger>
           )}
-          {user?.role === 'admin' && (
-            <TabsTrigger value="automation" className="gap-2 dark:text-slate-300 dark:data-[state=active]:bg-slate-700">
-              <SettingsIcon className="w-4 h-4" />
-              {t('settings.automation_rules')}
-            </TabsTrigger>
-          )}
+
           {user?.role === 'admin' && (
             <TabsTrigger value="taxonomy" className="gap-2 dark:text-slate-300 dark:data-[state=active]:bg-slate-700">
               <FolderTree className="w-4 h-4" />
@@ -182,16 +177,7 @@ export default function Settings() {
                 <Input value={user?.email} disabled className="dark:bg-slate-900 dark:border-slate-600 dark:text-slate-400" />
               </div>
 
-              <div className="space-y-2">
-                <Label className="dark:text-slate-300">{t('settings.signature')}</Label>
-                <Textarea
-                  value={profile.signature}
-                  onChange={(e) => setProfile({ ...profile, signature: e.target.value })}
-                  rows={4}
-                  placeholder={t('settings.signature_placeholder')}
-                  className="dark:bg-slate-900 dark:border-slate-600 dark:text-slate-200"
-                />
-              </div>
+
 
               <div className="flex justify-end">
                 <Button onClick={handleSaveProfile} className="bg-slate-800 hover:bg-slate-700 dark:bg-slate-700 dark:hover:bg-slate-600">
@@ -349,11 +335,7 @@ export default function Settings() {
           </div>
         </TabsContent>
 
-        <TabsContent value="automation">
-          <div className="max-w-4xl mx-auto">
-            <AutomationRulesManager />
-          </div>
-        </TabsContent>
+
 
         <TabsContent value="taxonomy">
           <div className="max-w-4xl mx-auto">
