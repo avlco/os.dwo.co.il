@@ -455,13 +455,13 @@ export default function AutomationRulesManager() {
       <Dialog open={isEditModalOpen} onOpenChange={setIsEditModalOpen}>
         <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto dark:bg-slate-800">
           <DialogHeader>
-            <DialogTitle>{currentRule.id ? t('settings.edit_rule') : t('settings.new_rule')}</DialogTitle>
+            <DialogTitle className="dark:text-slate-100">{currentRule.id ? t('settings.edit_rule') : t('settings.new_rule')}</DialogTitle>
           </DialogHeader>
 
           <div className="flex items-center justify-between p-3 bg-slate-50 dark:bg-slate-900 rounded-lg mb-4">
             <div className="flex items-center gap-2">
-              <ShieldCheck className="w-5 h-5 text-blue-600" />
-              <span className="font-medium">{t('automation_rules.require_approval')}</span>
+              <ShieldCheck className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+              <span className="font-medium dark:text-slate-200">{t('automation_rules.require_approval')}</span>
             </div>
             <Switch 
               checked={currentRule.require_approval} 
@@ -470,12 +470,12 @@ export default function AutomationRulesManager() {
           </div>
           {currentRule.require_approval && (
             <div className="mb-4">
-              <Label>{t('automation_rules.approver')}</Label>
+              <Label className="dark:text-slate-300">{t('automation_rules.approver')}</Label>
               <Select value={currentRule.approver_email} onValueChange={v => setCurrentRule({...currentRule, approver_email: v})}>
-                <SelectTrigger><SelectValue placeholder={t('automation_rules.select_approver')} /></SelectTrigger>
-                <SelectContent>
+                <SelectTrigger className="dark:bg-slate-900 dark:border-slate-600 dark:text-slate-200"><SelectValue placeholder={t('automation_rules.select_approver')} /></SelectTrigger>
+                <SelectContent className="dark:bg-slate-800 dark:border-slate-700">
                   {users.map(user => (
-                    <SelectItem key={user.id} value={user.email}>{user.full_name} ({user.email})</SelectItem>
+                    <SelectItem key={user.id} value={user.email} className="dark:text-slate-200">{user.full_name} ({user.email})</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
@@ -483,28 +483,28 @@ export default function AutomationRulesManager() {
           )}
 
           <Tabs value={activeTab} onValueChange={setActiveTab}>
-            <TabsList className="grid grid-cols-3">
-              <TabsTrigger value="catch">{t('automation_rules.filter_tab')}</TabsTrigger>
-              <TabsTrigger value="map">{t('automation_rules.extractor_tab')}</TabsTrigger>
-              <TabsTrigger value="actions">{t('automation_rules.actions_tab')}</TabsTrigger>
+            <TabsList className="grid grid-cols-3 bg-slate-100 dark:bg-slate-900 border dark:border-slate-700">
+              <TabsTrigger value="catch" className="dark:text-slate-300 dark:data-[state=active]:bg-slate-700 dark:data-[state=active]:text-slate-100">{t('automation_rules.filter_tab')}</TabsTrigger>
+              <TabsTrigger value="map" className="dark:text-slate-300 dark:data-[state=active]:bg-slate-700 dark:data-[state=active]:text-slate-100">{t('automation_rules.extractor_tab')}</TabsTrigger>
+              <TabsTrigger value="actions" className="dark:text-slate-300 dark:data-[state=active]:bg-slate-700 dark:data-[state=active]:text-slate-100">{t('automation_rules.actions_tab')}</TabsTrigger>
             </TabsList>
 
             <TabsContent value="catch" className="space-y-4 pt-4">
               <div>
-                <Label>{t('automation_rules.rule_name')}</Label>
-                <Input value={currentRule.name} onChange={e => setCurrentRule({...currentRule, name: e.target.value})} placeholder={t('automation_rules.rule_name_placeholder')} />
+                <Label className="dark:text-slate-300">{t('automation_rules.rule_name')}</Label>
+                <Input value={currentRule.name} onChange={e => setCurrentRule({...currentRule, name: e.target.value})} placeholder={t('automation_rules.rule_name_placeholder')} className="dark:bg-slate-900 dark:border-slate-600 dark:text-slate-200" />
               </div>
               <div>
-                <Label>{t('automation_rules.sender_from')}</Label>
-                <Input value={sendersInput} onChange={e => setSendersInput(e.target.value)} placeholder={t('automation_rules.sender_placeholder')} />
+                <Label className="dark:text-slate-300">{t('automation_rules.sender_from')}</Label>
+                <Input value={sendersInput} onChange={e => setSendersInput(e.target.value)} placeholder={t('automation_rules.sender_placeholder')} className="dark:bg-slate-900 dark:border-slate-600 dark:text-slate-200" />
               </div>
               <div>
-                <Label>{t('automation_rules.subject_text')}</Label>
-                <Input value={currentRule.catch_config.subject_contains} onChange={e => setCurrentRule({...currentRule, catch_config: {...currentRule.catch_config, subject_contains: e.target.value}})} placeholder={t('automation_rules.subject_text_placeholder')} />
+                <Label className="dark:text-slate-300">{t('automation_rules.subject_text')}</Label>
+                <Input value={currentRule.catch_config.subject_contains} onChange={e => setCurrentRule({...currentRule, catch_config: {...currentRule.catch_config, subject_contains: e.target.value}})} placeholder={t('automation_rules.subject_text_placeholder')} className="dark:bg-slate-900 dark:border-slate-600 dark:text-slate-200" />
               </div>
               <div>
-                <Label>{t('automation_rules.body_text')}</Label>
-                <Input value={currentRule.catch_config.body_contains} onChange={e => setCurrentRule({...currentRule, catch_config: {...currentRule.catch_config, body_contains: e.target.value}})} placeholder={t('automation_rules.body_keywords')} />
+                <Label className="dark:text-slate-300">{t('automation_rules.body_text')}</Label>
+                <Input value={currentRule.catch_config.body_contains} onChange={e => setCurrentRule({...currentRule, catch_config: {...currentRule.catch_config, body_contains: e.target.value}})} placeholder={t('automation_rules.body_keywords')} className="dark:bg-slate-900 dark:border-slate-600 dark:text-slate-200" />
               </div>
             </TabsContent>
 
@@ -515,29 +515,29 @@ export default function AutomationRulesManager() {
                 {currentRule.map_config.map((row, index) => (
                   <div key={index} className="flex items-center gap-2 p-3 bg-slate-50 dark:bg-slate-900 rounded-lg">
                     <Select value={row.source} onValueChange={v => updateMapRow(index, 'source', v)}>
-                      <SelectTrigger className="w-28"><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="subject">{t('automation_rules.source_subject')}</SelectItem>
-                        <SelectItem value="body">{t('automation_rules.source_body', 'Body')}</SelectItem>
-                        <SelectItem value="attachment">{t('automation_rules.source_attachments', 'Attachments')}</SelectItem>
+                      <SelectTrigger className="w-28 dark:bg-slate-800 dark:border-slate-600 dark:text-slate-200"><SelectValue /></SelectTrigger>
+                      <SelectContent className="dark:bg-slate-800 dark:border-slate-700">
+                        <SelectItem value="subject" className="dark:text-slate-200">{t('automation_rules.source_subject')}</SelectItem>
+                        <SelectItem value="body" className="dark:text-slate-200">{t('automation_rules.source_body', 'Body')}</SelectItem>
+                        <SelectItem value="attachment" className="dark:text-slate-200">{t('automation_rules.source_attachments', 'Attachments')}</SelectItem>
                       </SelectContent>
                     </Select>
-                    <Input value={row.anchor_text} onChange={e => updateMapRow(index, 'anchor_text', e.target.value)} placeholder={t('automation_rules.anchor_text_placeholder')} className="flex-1" />
+                    <Input value={row.anchor_text} onChange={e => updateMapRow(index, 'anchor_text', e.target.value)} placeholder={t('automation_rules.anchor_text_placeholder')} className="flex-1 dark:bg-slate-800 dark:border-slate-600 dark:text-slate-200" />
                     <Select value={row.target_field} onValueChange={v => updateMapRow(index, 'target_field', v)}>
-                      <SelectTrigger className="w-44"><SelectValue /></SelectTrigger>
-                      <SelectContent>
+                      <SelectTrigger className="w-44 dark:bg-slate-800 dark:border-slate-600 dark:text-slate-200"><SelectValue /></SelectTrigger>
+                      <SelectContent className="dark:bg-slate-800 dark:border-slate-700">
                         {TARGET_FIELD_OPTIONS.map(opt => (
-                          <SelectItem key={opt.value} value={opt.value}>
+                          <SelectItem key={opt.value} value={opt.value} className="dark:text-slate-200">
                             <code className="text-xs">{opt.label}</code>
                           </SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
-                    <Button variant="ghost" size="icon" onClick={() => removeMapRow(index)} className="text-red-500"><X className="w-4 h-4" /></Button>
+                    <Button variant="ghost" size="icon" onClick={() => removeMapRow(index)} className="text-red-500 dark:text-red-400"><X className="w-4 h-4" /></Button>
                   </div>
                 ))}
               </div>
-              <Button variant="outline" onClick={addMapRow} className="w-full gap-2"><Plus className="w-4 h-4" /> {t('automation_rules.add_extraction_rule')}</Button>
+              <Button variant="outline" onClick={addMapRow} className="w-full gap-2 dark:border-slate-600 dark:text-slate-200"><Plus className="w-4 h-4" /> {t('automation_rules.add_extraction_rule')}</Button>
             </TabsContent>
 
             <TabsContent value="actions" className="space-y-6 pt-4">
@@ -814,8 +814,8 @@ export default function AutomationRulesManager() {
             </TabsContent>
           </Tabs>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setIsEditModalOpen(false)}>{t('common.cancel')}</Button>
-            <Button onClick={handleSave}>{t('settings.save_rule')}</Button>
+            <Button variant="outline" onClick={() => setIsEditModalOpen(false)} className="dark:border-slate-600 dark:text-slate-200">{t('common.cancel')}</Button>
+            <Button onClick={handleSave} className="bg-slate-800 hover:bg-slate-700 dark:bg-slate-600 dark:hover:bg-slate-500">{t('settings.save_rule')}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
