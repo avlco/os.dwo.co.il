@@ -77,10 +77,10 @@ export default function Dashboard() {
     return d.status !== 'completed' && isBefore(dueDate, today);
   });
 
-  const overdueTasks = tasks.filter(t => {
-    if (t.status === 'completed' || t.status === 'cancelled') return false;
-    if (!t.due_date) return false;
-    return isBefore(new Date(t.due_date), today);
+  const overdueTasks = tasks.filter(task => {
+    if (task.status === 'completed' || task.status === 'cancelled') return false;
+    if (!task.due_date) return false;
+    return isBefore(new Date(task.due_date), today);
   });
 
   const monthStart = startOfMonth(today);
