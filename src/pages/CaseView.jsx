@@ -422,9 +422,9 @@ export default function CaseView() {
                 <div className="space-y-3">
                   {deadlines.map((deadline) => (
                     <div 
-                      key={deadline.id}
-                      className="flex items-center gap-4 p-4 bg-slate-50 dark:bg-slate-800 rounded-xl"
-                    >
+  key={deadline.id}
+  className="flex items-center gap-4 p-4 bg-slate-50 dark:bg-card rounded-xl"
+>
                       <div className="flex-1">
                         <p className="font-medium text-slate-800">{deadline.description}</p>
                         <p className="text-sm text-slate-500">
