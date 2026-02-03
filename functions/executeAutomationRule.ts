@@ -484,12 +484,16 @@ Deno.serve(async (req) => {
     }
 
 
-    // Action 5: Calendar Event
+        // Action 5: Calendar Event
     if (actions.calendar_event?.enabled) {
+      const baseDate = calculateDueDate(actions.calendar_event.timing_offset || 7);
+      const timeOfDay = actions.calendar_event.time_of_day || '09:00';
+      const startDateTime = `${baseDate}T${timeOfDay}:00`;
+
       const eventData = {
         title: await replaceTokens(actions.calendar_event.title_template || 'תזכורת', { mail, caseId, clientId }, base44),
         description: await replaceTokens(actions.calendar_event.description_template || '', { mail, caseId, clientId }, base44),
-        start_date: calculateDueDate(actions.calendar_event.timing_offset || 7),
+        start_date: startDateTime,
         duration_minutes: actions.calendar_event.duration_minutes || 60,
         case_id: caseId,
         client_id: clientId,
@@ -510,7 +514,7 @@ Deno.serve(async (req) => {
                 case_id: caseId,
                 deadline_type: 'hearing',
                 description: eventData.title || eventData.description || 'אירוע מאוטומציה',
-                due_date: eventData.start_date || new Date().toISOString().split('T')[0],
+                due_date: (eventData.start_date || new Date().toISOString()).split('T')[0],
                 status: 'pending',
                 is_critical: false,
                 metadata: {
