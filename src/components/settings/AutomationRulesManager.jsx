@@ -662,7 +662,7 @@ export default function AutomationRulesManager() {
                             </div>
                             {currentRule.action_bundle.create_alert.enable_english && (
                                 <div className="space-y-3 p-3 bg-slate-50 dark:bg-slate-900 rounded border border-slate-200 dark:border-slate-700">
-                                    <div className="space-y-1.5">
+                                    <div>
                                         <Label className="text-sm">English Message</Label>
                                         <TokenInput 
                                           value={currentRule.action_bundle.create_alert.message_template_en || ''} 
@@ -810,12 +810,20 @@ export default function AutomationRulesManager() {
                           
                           {currentRule.action_bundle.send_email.enable_english && (
                             <div className="space-y-3 p-3 bg-slate-50 dark:bg-slate-900 rounded border border-slate-200 dark:border-slate-700">
-                                                            <div className="space-y-1.5">
+                                                                                          <div>
                                 <Label className="text-sm">English Subject</Label>
                                 <TokenInput 
                                   value={currentRule.action_bundle.send_email.subject_template_en || ''} 
                                   onChange={v => updateAction('send_email', 'subject_template_en', v)} 
                                   placeholder="Update re: Case {Case_No}" 
+                                />
+                              </div>
+                              <div>
+                                <Label className="text-sm">English Body</Label>
+                                <TokenTextarea 
+                                  value={currentRule.action_bundle.send_email.body_template_en || ''} 
+                                  onChange={v => updateAction('send_email', 'body_template_en', v)} 
+                                  placeholder="Dear {Client_Name},&#10;&#10;An update has been received..." 
                                 />
                               </div>
                               <div className="space-y-1.5">
