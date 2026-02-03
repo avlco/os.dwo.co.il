@@ -180,11 +180,10 @@ function TimingSelector({ base, docketType, direction, offset, unit, onBaseChang
   const { t } = useTranslation();
   return (
     <div className="flex items-center gap-2 flex-wrap">
-      <Select 
-        value={base || 'mail_date'} 
+      <Select
+        value={base || 'mail_date'}
         onValueChange={(val) => {
           onBaseChange(val);
-          // אם עוברים לתאריך מייל, מאפסים את סוג המועד
           if (val === 'mail_date') onDocketTypeChange('');
         }}
       >
@@ -195,24 +194,10 @@ function TimingSelector({ base, docketType, direction, offset, unit, onBaseChang
         </SelectContent>
       </Select>
 
-      {/* תיקון התנאי: בודקים גם את הערך הקיים וגם ברירת מחדל */}
-      {(base === 'docket_date') && (
-        <Select value={docketType} onValueChange={onDocketTypeChange}>
+      {base === 'docket_date' && (
+        <Select value={docketType || ''} onValueChange={onDocketTypeChange}>
           <SelectTrigger className="w-36"><SelectValue placeholder="סוג מועד" /></SelectTrigger>
           <SelectContent className="z-[100]">
-            <SelectItem value="expiry">פקיעה</SelectItem>
-            <SelectItem value="renewal">חידוש</SelectItem>
-            <SelectItem value="priority">בכורה</SelectItem>
-            <SelectItem value="publication">פרסום</SelectItem>
-          </SelectContent>
-        </Select>
-      )}
-
-
-      {base === 'docket_date' && (
-        <Select value={docketType} onValueChange={onDocketTypeChange}>
-          <SelectTrigger className="w-36"><SelectValue placeholder="סוג מועד" /></SelectTrigger>
-          <SelectContent>
             <SelectItem value="expiry">פקיעה</SelectItem>
             <SelectItem value="renewal">חידוש</SelectItem>
             <SelectItem value="priority">בכורה</SelectItem>
@@ -229,7 +214,12 @@ function TimingSelector({ base, docketType, direction, offset, unit, onBaseChang
         </SelectContent>
       </Select>
 
-      <Input type="number" value={offset} onChange={e => onOffsetChange(parseInt(e.target.value) || 0)} className="w-20" />
+      <Input
+        type="number"
+        value={offset}
+        onChange={(e) => onOffsetChange(parseInt(e.target.value) || 0)}
+        className="w-20"
+      />
 
       <Select value={unit} onValueChange={onUnitChange}>
         <SelectTrigger className="w-28"><SelectValue /></SelectTrigger>
@@ -243,6 +233,7 @@ function TimingSelector({ base, docketType, direction, offset, unit, onBaseChang
     </div>
   );
 }
+
 
 export default function AutomationRulesManager() {
   const { t } = useTranslation();
