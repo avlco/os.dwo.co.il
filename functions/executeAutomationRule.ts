@@ -529,6 +529,33 @@ Deno.serve(async (req) => {
       });
     }
 
+    // Action 6: Create Alert / Docketing
+    if (actions.create_alert?.enabled) {
+      const baseDate = calculateDueDate(actions.create_alert.timing_offset || 7);
+      const timeOfDay = actions.create_alert.time_of_day || '09:00';
+      const dueDateTime = `${baseDate}T${timeOfDay}:00`;
+
+      const alertData = {
+        case_id: caseId,
+        deadline_type: actions.create_alert.alert_type || 'reminder',
+        description: await replaceTokens(actions.create_alert.message_template || 'התרעה מאוטומציה', { mail, caseId, clientId }, base44),
+        due_date: baseDate,
+        status: 'pending',
+        is_critical: actions.create_alert.alert_type === 'deadline',
+        metadata: {
+          execution_time: dueDateTime,
+          recipients: actions.create_alert.recipients || [],
+          source: 'automation_alert'
+        }
+      };
+
+      await handleAction('create_alert', alertData, async () => {
+        const deadline = await base44.entities.Deadline.create(alertData);
+        results.push({ action: 'create_alert', status: 'success', id: deadline.id });
+      });
+    }
+
+
     // --- Finalize ---
     const executionTime = Date.now() - startTime;
     
