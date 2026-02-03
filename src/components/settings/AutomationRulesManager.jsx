@@ -735,34 +735,18 @@ export default function AutomationRulesManager() {
                             <Label className="text-sm text-blue-600 dark:text-blue-400 font-medium">{t('automation_rules.add_english_version')}</Label>
                           </div>
                           
-                          {currentRule.action_bundle.calendar_event.enable_english && (
-                            <div className="space-y-3 p-3 bg-slate-50 dark:bg-slate-900 rounded border border-slate-200 dark:border-slate-700">
-                                                            <div className="space-y-1.5">
-                                <Label className="text-sm">English Event Title</Label>
-                                <TokenInput 
-                                  value={currentRule.action_bundle.calendar_event.title_template_en || ''} 
-                                  onChange={v => updateAction('calendar_event', 'title_template_en', v)} 
-                                  placeholder="Meeting: {Case_No}" 
-                                />
+                                                      {currentRule.action_bundle.calendar_event.enable_english && (
+                              <div className="mt-4 space-y-4 p-4 bg-slate-50 dark:bg-slate-900 rounded border border-slate-200 dark:border-slate-700">
+                                <div className="space-y-1.5">
+                                  <Label className="text-sm">English Event Title</Label>
+                                  <TokenInput value={currentRule.action_bundle.calendar_event.title_template_en || ''} onChange={v => updateAction('calendar_event', 'title_template_en', v)} placeholder="Meeting: {Case_No}" />
+                                </div>
+                                <div className="space-y-1.5">
+                                  <Label className="text-sm">English Description</Label>
+                                  <TokenTextarea value={currentRule.action_bundle.calendar_event.description_template_en || ''} onChange={v => updateAction('calendar_event', 'description_template_en', v)} placeholder="Meeting details..." />
+                                </div>
                               </div>
-                              <div className="space-y-1.5">
-                                <Label className="text-sm">English Description</Label>
-                                <TokenTextarea 
-                                  value={currentRule.action_bundle.calendar_event.description_template_en || ''} 
-                                  onChange={v => updateAction('calendar_event', 'description_template_en', v)} 
-                                  placeholder="Meeting details..." 
-                                />
-                              </div>
-                              <div>
-                                <Label className="text-sm">English Description</Label>
-                                <TokenTextarea 
-                                  value={currentRule.action_bundle.calendar_event.description_template_en || ''} 
-                                  onChange={v => updateAction('calendar_event', 'description_template_en', v)} 
-                                  placeholder="Meeting details..." 
-                                />
-                              </div>
-                            </div>
-                          )}
+                            )}
                         </div>
 
                         <div>
@@ -808,42 +792,18 @@ export default function AutomationRulesManager() {
                             <Label className="text-sm text-blue-600 dark:text-blue-400 font-medium">{t('automation_rules.add_english_version')}</Label>
                           </div>
                           
-                          {currentRule.action_bundle.send_email.enable_english && (
-                            <div className="space-y-3 p-3 bg-slate-50 dark:bg-slate-900 rounded border border-slate-200 dark:border-slate-700">
-                                                                                          <div>
-                                <Label className="text-sm">English Subject</Label>
-                                <TokenInput 
-                                  value={currentRule.action_bundle.send_email.subject_template_en || ''} 
-                                  onChange={v => updateAction('send_email', 'subject_template_en', v)} 
-                                  placeholder="Update re: Case {Case_No}" 
-                                />
+                                                      {currentRule.action_bundle.send_email.enable_english && (
+                              <div className="mt-4 space-y-4 p-4 bg-slate-50 dark:bg-slate-900 rounded border border-slate-200 dark:border-slate-700">
+                                <div className="space-y-1.5">
+                                  <Label className="text-sm">English Subject</Label>
+                                  <TokenInput value={currentRule.action_bundle.send_email.subject_template_en || ''} onChange={v => updateAction('send_email', 'subject_template_en', v)} placeholder="Update re: Case {Case_No}" />
+                                </div>
+                                <div className="space-y-1.5">
+                                  <Label className="text-sm">English Body</Label>
+                                  <TokenTextarea value={currentRule.action_bundle.send_email.body_template_en || ''} onChange={v => updateAction('send_email', 'body_template_en', v)} placeholder="Dear {Client_Name},&#10;&#10;An update has been received..." />
+                                </div>
                               </div>
-                              <div>
-                                <Label className="text-sm">English Body</Label>
-                                <TokenTextarea 
-                                  value={currentRule.action_bundle.send_email.body_template_en || ''} 
-                                  onChange={v => updateAction('send_email', 'body_template_en', v)} 
-                                  placeholder="Dear {Client_Name},&#10;&#10;An update has been received..." 
-                                />
-                              </div>
-                              <div className="space-y-1.5">
-                                <Label className="text-sm">English Body</Label>
-                                <TokenTextarea 
-                                  value={currentRule.action_bundle.send_email.body_template_en || ''} 
-                                  onChange={v => updateAction('send_email', 'body_template_en', v)} 
-                                  placeholder="Dear {Client_Name},&#10;&#10;An update has been received..." 
-                                />
-                              </div>
-                              <div>
-                                <Label className="text-sm">English Body</Label>
-                                <TokenTextarea 
-                                  value={currentRule.action_bundle.send_email.body_template_en || ''} 
-                                  onChange={v => updateAction('send_email', 'body_template_en', v)} 
-                                  placeholder="Dear {Client_Name},&#10;&#10;An update has been received..." 
-                                />
-                              </div>
-                            </div>
-                          )}
+                            )}
                         </div>
 
                       </div>
