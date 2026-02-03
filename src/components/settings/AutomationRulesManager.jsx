@@ -614,19 +614,19 @@ export default function AutomationRulesManager() {
                             </Select>
                           </div>
                         </div>
-                                                <div>
+                                                    <div>
                           <Label className="text-sm">{t('automation_rules.timing')}</Label>
                           <TimingSelector
-                            base={currentRule.action_bundle.calendar_event.timing_base}
-                            docketType={currentRule.action_bundle.calendar_event.timing_docket_type}
-                            direction={currentRule.action_bundle.calendar_event.timing_direction}
-                            offset={currentRule.action_bundle.calendar_event.timing_offset}
-                            unit={currentRule.action_bundle.calendar_event.timing_unit}
-                            onBaseChange={v => updateAction('calendar_event', 'timing_base', v)}
-                            onDocketTypeChange={v => updateAction('calendar_event', 'timing_docket_type', v)}
-                            onDirectionChange={v => updateAction('calendar_event', 'timing_direction', v)}
-                            onOffsetChange={v => updateAction('calendar_event', 'timing_offset', v)}
-                            onUnitChange={v => updateAction('calendar_event', 'timing_unit', v)}
+                            base={currentRule.action_bundle.create_alert.timing_base}
+                            docketType={currentRule.action_bundle.create_alert.timing_docket_type}
+                            direction={currentRule.action_bundle.create_alert.timing_direction}
+                            offset={currentRule.action_bundle.create_alert.timing_offset}
+                            unit={currentRule.action_bundle.create_alert.timing_unit}
+                            onBaseChange={v => updateAction('create_alert', 'timing_base', v)}
+                            onDocketTypeChange={v => updateAction('create_alert', 'timing_docket_type', v)}
+                            onDirectionChange={v => updateAction('create_alert', 'timing_direction', v)}
+                            onOffsetChange={v => updateAction('create_alert', 'timing_offset', v)}
+                            onUnitChange={v => updateAction('create_alert', 'timing_unit', v)}
                           />
                         </div>
                               <div>
