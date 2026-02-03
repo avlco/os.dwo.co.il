@@ -188,29 +188,43 @@ async function resolveRecipients(recipients, context, base44) {
 // ========================================
 async function logAutomationExecution(base44, logData) {
   try {
-    const actionsSummaryStrings = (logData.actions_summary || []).map(action => {
+        const actionsSummaryStrings = (logData.actions_summary || []).map(action => {
       const status = action.status === 'success' ? '✅' :
                      action.status === 'failed' ? '❌' :
-                     action.status === 'pending_batch' ? '⏸️ (Batch)' : '⏭️';
+                     action.status === 'pending_batch' ? '⏸️ (ממתין לאישור)' : '⏭️';
       
-      let details = '';
+      let details = "";
       const cfg = action.config || {};
 
+      // פירוט לפי סוג הפעולה
       if (action.action === 'billing') {
         const total = (cfg.hours || 0) * (cfg.rate || 0);
-        details = ` (${cfg.hours} שעות x ₪${cfg.rate} = ₪${total})`;
+        details = ` [${cfg.hours} שעות x ₪${cfg.rate} = ₪${total}]`;
       } 
-      else if (action.action === 'calendar_event') {
-        details = ` [${cfg.title}] - ${cfg.start_date}`;
-      }
       else if (action.action === 'send_email') {
-        details = ` אל: ${cfg.to}`;
+        details = ` [אל: ${cfg.to}, נושא: ${cfg.subject}]`;
       }
       else if (action.action === 'save_file') {
-        details = ` נתיב: ${cfg.subfolder || 'שורש'}`;
+        details = ` [תיקייה: ${cfg.subfolder || 'ראשי'}]`;
+      }
+      else if (action.action === 'calendar_event') {
+        details = ` [${cfg.title} בתאריך ${cfg.start_date.split('T')[0]}]`;
+      }
+      else if (action.action === 'create_alert') {
+        details = ` [התרעה: ${cfg.description}]`;
       }
 
-      return `${action.action}${details}: ${status}`;
+      // תרגום שמות הפעולות לעברית לנוחות העו"ד
+      const actionNames = {
+        'send_email': '📧 שליחת מייל',
+        'billing': '💰 חיוב שעות',
+        'save_file': '🗂️ שמירת קובץ',
+        'calendar_event': '📅 אירוע ביומן',
+        'create_alert': '🚨 התרעה/דוקטינג'
+      };
+      
+      const friendlyName = actionNames[action.action] || action.action;
+      return `${friendlyName}${details}: ${status}`;
     });
 
     // חישוב סטטוס מדויק בהתבסס על תוצאות הפעולות
@@ -368,6 +382,25 @@ Deno.serve(async (req) => {
       }
     }
 
+    // --- לוגיקת שפה: נקבעת לאחר סיום חילוץ הנתונים והלקוח ---
+    let clientLanguage = 'hebrew';
+    if (clientId) {
+      try {
+        const client = await base44.entities.Client.get(clientId);
+        if (client?.metadata?.language) {
+          clientLanguage = client.metadata.language;
+        }
+      } catch (e) { console.warn('Failed to fetch client language'); }
+    }
+
+    // פונקציית עזר לבחירת התבנית הנכונה (עברית/אנגלית)
+    const getTemplate = (actionConfig, fieldHe, fieldEn) => {
+      if (clientLanguage === 'english' && actionConfig.enable_english) {
+        return actionConfig[fieldEn] || actionConfig[fieldHe];
+      }
+      return actionConfig[fieldHe];
+    };
+
     // --- DISPATCH: Execute Actions ---
     const results = [];
     const actions = rule.action_bundle || {};
@@ -396,14 +429,18 @@ Deno.serve(async (req) => {
       }
     };
 
-    // Action 1: Send Email
+       // Action 1: Send Email
     if (actions.send_email?.enabled) {
       const to = await resolveRecipients(actions.send_email.recipients, { caseId, clientId }, base44);
       if (to.length > 0) {
+        // בחירת התבנית הנכונה לפי שפת הלקוח
+        const subjectTemplate = getTemplate(actions.send_email, 'subject_template', 'subject_template_en');
+        const bodyTemplate = getTemplate(actions.send_email, 'body_template', 'body_template_en');
+
         const emailConfig = {
           to: to.join(','),
-          subject: await replaceTokens(actions.send_email.subject_template, { mail, caseId, clientId }, base44),
-          body: await replaceTokens(actions.send_email.body_template, { mail, caseId, clientId }, base44)
+          subject: await replaceTokens(subjectTemplate, { mail, caseId, clientId }, base44),
+          body: await replaceTokens(bodyTemplate, { mail, caseId, clientId }, base44)
         };
         
         await handleAction('send_email', emailConfig, async () => {
@@ -539,9 +576,13 @@ Deno.serve(async (req) => {
       const timeOfDay = actions.calendar_event.time_of_day || '09:00';
       const startDateTime = `${calculatedDay}T${timeOfDay}:00`;
 
+            // בחירת התבנית הנכונה לפי שפת הלקוח
+      const titleTemplate = getTemplate(actions.calendar_event, 'title_template', 'title_template_en');
+      const descTemplate = getTemplate(actions.calendar_event, 'description_template', 'description_template_en');
+
       const eventData = {
-        title: await replaceTokens(actions.calendar_event.title_template || 'תזכורת', { mail, caseId, clientId }, base44),
-        description: await replaceTokens(actions.calendar_event.description_template || '', { mail, caseId, clientId }, base44),
+        title: await replaceTokens(titleTemplate || 'תזכורת', { mail, caseId, clientId }, base44),
+        description: await replaceTokens(descTemplate || '', { mail, caseId, clientId }, base44),
         start_date: startDateTime,
         duration_minutes: actions.calendar_event.duration_minutes || 60,
         case_id: caseId,
@@ -603,11 +644,14 @@ Deno.serve(async (req) => {
       const timeOfDay = actions.create_alert.time_of_day || '09:00';
       const dueDateTime = `${calculatedDay}T${timeOfDay}:00`;
 
+      // בחירת התבנית הנכונה לפי שפת הלקוח
+      const alertTemplate = getTemplate(actions.create_alert, 'message_template', 'message_template_en');
+
       const alertData = {
         case_id: caseId,
         deadline_type: actions.create_alert.alert_type || 'reminder',
-        description: await replaceTokens(actions.create_alert.message_template || 'התרעה מאוטומציה', { mail, caseId, clientId }, base44),
-        due_date: baseDate,
+        description: await replaceTokens(alertTemplate || 'התרעה מאוטומציה', { mail, caseId, clientId }, base44),
+        due_date: calculatedDay, // <--- תיקון: משתמשים בתאריך שחושב בשורה הקודמת
         status: 'pending',
         is_critical: actions.create_alert.alert_type === 'deadline',
         metadata: {
