@@ -600,6 +600,17 @@ export default function AutomationRulesManager() {
                             onUnitChange={v => updateAction('create_alert', 'timing_unit', v)}
                           />
                         </div>
+                              <div>
+        <Label className="text-sm">
+          {t('automation_rules.execution_time')}
+        </Label>
+        <Input
+          type="time"
+          className="w-32"
+          value={currentRule.action_bundle.create_alert.time_of_day || '09:00'}
+          onChange={e => updateAction('create_alert', 'time_of_day', e.target.value)}
+        />
+      </div>
                         <div>
                           <Label className="text-sm">{t('automation_rules.message')}</Label>
                           <TokenInput value={currentRule.action_bundle.create_alert.message_template} onChange={v => updateAction('create_alert', 'message_template', v)} placeholder={t('automation_rules.message_placeholder')} />
@@ -667,6 +678,17 @@ export default function AutomationRulesManager() {
                             onUnitChange={v => updateAction('calendar_event', 'timing_unit', v)}
                           />
                         </div>
+                         <div>
+                            <Label className="text-sm">
+                              {t('automation_rules.execution_time')}
+                             </Label>
+                           <Input
+                              type="time"
+                              className="w-32"
+                             value={currentRule.action_bundle.calendar_event.time_of_day || '09:00'}
+                             onChange={e => updateAction('calendar_event', 'time_of_day', e.target.value)}
+                          />
+                       </div>
 
                         {/* English Calendar */}
                         <div className="mt-4 pt-4 border-t border-slate-200 dark:border-slate-700">
