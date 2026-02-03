@@ -560,11 +560,30 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Action 6: Create Alert / Docketing
+        // Action 6: Create Alert / Docketing
     if (actions.create_alert?.enabled) {
-      const baseDate = calculateDueDate(actions.create_alert.timing_offset || 7);
+      let calculationBase = new Date(mail.received_at || Date.now());
+
+      if (actions.create_alert.timing_base === 'docket_date' && caseId) {
+        try {
+          const deadlines = await base44.entities.Deadline.filter({ 
+            case_id: caseId, 
+            deadline_type: actions.create_alert.timing_docket_type 
+          }, '-due_date');
+          if (deadlines && deadlines.length > 0) {
+            calculationBase = new Date(deadlines[0].due_date);
+          }
+        } catch (e) { console.warn('Failed to fetch base docket date for alert'); }
+      }
+
+      const calculatedDay = calculateDueDate(
+        actions.create_alert.timing_offset,
+        actions.create_alert.timing_unit,
+        actions.create_alert.timing_direction,
+        calculationBase
+      );
       const timeOfDay = actions.create_alert.time_of_day || '09:00';
-      const dueDateTime = `${baseDate}T${timeOfDay}:00`;
+      const dueDateTime = `${calculatedDay}T${timeOfDay}:00`;
 
       const alertData = {
         case_id: caseId,
