@@ -528,9 +528,15 @@ export default function AutomationRulesManager() {
                 <Label className="dark:text-slate-300">{t('automation_rules.subject_text')}</Label>
                 <Input value={currentRule.catch_config.subject_contains} onChange={e => setCurrentRule({...currentRule, catch_config: {...currentRule.catch_config, subject_contains: e.target.value}})} placeholder={t('automation_rules.subject_text_placeholder')} className="dark:bg-slate-900 dark:border-slate-600 dark:text-slate-200" />
               </div>
-              <div>
+                            <div>
                 <Label className="dark:text-slate-300">{t('automation_rules.body_text')}</Label>
-                <Input value={currentRule.catch_config.body_contains} onChange={e => setCurrentRule({...currentRule, catch_config: {...currentRule.catch_config, body_contains: e.target.value}})} placeholder={t('automation_rules.body_keywords')} className="dark:bg-slate-900 dark:border-slate-600 dark:text-slate-200" />
+                <Textarea 
+                  value={currentRule.catch_config.body_contains} 
+                  onChange={e => setCurrentRule({...currentRule, catch_config: {...currentRule.catch_config, body_contains: e.target.value}})} 
+                  placeholder={t('automation_rules.body_keywords')} 
+                  className="dark:bg-slate-900 dark:border-slate-600 dark:text-slate-200 min-h-[80px] resize-y" 
+                  rows={3}
+                />
               </div>
             </TabsContent>
 
@@ -684,7 +690,7 @@ export default function AutomationRulesManager() {
                     </div>
                     {currentRule.action_bundle.calendar_event.enabled && (
                       <div className="space-y-3 pr-6">
-                        <div>
+                                                <div className="space-y-1.5">
                           <Label className="text-sm">{t('automation_rules.event_name')}</Label>
                           <TokenInput value={currentRule.action_bundle.calendar_event.title_template} onChange={v => updateAction('calendar_event', 'title_template', v)} placeholder={t('automation_rules.event_name_placeholder')} />
                         </div>
@@ -775,7 +781,7 @@ export default function AutomationRulesManager() {
                           <Label className="text-sm">{t('automation_rules.recipients')}</Label>
                           <RecipientsSelect value={currentRule.action_bundle.send_email.recipients} onChange={v => updateAction('send_email', 'recipients', v)} />
                         </div>
-                        <div>
+                                                <div className="space-y-1.5">
                           <Label className="text-sm">{t('automation_rules.email_subject')}</Label>
                           <TokenInput value={currentRule.action_bundle.send_email.subject_template} onChange={v => updateAction('send_email', 'subject_template', v)} placeholder={t('automation_rules.email_subject_placeholder')} />
                         </div>
