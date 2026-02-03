@@ -219,6 +219,7 @@ const translations = {
         client: "לקוח",
         responsible_lawyer: "עו\"ד אחראי",
         action_calendar: "📅 אירוע ביומן",
+        execution_time: "שעת ביצוע",
         event_name: "שם האירוע",
         event_name_placeholder: "מועד אחרון - {Case_No}",
         event_description_hebrew: "תיאור האירוע (עברית)",
@@ -236,6 +237,7 @@ const translations = {
         subfolder: "תת-תיקייה (אופציונלי)",
         subfolder_placeholder: "לדוגמה: נספחים",
         dropbox_hint: "💡 הנתיב נבנה אוטומטית לפי הגדרות מבנה התיקיות ב-Dropbox"
+
       },
       document_types: {
         application: "בקשה",
@@ -1330,6 +1332,7 @@ const translations = {
         client: "Client",
         responsible_lawyer: "Responsible Lawyer",
         action_calendar: "📅 Calendar Event",
+        execution_time: "Execution Time",
         event_name: "Event Name",
         event_name_placeholder: "Deadline - {Case_No}",
         event_description_hebrew: "Event Description (Hebrew)",
