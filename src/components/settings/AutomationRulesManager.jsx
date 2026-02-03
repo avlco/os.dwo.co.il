@@ -180,13 +180,34 @@ function TimingSelector({ base, docketType, direction, offset, unit, onBaseChang
   const { t } = useTranslation();
   return (
     <div className="flex items-center gap-2 flex-wrap">
-      <Select value={base || 'mail_date'} onValueChange={onBaseChange}>
+      <Select 
+        value={base || 'mail_date'} 
+        onValueChange={(val) => {
+          onBaseChange(val);
+          // אם עוברים לתאריך מייל, מאפסים את סוג המועד
+          if (val === 'mail_date') onDocketTypeChange('');
+        }}
+      >
         <SelectTrigger className="w-32"><SelectValue /></SelectTrigger>
         <SelectContent>
           <SelectItem value="mail_date">תאריך מייל</SelectItem>
           <SelectItem value="docket_date">מועד בתיק</SelectItem>
         </SelectContent>
       </Select>
+
+      {/* תיקון התנאי: בודקים גם את הערך הקיים וגם ברירת מחדל */}
+      {(base === 'docket_date') && (
+        <Select value={docketType} onValueChange={onDocketTypeChange}>
+          <SelectTrigger className="w-36"><SelectValue placeholder="סוג מועד" /></SelectTrigger>
+          <SelectContent className="z-[100]">
+            <SelectItem value="expiry">פקיעה</SelectItem>
+            <SelectItem value="renewal">חידוש</SelectItem>
+            <SelectItem value="priority">בכורה</SelectItem>
+            <SelectItem value="publication">פרסום</SelectItem>
+          </SelectContent>
+        </Select>
+      )}
+
 
       {base === 'docket_date' && (
         <Select value={docketType} onValueChange={onDocketTypeChange}>
