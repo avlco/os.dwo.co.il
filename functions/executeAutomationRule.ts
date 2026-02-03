@@ -192,7 +192,25 @@ async function logAutomationExecution(base44, logData) {
       const status = action.status === 'success' ? '✅' :
                      action.status === 'failed' ? '❌' :
                      action.status === 'pending_batch' ? '⏸️ (Batch)' : '⏭️';
-      return `${action.action}: ${status}`;
+      
+      let details = '';
+      const cfg = action.config || {};
+
+      if (action.action === 'billing') {
+        const total = (cfg.hours || 0) * (cfg.rate || 0);
+        details = ` (${cfg.hours} שעות x ₪${cfg.rate} = ₪${total})`;
+      } 
+      else if (action.action === 'calendar_event') {
+        details = ` [${cfg.title}] - ${cfg.start_date}`;
+      }
+      else if (action.action === 'send_email') {
+        details = ` אל: ${cfg.to}`;
+      }
+      else if (action.action === 'save_file') {
+        details = ` נתיב: ${cfg.subfolder || 'שורש'}`;
+      }
+
+      return `${action.action}${details}: ${status}`;
     });
 
     // חישוב סטטוס מדויק בהתבסס על תוצאות הפעולות
