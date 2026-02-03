@@ -139,9 +139,21 @@ async function replaceTokens(template, context, base44) {
   return result.replace(/{[^}]+}/g, '');
 }
 
-function calculateDueDate(offsetDays) {
-  const date = new Date();
-  date.setDate(date.getDate() + (offsetDays || 0));
+function calculateDueDate(offset, unit = 'days', direction = 'after', baseDate = new Date()) {
+  const date = new Date(baseDate);
+  const multiplier = direction === 'before' ? -1 : 1;
+  const val = (offset || 0) * multiplier;
+
+  if (unit === 'days') {
+    date.setDate(date.getDate() + val);
+  } else if (unit === 'weeks') {
+    date.setDate(date.getDate() + (val * 7));
+  } else if (unit === 'months') {
+    date.setMonth(date.getMonth() + val);
+  } else if (unit === 'years') {
+    date.setFullYear(date.getFullYear() + val);
+  }
+
   return date.toISOString().split('T')[0];
 }
 
