@@ -31,25 +31,21 @@ async function signData(data, secret) {
     false,
     ['sign']
   );
-  const signature = await crypto.subtle.sign(
-    'HMAC',
-    key,
-    encoder.encode(data)
-  );
+  const signature = await crypto.subtle.sign('HMAC', key, encoder.encode(data));
   return base64UrlEncode(signature);
 }
 
 async function generateApprovalToken(payload, secret) {
   const tokenPayload = {
     ...payload,
-    exp: Date.now() + (60 * 60 * 1000), 
-    nonce: crypto.randomUUID()
+    exp: Date.now() + 60 * 60 * 1000,
+    nonce: crypto.randomUUID(),
   };
-  
+
   const payloadString = JSON.stringify(tokenPayload);
   const encodedPayload = base64UrlEncodeString(payloadString);
   const signature = await signData(encodedPayload, secret);
-  
+
   return `${encodedPayload}.${signature}`;
 }
 
@@ -59,18 +55,18 @@ async function generateApprovalToken(payload, secret) {
 
 const BRAND = {
   colors: {
-    primary: '#b62f12',    
-    secondary: '#545454',  
-    bg: '#f3f4f6',         
-    card: '#ffffff',       
-    text: '#000000',       
-    textLight: '#545454',  
-    link: '#b62f12',       
-    success: '#10b981',    
-    danger: '#ef4444'      
+    primary: '#b62f12',
+    secondary: '#545454',
+    bg: '#f3f4f6',
+    card: '#ffffff',
+    text: '#000000',
+    textLight: '#545454',
+    link: '#b62f12',
+    success: '#10b981',
+    danger: '#ef4444',
   },
-  logoUrl: 'https://dwo.co.il/wp-content/uploads/2020/04/Drori-Stav-logo-2.png', 
-  appUrl: 'https://os.dwo.co.il'
+  logoUrl: 'https://dwo.co.il/wp-content/uploads/2020/04/Drori-Stav-logo-2.png',
+  appUrl: 'https://os.dwo.co.il',
 };
 
 function generateEmailLayout(contentHtml, title, language = 'he') {
@@ -120,87 +116,315 @@ function generateEmailLayout(contentHtml, title, language = 'he') {
 // ==========================================
 // 3. RENDER LOGIC
 // ==========================================
-function renderApprovalEmail({ batch, approveUrl, rejectUrl, editUrl, language = 'he', caseName }) {
+
+function escapeHtml(value) {
+  if (value === undefined || value === null) return '';
+  return String(value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
+function isPresent(value) {
+  if (value === undefined || value === null) return false;
+  if (typeof value === 'number') return true;
+  if (typeof value === 'boolean') return true;
+  return String(value).trim() !== '';
+}
+
+function stripHtml(html) {
+  if (!html) return '';
+  return String(html).replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
+function truncateText(text, maxLen = 220) {
+  if (!isPresent(text)) return '';
+  const s = String(text);
+  if (s.length <= maxLen) return s;
+  return s.slice(0, maxLen).trim() + '…';
+}
+
+function toList(value) {
+  if (!isPresent(value)) return [];
+  if (Array.isArray(value)) return value;
+  return [value];
+}
+
+function formatList(value) {
+  const arr = toList(value)
+    .map((v) => {
+      if (v && typeof v === 'object') return v.email || v.name || JSON.stringify(v);
+      return String(v);
+    })
+    .map((s) => s.trim())
+    .filter(Boolean);
+
+  return arr.join(', ');
+}
+
+function yesNo(value, language) {
+  const isHebrew = language === 'he';
+  return value ? (isHebrew ? 'כן' : 'Yes') : (isHebrew ? 'לא' : 'No');
+}
+
+function renderRow({ label, value, align }) {
+  if (!isPresent(value)) return '';
+  return `
+    <div style="margin-top: 6px; font-size: 13px; color: #111827; text-align: ${align};">
+      <span style="font-weight: 700;">${escapeHtml(label)}:</span>
+      <span style="color: #4b5563;"> ${escapeHtml(value)}</span>
+    </div>
+  `;
+}
+
+function translateExecutionTime(value, language) {
+  if (!isPresent(value)) return '';
+  const v = String(value);
+  if (v === 'automation_rules.execution_time') {
+    return language === 'he' ? 'שעת ביצוע' : 'Execution time';
+  }
+  if (v.includes('.')) {
+    const last = v.split('.').pop();
+    return last.replace(/_/g, ' ');
+  }
+  return v;
+}
+
+function renderApprovalEmail({
+  batch,
+  approveUrl,
+  rejectUrl,
+  editUrl,
+  language = 'he',
+  caseName,
+  clientCommunicationLanguage = 'he',
+}) {
   const isHebrew = language === 'he';
   const align = isHebrew ? 'right' : 'left';
   const title = isHebrew ? `אישור נדרש: ${batch.automation_rule_name}` : `Approval Required`;
-  
-  const actionsList = (batch.actions_current || []).map(action => {
-    const type = action.action_type || action.action || 'unknown';
-    const config = action.config || {};
-    let icon = '⚡';
-    let desc = type;
-    
-    if (type === 'send_email') { icon = '📧'; desc = 'שליחת מייל'; }
-    if (type === 'create_task') { icon = '✅'; desc = 'יצירת משימה'; }
-    if (type === 'billing') { icon = '💰'; desc = 'חיוב שעות'; }
-    if (type === 'save_file') { icon = '💾'; desc = 'שמירת קבצים'; }
-    if (type === 'calendar_event') { icon = '📅'; desc = 'פגישה ביומן'; }
 
-    return `
-      <div style="background: #f8f9fa; padding: 12px; margin-bottom: 10px; border-radius: 6px; border-${align}: 4px solid ${BRAND.colors.primary}; text-align: ${align};">
-        <div style="font-weight: bold; color: ${BRAND.colors.text}; font-size: 15px;">${icon} ${desc}</div>
-        <div style="color: ${BRAND.colors.textLight}; font-size: 13px; margin-top: 4px;">${
-          type === 'send_email' ? `נמען: ${config.to || '-'} | נושא: ${config.subject || '-'}` :
-          type === 'create_task' ? `משימה: ${config.title || '-'}` :
-          type === 'billing' ? `${config.hours || 0} שעות × ₪${config.rate || config.hourly_rate || 0}` :
-          type === 'calendar_event' ? `${config.title || '-'} | ${config.start_date || '-'}` :
-          type === 'save_file' ? `נתיב: ${config.path || config.dropbox_folder_path || '-'}` :
-          JSON.stringify(config).substring(0, 100)
-        }</div>
-      </div>
-    `;
-  }).join('');
+  const shouldSendEnglishVersion = clientCommunicationLanguage === 'en';
 
-  const btnBase = `display: inline-block; padding: 12px 24px; color: #ffffff !important; text-decoration: none; border-radius: 6px; font-weight: bold; margin: 5px; font-size: 14px;`;
-  
-  return generateEmailLayout(`
-    <h2 style="color: ${BRAND.colors.primary}; text-align: center;">${title}</h2>
-    
+  const actionsList = (batch.actions_current || [])
+    .map((action) => {
+      const type = action.action_type || action.action || 'unknown';
+      const config = action.config || {};
+
+      let icon = '⚡';
+      let desc = type;
+
+      if (type === 'send_email') {
+        icon = '📧';
+        desc = isHebrew ? 'שליחת מייל' : 'Send email';
+      }
+      if (type === 'create_task') {
+        icon = '✅';
+        desc = isHebrew ? 'יצירת משימה' : 'Create task';
+      }
+      if (type === 'billing') {
+        icon = '💰';
+        desc = isHebrew ? 'חיוב שעות' : 'Billable hours';
+      }
+      if (type === 'save_file') {
+        icon = '💾';
+        desc = isHebrew ? 'שמירת קבצים ב-Dropbox' : 'Save files to Dropbox';
+      }
+      if (type === 'calendar_event') {
+        icon = '📅';
+        desc = isHebrew ? 'אירוע ביומן' : 'Calendar event';
+      }
+
+      const isDocketing =
+        type === 'docketing' ||
+        type === 'alert' ||
+        type === 'docking' ||
+        type === 'docketing_alert';
+
+      if (isDocketing) {
+        icon = '⏰';
+        desc = isHebrew ? 'התרעה / דוקטינג' : 'Alert / docketing';
+      }
+
+      const timing =
+        config.timing ||
+        config.schedule ||
+        config.scheduled_for ||
+        config.start_date ||
+        config.date;
+
+      const timeRaw =
+        config.time ||
+        config.execution_time ||
+        config.execution_time_value ||
+        config.hour;
+
+      const timeValue = translateExecutionTime(timeRaw, language);
+
+      // 1) חיוב שעות
+      if (type === 'billing') {
+        const hours = config.hours;
+        const rate = config.rate ?? config.hourly_rate;
+        const descText = config.description || config.desc || config.notes;
+
+        const total =
+          isPresent(hours) && isPresent(rate)
+            ? parseFloat(hours) * parseFloat(rate)
+            : null;
+
+        const totalText =
+          isPresent(total) && !Number.isNaN(total) ? `₪${total.toFixed(2)}` : '';
+
+        return `
+          <div style="background: #f8f9fa; padding: 12px; margin-bottom: 10px; border-radius: 6px; border-${align}: 4px solid ${BRAND.colors.primary}; text-align: ${align};">
+            <div style="font-weight: bold; color: ${BRAND.colors.text}; font-size: 15px;">${icon} ${escapeHtml(desc)}</div>
+            ${renderRow({ label: isHebrew ? 'שעות' : 'Hours', value: hours, align })}
+            ${renderRow({ label: isHebrew ? 'תעריף לשעה (₪)' : 'Rate (₪)', value: isPresent(rate) ? `₪${rate}` : '', align })}
+            ${renderRow({ label: isHebrew ? 'תיאור' : 'Description', value: descText, align })}
+            ${renderRow({ label: isHebrew ? 'סה״כ' : 'Total', value: totalText, align })}
+          </div>
+        `;
+      }
+
+      // 2) התרעה / דוקטינג
+      if (isDocketing) {
+        const kind = config.kind || config.type || config.alert_type;
+        const message = config.message || config.text || config.body;
+
+        return `
+          <div style="background: #f8f9fa; padding: 12px; margin-bottom: 10px; border-radius: 6px; border-${align}: 4px solid ${BRAND.colors.primary}; text-align: ${align};">
+            <div style="font-weight: bold; color: ${BRAND.colors.text}; font-size: 15px;">${icon} ${escapeHtml(desc)}</div>
+            ${renderRow({ label: isHebrew ? 'סוג' : 'Type', value: kind, align })}
+            ${renderRow({ label: isHebrew ? 'תזמון' : 'Timing', value: timing, align })}
+            ${renderRow({ label: isHebrew ? 'שעה' : 'Time', value: timeValue, align })}
+            ${renderRow({ label: isHebrew ? 'הודעה' : 'Message', value: truncateText(message, 260), align })}
+            ${renderRow({ label: isHebrew ? 'נשלחת גרסה באנגלית' : 'English version sent', value: yesNo(shouldSendEnglishVersion, language), align })}
+          </div>
+        `;
+      }
+
+      // 3) אירוע ביומן
+      if (type === 'calendar_event') {
+        const eventName = config.title || config.name || config.summary;
+        const eventDesc = config.description || config.body || config.notes;
+        const participants = config.attendees || config.participants;
+        const videoLink =
+          config.video_link ||
+          config.meet_link ||
+          config.conference_link ||
+          config.url;
+
+        return `
+          <div style="background: #f8f9fa; padding: 12px; margin-bottom: 10px; border-radius: 6px; border-${align}: 4px solid ${BRAND.colors.primary}; text-align: ${align};">
+            <div style="font-weight: bold; color: ${BRAND.colors.text}; font-size: 15px;">${icon} ${escapeHtml(desc)}</div>
+            ${renderRow({ label: isHebrew ? 'שם האירוע' : 'Event name', value: eventName, align })}
+            ${renderRow({ label: isHebrew ? 'תיאור האירוע' : 'Event description', value: truncateText(stripHtml(eventDesc), 260), align })}
+            ${renderRow({ label: isHebrew ? 'תזמון' : 'Timing', value: timing || config.start_date || config.start_time, align })}
+            ${renderRow({ label: isHebrew ? 'שעה' : 'Time', value: timeValue || config.start_time, align })}
+            ${renderRow({ label: isHebrew ? 'משתתפים' : 'Participants', value: formatList(participants), align })}
+            ${renderRow({ label: isHebrew ? 'קישור וידאו' : 'Video link', value: videoLink, align })}
+            ${renderRow({ label: isHebrew ? 'נשלחת גרסה באנגלית' : 'English version sent', value: yesNo(shouldSendEnglishVersion, language), align })}
+          </div>
+        `;
+      }
+
+      // 4) שליחת מייל
+      if (type === 'send_email') {
+        const recipients = config.to || config.recipients || config.recipient;
+        const subject = config.subject;
+        const content = config.body || config.content || config.html || config.text;
+
+        return `
+          <div style="background: #f8f9fa; padding: 12px; margin-bottom: 10px; border-radius: 6px; border-${align}: 4px solid ${BRAND.colors.primary}; text-align: ${align};">
+            <div style="font-weight: bold; color: ${BRAND.colors.text}; font-size: 15px;">${icon} ${escapeHtml(desc)}</div>
+            ${renderRow({ label: isHebrew ? 'נמענים' : 'Recipients', value: formatList(recipients), align })}
+            ${renderRow({ label: isHebrew ? 'נושא' : 'Subject', value: subject, align })}
+            ${renderRow({ label: isHebrew ? 'תוכן' : 'Content', value: truncateText(stripHtml(content), 320), align })}
+            ${renderRow({ label: isHebrew ? 'נשלחת גרסה באנגלית' : 'English version sent', value: yesNo(shouldSendEnglishVersion, language), align })}
+          </div>
+        `;
+      }
+
+      // 5) שמירת קבצים ב-Dropbox
+      if (type === 'save_file') {
+        const path = config.path || config.dropbox_folder_path || config.dropbox_path;
+
+        return `
+          <div style="background: #f8f9fa; padding: 12px; margin-bottom: 10px; border-radius: 6px; border-${align}: 4px solid ${BRAND.colors.primary}; text-align: ${align};">
+            <div style="font-weight: bold; color: ${BRAND.colors.text}; font-size: 15px;">${icon} ${escapeHtml(desc)}</div>
+            ${renderRow({ label: isHebrew ? 'מיקום (path)' : 'Path', value: path, align })}
+          </div>
+        `;
+      }
+
+      // fallback מינימלי
+      const fallback = truncateText(JSON.stringify(config), 180);
+      return `
+        <div style="background: #f8f9fa; padding: 12px; margin-bottom: 10px; border-radius: 6px; border-${align}: 4px solid ${BRAND.colors.primary}; text-align: ${align};">
+          <div style="font-weight: bold; color: ${BRAND.colors.text}; font-size: 15px;">${icon} ${escapeHtml(desc)}</div>
+          ${renderRow({ label: isHebrew ? 'פרטים' : 'Details', value: fallback, align })}
+        </div>
+      `;
+    })
+    .join('');
+
+  const btnBase =
+    'display: inline-block; padding: 12px 24px; color: #ffffff !important; text-decoration: none; border-radius: 6px; font-weight: bold; margin: 5px; font-size: 14px;';
+
+  return generateEmailLayout(
+    `
+    <h2 style="color: ${BRAND.colors.primary}; text-align: center;">${escapeHtml(title)}</h2>
+
     <div style="background-color: #ffffff; padding: 5px;">
       <table style="width: 100%; margin-bottom: 20px;">
         <tr>
-          <td><strong>נושא:</strong> ${batch.mail_subject || '-'}</td>
+          <td><strong>נושא:</strong> ${escapeHtml(batch.mail_subject || '-')}</td>
         </tr>
         <tr>
-          <td><strong>מאת:</strong> ${batch.mail_from || '-'}</td>
+          <td><strong>מאת:</strong> ${escapeHtml(batch.mail_from || '-')}</td>
         </tr>
-        ${caseName ? `<tr><td><strong>תיק:</strong> ${caseName}</td></tr>` : ''}
+        ${caseName ? `<tr><td><strong>תיק:</strong> ${escapeHtml(caseName)}</td></tr>` : ''}
       </table>
-      
+
       <h3>פעולות ממתינות לאישור:</h3>
       ${actionsList}
-      
+
       <div style="text-align: center; margin-top: 35px;">
         <a href="${approveUrl}" style="${btnBase} background-color: ${BRAND.colors.success};">✅ אישור</a>
         <a href="${editUrl}" style="${btnBase} background-color: #3b82f6;">✏️ עריכה</a>
         <a href="${rejectUrl}" style="${btnBase} background-color: ${BRAND.colors.secondary};">🛑 ביטול</a>
       </div>
     </div>
-  `, title, language);
+  `,
+    title,
+    language
+  );
 }
 
 // ==========================================
 // 4. MAIN FUNCTION LOGIC
 // ==========================================
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
 
   try {
     const base44 = createClientFromRequest(req);
     const { mailId, actionsToApprove, extractedInfo, userId } = await req.json();
-    
+
     if (!mailId || !actionsToApprove?.length) {
-      return new Response(JSON.stringify({ success: true, message: 'No actions' }), { headers: corsHeaders });
+      return new Response(JSON.stringify({ success: true, message: 'No actions' }), {
+        headers: corsHeaders,
+      });
     }
 
     const normalizedActions = actionsToApprove.map((action, index) => ({
       ...action,
       enabled: action.enabled !== undefined ? action.enabled : true,
       action_type: action.action_type || action.action || 'unknown',
-      idempotency_key: action.idempotency_key || `${mailId}_${index}_${Date.now()}`
+      idempotency_key: action.idempotency_key || `${mailId}_${index}_${Date.now()}`,
     }));
-
 
     const mail = await base44.entities.Mail.get(mailId);
     if (!mail) throw new Error(`Mail not found: ${mailId}`);
@@ -220,7 +444,9 @@ Deno.serve(async (req) => {
       try {
         const firstAction = approverActions[0];
         const existingBatches = await base44.asServiceRole.entities.ApprovalBatch.filter({
-          mail_id: mailId, approver_email: approverEmail, status: { $in: ['pending', 'editing'] }
+          mail_id: mailId,
+          approver_email: approverEmail,
+          status: { $in: ['pending', 'editing'] },
         });
 
         let batch;
@@ -229,7 +455,9 @@ Deno.serve(async (req) => {
         if (existingBatches && existingBatches.length > 0) {
           batch = existingBatches[0];
           await base44.asServiceRole.entities.ApprovalBatch.update(batch.id, {
-            actions_current: approverActions, expires_at: expiresAt.toISOString(), user_id: userId || batch.user_id
+            actions_current: approverActions,
+            expires_at: expiresAt.toISOString(),
+            user_id: userId || batch.user_id,
           });
           batch.actions_current = approverActions;
         } else {
@@ -247,7 +475,7 @@ Deno.serve(async (req) => {
             extracted_info: extractedInfo || {},
             actions_original: approverActions,
             actions_current: approverActions,
-            user_id: userId
+            user_id: userId,
           });
         }
 
@@ -255,43 +483,64 @@ Deno.serve(async (req) => {
         if (!secret) throw new Error('Missing APPROVAL_HMAC_SECRET');
 
         const appUrl = Deno.env.get('APP_BASE_URL') || 'https://dwo.base44.app';
-        const functionsBase = `${appUrl}/functions/v1`;
 
-        const approveToken = await generateApprovalToken({ batch_id: batch.id, approver_email: approverEmail, action: 'approve' }, secret);
-        const rejectToken = await generateApprovalToken({ batch_id: batch.id, approver_email: approverEmail, action: 'reject' }, secret);
+        const approveToken = await generateApprovalToken(
+          { batch_id: batch.id, approver_email: approverEmail, action: 'approve' },
+          secret
+        );
+        const rejectToken = await generateApprovalToken(
+          { batch_id: batch.id, approver_email: approverEmail, action: 'reject' },
+          secret
+        );
 
         const approveUrl = `${appUrl}/ApproveBatch?token=${approveToken}`;
         const rejectUrl = `${appUrl}/ApproveBatch?token=${rejectToken}`;
         const editUrl = `${appUrl}/ApprovalBatchEdit?batchId=${batch.id}`;
 
-
         let caseName = null;
         if (batch.case_id) {
-           try { const c = await base44.entities.Case.get(batch.case_id); caseName = c?.case_number; } catch(e){}
+          try {
+            const c = await base44.entities.Case.get(batch.case_id);
+            caseName = c?.case_number;
+          } catch (e) {}
+        }
+
+        let clientCommunicationLanguage = 'he';
+        if (batch.client_id) {
+          try {
+            const client = await base44.entities.Client.get(batch.client_id);
+            if (client?.communication_language) clientCommunicationLanguage = client.communication_language;
+          } catch (e) {}
         }
 
         const emailHtml = renderApprovalEmail({
           batch: { ...batch, actions_current: batch.actions_current },
-          approveUrl, rejectUrl, editUrl, language: 'he', caseName
+          approveUrl,
+          rejectUrl,
+          editUrl,
+          language: 'he',
+          caseName,
+          clientCommunicationLanguage,
         });
 
         await base44.functions.invoke('sendEmail', {
           to: approverEmail,
           subject: `אישור נדרש: ${batch.automation_rule_name}`,
-          body: emailHtml
+          body: emailHtml,
         });
 
         createdBatches.push({ batch_id: batch.id, approver: approverEmail });
-
       } catch (e) {
         console.error(`Error processing batch for ${approverEmail}:`, e);
       }
     }
 
     return new Response(JSON.stringify({ success: true, batches: createdBatches }), { headers: corsHeaders });
-
   } catch (error) {
     console.error('Critical Error:', error);
-    return new Response(JSON.stringify({ error: error.message }), { status: 500, headers: corsHeaders });
+    return new Response(JSON.stringify({ error: error.message }), {
+      status: 500,
+      headers: corsHeaders,
+    });
   }
 });
