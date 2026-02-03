@@ -498,9 +498,28 @@ Deno.serve(async (req) => {
 
         // Action 5: Calendar Event
     if (actions.calendar_event?.enabled) {
-      const baseDate = calculateDueDate(actions.calendar_event.timing_offset || 7);
+      let calculationBase = new Date(mail.received_at || Date.now());
+
+      if (actions.calendar_event.timing_base === 'docket_date' && caseId) {
+        try {
+          const deadlines = await base44.entities.Deadline.filter({ 
+            case_id: caseId, 
+            deadline_type: actions.calendar_event.timing_docket_type 
+          }, '-due_date');
+          if (deadlines && deadlines.length > 0) {
+            calculationBase = new Date(deadlines[0].due_date);
+          }
+        } catch (e) { console.warn('Failed to fetch base docket date'); }
+      }
+
+      const calculatedDay = calculateDueDate(
+        actions.calendar_event.timing_offset,
+        actions.calendar_event.timing_unit,
+        actions.calendar_event.timing_direction,
+        calculationBase
+      );
       const timeOfDay = actions.calendar_event.time_of_day || '09:00';
-      const startDateTime = `${baseDate}T${timeOfDay}:00`;
+      const startDateTime = `${calculatedDay}T${timeOfDay}:00`;
 
       const eventData = {
         title: await replaceTokens(actions.calendar_event.title_template || 'תזכורת', { mail, caseId, clientId }, base44),
