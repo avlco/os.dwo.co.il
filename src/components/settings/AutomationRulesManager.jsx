@@ -66,14 +66,15 @@ const defaultRule = {
         body_template_en: ''
     },
     save_file: { enabled: false, path_template: '' },
-    calendar_event: { 
+        calendar_event: { 
         enabled: false, 
         title_template: '', 
         description_template: '',
+        timing_base: 'mail_date',
+        timing_docket_type: '',
         timing_direction: 'after', 
         timing_offset: 7, 
-        timing_unit: 'days',
-        time_of_day: '09:00', 
+        timing_unit: 'days', 
         attendees: [], 
         create_meet_link: false,
         enable_english: false,
@@ -84,10 +85,11 @@ const defaultRule = {
         enabled: false, 
         alert_type: 'reminder', 
         message_template: '', 
+        timing_base: 'mail_date',
+        timing_docket_type: '',
         timing_direction: 'after', 
         timing_offset: 7, 
-        timing_unit: 'days',
-        time_of_day: '09:00', 
+        timing_unit: 'days', 
         recipients: [],
         enable_english: false,
         message_template_en: ''
@@ -174,26 +176,49 @@ function RecipientsSelect({ value = [], onChange }) {
   );
 }
 
-function TimingSelector({ direction, offset, unit, onDirectionChange, onOffsetChange, onUnitChange }) {
+function TimingSelector({ base, docketType, direction, offset, unit, onBaseChange, onDocketTypeChange, onDirectionChange, onOffsetChange, onUnitChange }) {
   const { t } = useTranslation();
   return (
     <div className="flex items-center gap-2 flex-wrap">
+      <Select value={base || 'mail_date'} onValueChange={onBaseChange}>
+        <SelectTrigger className="w-32"><SelectValue /></SelectTrigger>
+        <SelectContent>
+          <SelectItem value="mail_date">תאריך מייל</SelectItem>
+          <SelectItem value="docket_date">מועד בתיק</SelectItem>
+        </SelectContent>
+      </Select>
+
+      {base === 'docket_date' && (
+        <Select value={docketType} onValueChange={onDocketTypeChange}>
+          <SelectTrigger className="w-36"><SelectValue placeholder="סוג מועד" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="expiry">פקיעה</SelectItem>
+            <SelectItem value="renewal">חידוש</SelectItem>
+            <SelectItem value="priority">בכורה</SelectItem>
+            <SelectItem value="publication">פרסום</SelectItem>
+          </SelectContent>
+        </Select>
+      )}
+
       <Select value={direction} onValueChange={onDirectionChange}>
         <SelectTrigger className="w-24"><SelectValue /></SelectTrigger>
         <SelectContent>
-          <SelectItem value="before">{t('automation_rules.before', 'Before')}</SelectItem>
-          <SelectItem value="after">{t('automation_rules.after')}</SelectItem>
+          <SelectItem value="before">לפני</SelectItem>
+          <SelectItem value="after">אחרי</SelectItem>
         </SelectContent>
       </Select>
+
       <Input type="number" value={offset} onChange={e => onOffsetChange(parseInt(e.target.value) || 0)} className="w-20" />
+
       <Select value={unit} onValueChange={onUnitChange}>
-        <SelectTrigger className="w-24"><SelectValue /></SelectTrigger>
+        <SelectTrigger className="w-28"><SelectValue /></SelectTrigger>
         <SelectContent>
-          <SelectItem value="days">{t('automation_rules.days')}</SelectItem>
-          <SelectItem value="weeks">{t('automation_rules.weeks', 'Weeks')}</SelectItem>
+          <SelectItem value="days">ימים</SelectItem>
+          <SelectItem value="weeks">שבועות</SelectItem>
+          <SelectItem value="months">חודשים</SelectItem>
+          <SelectItem value="years">שנים</SelectItem>
         </SelectContent>
       </Select>
-      <span className="text-sm text-slate-500">{t('automation_rules.from_mail_date')}</span>
     </div>
   );
 }
