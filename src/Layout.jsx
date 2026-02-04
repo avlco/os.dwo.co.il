@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { createPageUrl } from './utils';
 import { useTranslation } from 'react-i18next';
 import { ThemeProvider } from './components/ThemeProvider';
+import { DateTimeSettingsProvider } from './components/DateTimeSettingsProvider';
 import './components/i18nConfig';
 import { useAuth } from '@/lib/AuthContext';
 import {
@@ -289,7 +290,9 @@ function LayoutContent({ children, currentPageName }) {
 export default function Layout({ children, currentPageName }) {
   return (
     <ThemeProvider>
-      <LayoutContent children={children} currentPageName={currentPageName} />
+      <DateTimeSettingsProvider>
+        <LayoutContent children={children} currentPageName={currentPageName} />
+      </DateTimeSettingsProvider>
     </ThemeProvider>
   );
 }

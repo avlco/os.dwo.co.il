@@ -8,6 +8,7 @@ import UserManagement from '../components/settings/UserManagement';
 
 import IntegrationsTab from '../components/settings/IntegrationsTab';
 import DocumentTaxonomyManager from '../components/settings/DocumentTaxonomyManager';
+import DateTimePreferences from '../components/settings/DateTimePreferences';
 import {
   User,
   Bell,
@@ -284,7 +285,7 @@ export default function Settings() {
         </TabsContent>
 
         <TabsContent value="preferences">
-          <div className="max-w-4xl mx-auto">
+          <div className="max-w-4xl mx-auto space-y-6">
           <Card className="dark:bg-slate-800 dark:border-slate-700">
             <CardHeader>
               <CardTitle className="dark:text-slate-100">{t('settings.system_preferences')}</CardTitle>
@@ -324,6 +325,8 @@ export default function Settings() {
               </div>
             </CardContent>
           </Card>
+
+          <DateTimePreferences />
           </div>
         </TabsContent>
 

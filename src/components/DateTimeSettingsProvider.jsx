@@ -19,7 +19,7 @@ import {
   formatCalendar,
   formatForDateInput,
   formatForDateTimeInput
-} from '../utils/dateTimeUtils';
+} from './utils/dateTimeUtils';
 
 const DateTimeSettingsContext = createContext({
   settings: DEFAULT_SETTINGS,
