@@ -205,35 +205,39 @@ function renderApprovalEmail({
   const align = isHebrew ? 'right' : 'left';
   const title = isHebrew ? `אישור נדרש: ${batch.automation_rule_name}` : `Approval Required`;
 
-  const shouldSendEnglishVersion = clientCommunicationLanguage === 'en';
+  // Determine if the CLIENT will receive content in English (based on their preference)
+  const clientWillReceiveEnglish = clientCommunicationLanguage === 'en';
 
   const actionsList = (batch.actions_current || [])
     .map((action) => {
       const type = action.action_type || action.action || 'unknown';
       const config = action.config || {};
+      
+      // Check if this specific action has English enabled AND client prefers English
+      const actionUsesEnglish = config.language === 'en' || (config.enable_english && clientWillReceiveEnglish);
 
       let icon = '⚡';
       let desc = type;
 
+      // Set icon and description based on type
       if (type === 'send_email') {
         icon = '📧';
         desc = isHebrew ? 'שליחת מייל' : 'Send email';
-      }
-      if (type === 'create_task') {
+      } else if (type === 'create_task') {
         icon = '✅';
         desc = isHebrew ? 'יצירת משימה' : 'Create task';
-      }
-      if (type === 'billing') {
+      } else if (type === 'billing') {
         icon = '💰';
         desc = isHebrew ? 'חיוב שעות' : 'Billable hours';
-      }
-      if (type === 'save_file') {
+      } else if (type === 'save_file') {
         icon = '💾';
         desc = isHebrew ? 'שמירת קבצים ב-Dropbox' : 'Save files to Dropbox';
-      }
-      if (type === 'calendar_event') {
+      } else if (type === 'calendar_event') {
         icon = '📅';
         desc = isHebrew ? 'אירוע ביומן' : 'Calendar event';
+      } else if (type === 'create_alert') {
+        icon = '⏰';
+        desc = isHebrew ? 'התרעה / דוקטינג' : 'Alert / Docketing';
       }
 
       const isDocketing =
@@ -258,11 +262,17 @@ function renderApprovalEmail({
         config.time ||
         config.execution_time ||
         config.execution_time_value ||
-        config.hour;
+        config.hour ||
+        config.time_of_day;
 
       const timeValue = translateExecutionTime(timeRaw, language);
+      
+      // Language indicator for approval email
+      const langIndicator = actionUsesEnglish 
+        ? (isHebrew ? '🇬🇧 אנגלית' : '🇬🇧 English')
+        : (isHebrew ? '🇮🇱 עברית' : '🇮🇱 Hebrew');
 
-      // 1) חיוב שעות
+      // 1) חיוב שעות (billing)
       if (type === 'billing') {
         const hours = config.hours;
         const rate = config.rate ?? config.hourly_rate;
@@ -287,7 +297,27 @@ function renderApprovalEmail({
         `;
       }
 
-      // 2) התרעה / דוקטינג
+      // 2) התרעה / דוקטינג (create_alert) - MOVED BEFORE fallback
+      if (type === 'create_alert') {
+        const alertType = config.alert_type || config.deadline_type;
+        const message = config.message || config.description;
+        const dueDate = config.due_date;
+        const timingInfo = config.timing_offset ? 
+          `${config.timing_offset} ${config.timing_unit || 'days'} ${config.timing_direction || 'after'}` : '';
+
+        return `
+          <div style="background: #f8f9fa; padding: 12px; margin-bottom: 10px; border-radius: 6px; border-${align}: 4px solid ${BRAND.colors.primary}; text-align: ${align};">
+            <div style="font-weight: bold; color: ${BRAND.colors.text}; font-size: 15px;">${icon} ${escapeHtml(desc)}</div>
+            ${renderRow({ label: isHebrew ? 'סוג התרעה' : 'Alert Type', value: alertType, align })}
+            ${renderRow({ label: isHebrew ? 'הודעה' : 'Message', value: truncateText(message, 260), align })}
+            ${renderRow({ label: isHebrew ? 'תאריך יעד' : 'Due Date', value: dueDate, align })}
+            ${renderRow({ label: isHebrew ? 'תזמון' : 'Timing', value: timingInfo, align })}
+            ${renderRow({ label: isHebrew ? 'שפת התוכן' : 'Content Language', value: langIndicator, align })}
+          </div>
+        `;
+      }
+
+      // 3) התרעה / דוקטינג (legacy types)
       if (isDocketing) {
         const kind = config.kind || config.type || config.alert_type;
         const message = config.message || config.text || config.body;
@@ -299,12 +329,12 @@ function renderApprovalEmail({
             ${renderRow({ label: isHebrew ? 'תזמון' : 'Timing', value: timing, align })}
             ${renderRow({ label: isHebrew ? 'שעה' : 'Time', value: timeValue, align })}
             ${renderRow({ label: isHebrew ? 'הודעה' : 'Message', value: truncateText(message, 260), align })}
-            ${renderRow({ label: isHebrew ? 'נשלחת גרסה באנגלית' : 'English version sent', value: yesNo(shouldSendEnglishVersion, language), align })}
+            ${renderRow({ label: isHebrew ? 'שפת התוכן' : 'Content Language', value: langIndicator, align })}
           </div>
         `;
       }
 
-      // 3) אירוע ביומן
+      // 4) אירוע ביומן (calendar_event)
       if (type === 'calendar_event') {
         const eventName = config.title || config.name || config.summary;
         const eventDesc = config.description || config.body || config.notes;
@@ -321,15 +351,15 @@ function renderApprovalEmail({
             ${renderRow({ label: isHebrew ? 'שם האירוע' : 'Event name', value: eventName, align })}
             ${renderRow({ label: isHebrew ? 'תיאור האירוע' : 'Event description', value: truncateText(stripHtml(eventDesc), 260), align })}
             ${renderRow({ label: isHebrew ? 'תזמון' : 'Timing', value: timing || config.start_date || config.start_time, align })}
-            ${renderRow({ label: isHebrew ? 'שעה' : 'Time', value: timeValue || config.start_time, align })}
+            ${renderRow({ label: isHebrew ? 'שעה' : 'Time', value: timeValue || config.time_of_day, align })}
             ${renderRow({ label: isHebrew ? 'משתתפים' : 'Participants', value: formatList(participants), align })}
             ${renderRow({ label: isHebrew ? 'קישור וידאו' : 'Video link', value: videoLink, align })}
-            ${renderRow({ label: isHebrew ? 'נשלחת גרסה באנגלית' : 'English version sent', value: yesNo(shouldSendEnglishVersion, language), align })}
+            ${renderRow({ label: isHebrew ? 'שפת התוכן' : 'Content Language', value: langIndicator, align })}
           </div>
         `;
       }
 
-      // 4) שליחת מייל
+      // 5) שליחת מייל (send_email)
       if (type === 'send_email') {
         const recipients = config.to || config.recipients || config.recipient;
         const subject = config.subject;
@@ -341,12 +371,12 @@ function renderApprovalEmail({
             ${renderRow({ label: isHebrew ? 'נמענים' : 'Recipients', value: formatList(recipients), align })}
             ${renderRow({ label: isHebrew ? 'נושא' : 'Subject', value: subject, align })}
             ${renderRow({ label: isHebrew ? 'תוכן' : 'Content', value: truncateText(stripHtml(content), 320), align })}
-            ${renderRow({ label: isHebrew ? 'נשלחת גרסה באנגלית' : 'English version sent', value: yesNo(shouldSendEnglishVersion, language), align })}
+            ${renderRow({ label: isHebrew ? 'שפת התוכן' : 'Content Language', value: langIndicator, align })}
           </div>
         `;
       }
 
-      // 5) שמירת קבצים ב-Dropbox
+      // 6) שמירת קבצים ב-Dropbox (save_file)
       if (type === 'save_file') {
         const path = config.path || config.dropbox_folder_path || config.dropbox_path || config.pathTemplate;
         const docType = config.documentType || config.document_type;
@@ -363,31 +393,8 @@ function renderApprovalEmail({
           </div>
         `;
       }
-      
-      // 6) התרעה / דוקטינג (create_alert)
-      if (type === 'create_alert') {
-        icon = '⏰';
-        desc = isHebrew ? 'התרעה / דוקטינג' : 'Alert / Docketing';
-        
-        const alertType = config.alert_type || config.deadline_type;
-        const message = config.message || config.description;
-        const dueDate = config.due_date;
-        const timingInfo = config.timing_offset ? 
-          `${config.timing_offset} ${config.timing_unit || 'days'} ${config.timing_direction || 'after'}` : '';
 
-        return `
-          <div style="background: #f8f9fa; padding: 12px; margin-bottom: 10px; border-radius: 6px; border-${align}: 4px solid ${BRAND.colors.primary}; text-align: ${align};">
-            <div style="font-weight: bold; color: ${BRAND.colors.text}; font-size: 15px;">${icon} ${escapeHtml(desc)}</div>
-            ${renderRow({ label: isHebrew ? 'סוג התרעה' : 'Alert Type', value: alertType, align })}
-            ${renderRow({ label: isHebrew ? 'הודעה' : 'Message', value: truncateText(message, 260), align })}
-            ${renderRow({ label: isHebrew ? 'תאריך יעד' : 'Due Date', value: dueDate, align })}
-            ${renderRow({ label: isHebrew ? 'תזמון' : 'Timing', value: timingInfo, align })}
-            ${renderRow({ label: isHebrew ? 'נשלחת גרסה באנגלית' : 'English version', value: yesNo(config.enable_english && shouldSendEnglishVersion, language), align })}
-          </div>
-        `;
-      }
-
-      // fallback מינימלי
+      // 7) fallback מינימלי - for unknown action types
       const fallback = truncateText(JSON.stringify(config), 180);
       return `
         <div style="background: #f8f9fa; padding: 12px; margin-bottom: 10px; border-radius: 6px; border-${align}: 4px solid ${BRAND.colors.primary}; text-align: ${align};">

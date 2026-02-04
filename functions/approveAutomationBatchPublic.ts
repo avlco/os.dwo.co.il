@@ -90,10 +90,16 @@ const EMAIL_BRAND = {
   logoUrl: 'https://dwo.co.il/wp-content/uploads/2020/04/Drori-Stav-logo-2.png'
 };
 
-function generateEmailLayout(contentHtml, title) {
+function generateEmailLayout(contentHtml, title, language = 'he') {
+  const isHebrew = language === 'he';
+  const dir = isHebrew ? 'rtl' : 'ltr';
+  const textAlign = isHebrew ? 'right' : 'left';
+  
   const t = {
     footer_contact: 'DWO - משרד עורכי דין | www.dwo.co.il',
-    footer_disclaimer: 'הודעה זו מכילה מידע סודי ומוגן. אם קיבלת הודעה זו בטעות, אנא מחק אותה ודווח לשולח.'
+    footer_disclaimer: isHebrew 
+      ? 'הודעה זו מכילה מידע סודי ומוגן. אם קיבלת הודעה זו בטעות, אנא מחק אותה ודווח לשולח.'
+      : 'This message contains confidential information. If you received it in error, please delete it and notify the sender.'
   };
 
   const s = {
@@ -102,14 +108,14 @@ function generateEmailLayout(contentHtml, title) {
     container: `max-width: 600px; margin: 0 auto; background-color: ${EMAIL_BRAND.colors.card}; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 6px rgba(0,0,0,0.05);`,
     header: `background-color: ${EMAIL_BRAND.colors.card}; padding: 20px; text-align: center; border-bottom: 3px solid ${EMAIL_BRAND.colors.primary};`,
     logo: `height: 50px; width: auto; max-width: 200px; object-fit: contain; display: block; margin: 0 auto;`,
-    content: `padding: 30px 25px; color: ${EMAIL_BRAND.colors.text}; line-height: 1.6; text-align: right; direction: rtl; font-size: 16px;`,
-    footer: `background-color: #f8fafc; padding: 20px; text-align: center; font-size: 12px; color: ${EMAIL_BRAND.colors.textLight}; border-top: 1px solid #e2e8f0; direction: rtl;`,
+    content: `padding: 30px 25px; color: ${EMAIL_BRAND.colors.text}; line-height: 1.6; text-align: ${textAlign}; direction: ${dir}; font-size: 16px;`,
+    footer: `background-color: #f8fafc; padding: 20px; text-align: center; font-size: 12px; color: ${EMAIL_BRAND.colors.textLight}; border-top: 1px solid #e2e8f0; direction: ${dir};`,
     link: `color: ${EMAIL_BRAND.colors.link}; text-decoration: none; font-weight: bold;`
   };
 
   return `
 <!DOCTYPE html>
-<html dir="rtl" lang="he">
+<html dir="${dir}" lang="${language}">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -184,7 +190,7 @@ async function executeBatchActions(base44, batch, context) {
   let successCount = 0;
   let failCount = 0;
   
-  // Get client language for proper execution
+  // Get client language for proper execution (fallback only - should already be in action config)
   let clientLanguage = 'he';
   if (batch.client_id) {
     try {
@@ -194,21 +200,25 @@ async function executeBatchActions(base44, batch, context) {
   }
 
   console.log(`[Executor] Starting execution of ${actions.length} actions for Batch ${batch.id}`);
-  console.log(`[Executor] Client language: ${clientLanguage}`);
+  console.log(`[Executor] Client language fallback: ${clientLanguage}`);
 
   for (const action of actions.filter(a => a.enabled !== false)) {
     try {
       const type = action.action_type || action.action;
       const config = action.config || {};
+      
+      // Language is already determined and embedded in config by executeAutomationRule
+      // Use config.language if available, otherwise fall back to client language
+      const actionLang = config.language || clientLanguage;
+      
       let result = null;
 
-            switch (type) {
-                case 'send_email': {
-          // The subject and body in config are already in the correct language (determined by executeAutomationRule)
+      switch (type) {
+        case 'send_email': {
+          // Subject and body in config are already in the correct language (determined by executeAutomationRule)
           const formattedBody = `<div style="white-space: pre-wrap; font-family: 'Segoe UI', Arial, sans-serif; color: ${EMAIL_BRAND.colors.text};">${config.body}</div>`;
-          const emailLang = config.language || clientLanguage || 'he';
-          const brandedBody = generateEmailLayout(formattedBody, config.subject, emailLang);
-          console.log(`[Executor] Sending email to ${config.to} in language: ${emailLang}`);
+          const brandedBody = generateEmailLayout(formattedBody, config.subject, actionLang);
+          console.log(`[Executor] Sending email to ${config.to} in language: ${actionLang}`);
           result = await base44.functions.invoke('sendEmail', {
             to: config.to,
             subject: config.subject,
@@ -222,19 +232,26 @@ async function executeBatchActions(base44, batch, context) {
           result = await base44.asServiceRole.entities.Task.create({
             title: config.title,
             description: config.description,
-            case_id: batch.case_id,
-            client_id: batch.client_id,
+            case_id: config.case_id || batch.case_id,
+            client_id: config.client_id || batch.client_id,
             status: 'pending',
             due_date: config.due_date
           });
           break;
 
         case 'billing': {
+          // Validate required fields for billing
+          const billingCaseId = config.case_id || batch.case_id;
+          if (!billingCaseId) {
+            console.warn(`[Executor] Billing action skipped: missing case_id`);
+            throw new Error('Billing requires case_id - no case associated with this email');
+          }
+          
           result = await base44.asServiceRole.entities.TimeEntry.create({
-            case_id: config.case_id || batch.case_id,
+            case_id: billingCaseId,
             client_id: config.client_id || batch.client_id,
             description: config.description || 'Automated billing',
-            hours: config.hours,
+            hours: config.hours || 0.25,
             rate: config.rate || config.hourly_rate || 0,
             date_worked: config.date_worked || new Date().toISOString().split('T')[0],
             is_billable: true,
@@ -252,7 +269,7 @@ async function executeBatchActions(base44, batch, context) {
           
         case 'calendar_event': {
           // Title and description in config are already in the correct language
-          console.log(`[Executor] Creating calendar event: ${config.title}`);
+          console.log(`[Executor] Creating calendar event: ${config.title} (lang: ${actionLang})`);
           result = await base44.functions.invoke('createCalendarEvent', {
             title: config.title,
             description: config.description,
@@ -278,7 +295,8 @@ async function executeBatchActions(base44, batch, context) {
                 google_event_id: resultData?.google_event_id || null,
                 html_link: resultData?.htmlLink || null,
                 meet_link: resultData?.meetLink || null,
-                source: 'automation_batch_public'
+                source: 'automation_batch_public',
+                language: actionLang
               }
             });
           } catch (e) { console.warn('[Executor] Failed to create local Deadline:', e.message); }
@@ -287,7 +305,7 @@ async function executeBatchActions(base44, batch, context) {
         
         case 'create_alert': {
           // Message/description in config is already in the correct language
-          console.log(`[Executor] Creating alert: ${config.description || config.message}`);
+          console.log(`[Executor] Creating alert: ${config.description || config.message} (lang: ${actionLang})`);
           try {
             const deadline = await base44.asServiceRole.entities.Deadline.create({
               case_id: config.case_id || batch.case_id,
@@ -301,7 +319,7 @@ async function executeBatchActions(base44, batch, context) {
                 execution_time: config.time_of_day,
                 recipients: config.recipients || [],
                 source: 'automation_batch_public',
-                language: config.language
+                language: actionLang
               }
             });
             result = { id: deadline.id };
@@ -310,7 +328,8 @@ async function executeBatchActions(base44, batch, context) {
           }
           break;
         }
-                case 'save_file': {
+        
+        case 'save_file': {
           console.log(`[Executor] Uploading files to Dropbox`);
           result = await base44.functions.invoke('uploadToDropbox', {
             mailId: config.mailId || batch.mail_id,
@@ -323,12 +342,16 @@ async function executeBatchActions(base44, batch, context) {
           if (uploadResult?.error) throw new Error(uploadResult.error);
           break;
         }
+        
+        default:
+          console.warn(`[Executor] Unknown action type: ${type}`);
+          throw new Error(`Unknown action type: ${type}`);
       }
 
-      results.push({ id: action.idempotency_key, status: 'success', data: result?.data || 'ok' });
+      results.push({ id: action.idempotency_key, status: 'success', data: result?.data || result?.id || 'ok' });
       successCount++;
     } catch (error) {
-      console.error(`[Executor] Action failed: ${error.message}`);
+      console.error(`[Executor] Action ${action.action_type || action.action} failed: ${error.message}`);
       results.push({ id: action.idempotency_key, status: 'failed', error: error.message });
       failCount++;
     }
