@@ -55,7 +55,7 @@ export default function TreeSchemaManager() {
   const createMutation = useMutation({
     mutationFn: (data) => base44.entities.FolderTreeSchema.create(data),
     onSuccess: () => {
-      queryClient.invalidateQueries(['folderTreeSchemas']);
+      queryClient.invalidateQueries({ queryKey: ['folderTreeSchemas'] });
       toast.success('סכמה נוצרה בהצלחה');
       setIsBuilderOpen(false);
       setEditingSchema(null);
@@ -68,7 +68,7 @@ export default function TreeSchemaManager() {
   const updateMutation = useMutation({
     mutationFn: ({ id, data }) => base44.entities.FolderTreeSchema.update(id, data),
     onSuccess: () => {
-      queryClient.invalidateQueries(['folderTreeSchemas']);
+      queryClient.invalidateQueries({ queryKey: ['folderTreeSchemas'] });
       toast.success('סכמה עודכנה בהצלחה');
       setIsBuilderOpen(false);
       setEditingSchema(null);
@@ -81,7 +81,7 @@ export default function TreeSchemaManager() {
   const deleteMutation = useMutation({
     mutationFn: (id) => base44.entities.FolderTreeSchema.delete(id),
     onSuccess: () => {
-      queryClient.invalidateQueries(['folderTreeSchemas']);
+      queryClient.invalidateQueries({ queryKey: ['folderTreeSchemas'] });
       toast.success('סכמה נמחקה בהצלחה');
       setDeleteConfirmId(null);
     },
