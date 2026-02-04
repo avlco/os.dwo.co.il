@@ -132,6 +132,7 @@ async function replaceTokens(template, context, base44) {
       const client = await base44.entities.Client.get(context.clientId);
       if (client) {
         result = result.replace(/{Client_Name}/g, client.name || '');
+        result = result.replace(/{Client_No}/g, client.client_number || '');
       }
     } catch (e) {}
   }

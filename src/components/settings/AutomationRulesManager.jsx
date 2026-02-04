@@ -28,17 +28,17 @@ import RuleOptimizationBanner from '../mailrules/RuleOptimizationBanner';
 const AVAILABLE_TOKENS = [
   { key: '{Case_No}', label: 'מספר תיק' },
   { key: '{Client_Name}', label: 'שם לקוח' },
+  { key: '{Client_No}', label: 'מספר לקוח' },
   { key: '{Case_Type}', label: 'סוג תיק' },
   { key: '{Official_No}', label: 'מספר רשמי' },
   { key: '{Mail_Subject}', label: 'נושא המייל' },
   { key: '{Mail_Date}', label: 'תאריך המייל' },
-  { key: '{Identifier_Found}', label: 'מזהה שנמצא' },
 ];
 
 const TARGET_FIELD_OPTIONS = [
-  { value: 'case_no', label: '{Case_Number}', description: 'מספר תיק פנימי' },
-  { value: 'official_no', label: '{Official_Number}', description: 'מספר בקשה רשמי' },
-  { value: 'client_ref', label: '{Client_Reference}', description: 'סימוכין לקוח' },
+  { value: 'case_no', label: '{Case_No}', description: 'מספר תיק' },
+  { value: 'official_no', label: '{Official_No}', description: 'מספר בקשה רשמי' },
+  { value: 'client_ref', label: '{Client_No}', description: 'מספר לקוח' },
 ];
 
 const RECIPIENT_OPTIONS = [
@@ -572,7 +572,7 @@ export default function AutomationRulesManager() {
                       <SelectContent className="dark:bg-slate-800 dark:border-slate-700">
                         {TARGET_FIELD_OPTIONS.map(opt => (
                           <SelectItem key={opt.value} value={opt.value} className="dark:text-slate-200">
-                            <code className="text-xs">{opt.label}</code>
+                            <code className="text-xs">{opt.label}</code> {opt.description}
                           </SelectItem>
                         ))}
                       </SelectContent>
