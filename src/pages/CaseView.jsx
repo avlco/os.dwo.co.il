@@ -98,6 +98,7 @@ export default function CaseView() {
 
   // --- Forms ---
   const [editCaseForm, setEditCaseForm] = useState({}); // טופס עריכה לתיק
+  const [formErrors, setFormErrors] = useState({});
   const [deadlineForm, setDeadlineForm] = useState({
     deadline_type: 'custom',
     description: '',
@@ -242,6 +243,50 @@ export default function CaseView() {
   // פונקציית השמירה לטופס העריכה
   const handleEditSubmit = (e) => {
     e.preventDefault();
+    
+    // Clear previous errors
+    setFormErrors({});
+    const errors = {};
+
+    // Validate case_number - only digits allowed
+    if (!editCaseForm.case_number || editCaseForm.case_number.trim() === '') {
+      errors.case_number = 'מספר תיק הוא שדה חובה';
+    } else if (!/^[0-9]+$/.test(editCaseForm.case_number)) {
+      errors.case_number = 'מספר תיק חייב להכיל ספרות בלבד';
+    } else {
+      // Check for duplicate case_number (excluding current case)
+      const isDuplicateCaseNumber = allCases.some(c =>
+        c.case_number === editCaseForm.case_number && c.id !== caseId
+      );
+      if (isDuplicateCaseNumber) {
+        errors.case_number = `מספר תיק "${editCaseForm.case_number}" כבר קיים במערכת`;
+      }
+    }
+
+    // Validate title
+    if (!editCaseForm.title || editCaseForm.title.trim() === '') {
+      errors.title = 'נושא התיק הוא שדה חובה';
+    } else {
+      // Check for duplicate title (excluding current case)
+      const isDuplicateTitle = allCases.some(c =>
+        c.title?.toLowerCase() === editCaseForm.title.toLowerCase() && c.id !== caseId
+      );
+      if (isDuplicateTitle) {
+        errors.title = `נושא תיק "${editCaseForm.title}" כבר קיים במערכת`;
+      }
+    }
+
+    // If there are errors, show them and stop
+    if (Object.keys(errors).length > 0) {
+      setFormErrors(errors);
+      toast({
+        variant: "destructive",
+        title: "שגיאת ולידציה",
+        description: "יש לתקן את השדות המסומנים",
+      });
+      return;
+    }
+    
     const submitData = { ...editCaseForm };
     
     // ניקוי שדות ריקים
@@ -559,9 +604,12 @@ export default function CaseView() {
                 <Label>{t('case_view.case_number_field')}</Label>
                 <Input
                   value={editCaseForm.case_number}
-                  onChange={(e) => setEditCaseForm({ ...editCaseForm, case_number: e.target.value })}
+                  onChange={(e) => { setEditCaseForm({ ...editCaseForm, case_number: e.target.value }); setFormErrors(prev => ({...prev, case_number: null})); }}
+                  placeholder="12345"
                   required
+                  className={formErrors.case_number ? 'border-red-500' : ''}
                 />
+                {formErrors.case_number && <p className="text-sm text-red-500">{formErrors.case_number}</p>}
               </div>
               <div className="space-y-2">
                 <Label>{t('case_view.case_type_field')}</Label>
@@ -601,9 +649,11 @@ export default function CaseView() {
               <Label>{t('case_view.case_title_label')}</Label>
               <Input
                 value={editCaseForm.title}
-                onChange={(e) => setEditCaseForm({ ...editCaseForm, title: e.target.value })}
+                onChange={(e) => { setEditCaseForm({ ...editCaseForm, title: e.target.value }); setFormErrors(prev => ({...prev, title: null})); }}
                 required
+                className={formErrors.title ? 'border-red-500' : ''}
               />
+              {formErrors.title && <p className="text-sm text-red-500">{formErrors.title}</p>}
             </div>
 
             <div className="grid grid-cols-3 gap-4">
