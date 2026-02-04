@@ -435,7 +435,9 @@ Deno.serve(async (req) => {
 
     // 7. Upload Each Attachment
     const results = [];
-    const gmailMessageId = mail.gmail_message_id || mail.messageId || null;
+    // Gmail message ID is stored in external_id field
+    const gmailMessageId = mail.external_id || mail.gmail_message_id || mail.messageId || null;
+    console.log(`[UploadToDropbox] Gmail message ID: ${gmailMessageId}, Attachments count: ${mail.attachments.length}`);
 
     for (const attachment of mail.attachments) {
       try {
