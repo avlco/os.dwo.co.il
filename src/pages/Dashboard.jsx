@@ -5,8 +5,8 @@ import { Link } from 'react-router-dom';
 import { createPageUrl } from '../utils';
 import { useTranslation } from 'react-i18next';
 import '../components/i18nConfig';
-import { format, addDays, isAfter, isBefore, startOfMonth, endOfMonth } from 'date-fns';
-import { he } from 'date-fns/locale';
+import { addDays, isAfter, isBefore, startOfMonth, endOfMonth } from 'date-fns';
+import { useDateTimeSettings } from '../components/DateTimeSettingsProvider';
 import StatsCard from '../components/ui/StatsCard';
 import StatusBadge from '../components/ui/StatusBadge';
 import {
@@ -30,6 +30,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 export default function Dashboard() {
   const { t, i18n } = useTranslation();
   const isRTL = i18n.language === 'he';
+  const { formatDate, formatCalendar } = useDateTimeSettings();
   const today = new Date();
   const in30Days = addDays(today, 30);
 
@@ -232,10 +233,10 @@ export default function Dashboard() {
                   >
                     <div className="flex-shrink-0 w-12 h-12 rounded-xl bg-amber-100 dark:bg-amber-900/30 flex flex-col items-center justify-center">
                       <span className="text-xs font-medium text-amber-600 dark:text-amber-400">
-                        {format(new Date(deadline.due_date), 'MMM', { locale: isRTL ? he : undefined })}
+                        {formatCalendar(deadline.due_date, 'MMM')}
                       </span>
                       <span className="text-lg font-bold text-amber-700 dark:text-amber-300">
-                        {format(new Date(deadline.due_date), 'd')}
+                        {formatCalendar(deadline.due_date, 'd')}
                       </span>
                     </div>
                     <div className="flex-1 min-w-0">
@@ -282,7 +283,7 @@ export default function Dashboard() {
                     <div className="flex-1 min-w-0">
                       <p className="font-medium text-slate-800 dark:text-slate-200 truncate">{deadline.description}</p>
                       <p className="text-sm text-rose-600 dark:text-rose-400">
-                        {t('dashboard.due_label')} {format(new Date(deadline.due_date), 'dd/MM/yyyy')}
+                        {t('dashboard.due_label')} {formatDate(deadline.due_date)}
                       </p>
                     </div>
                     <StatusBadge status="overdue" />
@@ -297,7 +298,7 @@ export default function Dashboard() {
                     <div className="flex-1 min-w-0">
                       <p className="font-medium text-slate-800 dark:text-slate-200 truncate">{task.title}</p>
                       <p className="text-sm text-rose-600 dark:text-rose-400">
-                        {t('dashboard.due_label')} {format(new Date(task.due_date), 'dd/MM/yyyy')}
+                        {t('dashboard.due_label')} {formatDate(task.due_date)}
                       </p>
                     </div>
                     <StatusBadge status="overdue" />

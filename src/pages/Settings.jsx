@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { base44 } from '@/api/base44Client';
-import { format } from 'date-fns';
 import { useTranslation } from 'react-i18next';
 import { useTheme } from '../components/ThemeProvider';
+import { useDateTimeSettings } from '../components/DateTimeSettingsProvider';
 import PageHeader from '../components/ui/PageHeader';
 import UserManagement from '../components/settings/UserManagement';
 
@@ -37,6 +37,7 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 export default function Settings() {
   const { t, i18n } = useTranslation();
   const { theme, setTheme } = useTheme();
+  const { formatDate, formatDateTime } = useDateTimeSettings();
   const [user, setUser] = useState(null);
   const [profile, setProfile] = useState({
     full_name: '',
@@ -268,14 +269,14 @@ export default function Settings() {
                 <div>
                   <p className="font-medium text-slate-800 dark:text-slate-200 mb-2">{t('settings.last_login')}</p>
                   <p className="text-sm text-slate-500 dark:text-slate-400">
-                    {user?.last_login_at ? format(new Date(user.last_login_at), 'dd/MM/yyyy HH:mm') : 'N/A'}
+                    {user?.last_login_at ? formatDateTime(user.last_login_at) : 'N/A'}
                   </p>
                 </div>
 
                 <div>
                   <p className="font-medium text-slate-800 dark:text-slate-200 mb-2">{t('settings.account_created')}</p>
                   <p className="text-sm text-slate-500 dark:text-slate-400">
-                    {user?.created_date ? format(new Date(user.created_date), 'dd/MM/yyyy') : 'N/A'}
+                    {user?.created_date ? formatDate(user.created_date) : 'N/A'}
                   </p>
                 </div>
               </div>
