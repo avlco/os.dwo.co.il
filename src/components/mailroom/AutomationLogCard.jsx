@@ -1,9 +1,8 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
 import { createPageUrl } from '../../utils';
-import { format } from 'date-fns';
-import { he } from 'date-fns/locale';
 import { Badge } from "../ui/badge";
+import { useDateTimeSettings } from '../DateTimeSettingsProvider';
 import { Card, CardContent } from "../ui/card";
 import { Button } from "../ui/button";
 import { 
@@ -38,6 +37,7 @@ const actionLabels = {
 };
 
 export default function AutomationLogCard({ log, relatedMail }) {
+  const { formatDate, formatTime } = useDateTimeSettings();
   const isSuccess = log.status === 'completed';
   const isPartialSuccess = log.status === 'completed_with_errors';
   const isFailed = log.status === 'failed';
@@ -182,11 +182,10 @@ export default function AutomationLogCard({ log, relatedMail }) {
           <div className="text-left text-sm text-slate-500 dark:text-slate-400 flex-shrink-0">
             {(() => {
               const dateToUse = metadata.logged_at || log.created_date;
-              const dateObj = new Date(dateToUse);
               return (
                 <>
-                  <p>{format(dateObj, 'dd/MM/yyyy', { locale: he })}</p>
-                  <p>{format(dateObj, 'HH:mm:ss', { locale: he })}</p>
+                  <p>{formatDate(dateToUse)}</p>
+                  <p>{formatTime(dateToUse, null, 'HH:mm:ss')}</p>
                 </>
               );
             })()}

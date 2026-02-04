@@ -1,9 +1,8 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
 import { createPageUrl } from '../../utils';
-import { format } from 'date-fns';
-import { he } from 'date-fns/locale';
 import { Badge } from "../ui/badge";
+import { useDateTimeSettings } from '../DateTimeSettingsProvider';
 import { Card, CardContent } from "../ui/card";
 import { 
   Mail, 
@@ -21,6 +20,7 @@ import { useTranslation } from 'react-i18next';
 
 export default function MailThreadCard({ thread, automationLogs = [] }) {
   const { t } = useTranslation();
+  const { formatDateTime } = useDateTimeSettings();
   
   const statusConfig = {
     pending: { label: t('mail_thread.new_label'), color: 'bg-blue-100 text-blue-800', icon: Mail },
@@ -82,7 +82,7 @@ export default function MailThreadCard({ thread, automationLogs = [] }) {
                   {latestMail.subject || t('mail_view.no_subject')}
                 </h3>
                 <span className="text-xs text-slate-500 dark:text-slate-400 whitespace-nowrap">
-                  {latestMail.received_at ? format(new Date(latestMail.received_at), 'dd/MM HH:mm', { locale: he }) : '-'}
+                  {formatDateTime(latestMail.received_at, null, 'dd/MM HH:mm')}
                 </span>
               </div>
               
