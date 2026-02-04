@@ -7,7 +7,7 @@ import PageHeader from '../components/ui/PageHeader';
 import UserManagement from '../components/settings/UserManagement';
 
 import IntegrationsTab from '../components/settings/IntegrationsTab';
-import DocumentTaxonomyManager from '../components/settings/DocumentTaxonomyManager';
+import TreeSchemaManager from '../components/settings/TreeSchemaManager';
 import DateTimePreferences from '../components/settings/DateTimePreferences';
 import {
   User,
@@ -120,9 +120,9 @@ export default function Settings() {
           )}
 
           {user?.role === 'admin' && (
-            <TabsTrigger value="taxonomy" className="gap-2 dark:text-slate-300 dark:data-[state=active]:bg-slate-700">
+            <TabsTrigger value="folder-structure" className="gap-2 dark:text-slate-300 dark:data-[state=active]:bg-slate-700">
               <FolderTree className="w-4 h-4" />
-              טקסונומיית מסמכים
+              מבנה תיקיות
             </TabsTrigger>
           )}
           <TabsTrigger value="integrations" className="gap-2 dark:text-slate-300 dark:data-[state=active]:bg-slate-700">
@@ -339,9 +339,9 @@ export default function Settings() {
 
 
 
-        <TabsContent value="taxonomy">
-          <div className="max-w-4xl mx-auto">
-            <DocumentTaxonomyManager />
+        <TabsContent value="folder-structure">
+          <div className="max-w-5xl mx-auto">
+            <TreeSchemaManager />
           </div>
         </TabsContent>
 
