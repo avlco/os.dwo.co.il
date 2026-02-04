@@ -383,20 +383,27 @@ Deno.serve(async (req) => {
     }
 
     // --- לוגיקת שפה: נקבעת לאחר סיום חילוץ הנתונים והלקוח ---
-    let clientLanguage = 'hebrew';
+    let clientLanguage = 'he'; // Default Hebrew
+    let clientData = null;
     if (clientId) {
       try {
-        const client = await base44.entities.Client.get(clientId);
-        if (client?.metadata?.language) {
-          clientLanguage = client.metadata.language;
+        clientData = await base44.entities.Client.get(clientId);
+        // Check communication_language field (standard field in Client entity)
+        if (clientData?.communication_language) {
+          clientLanguage = clientData.communication_language; // 'he' or 'en'
         }
       } catch (e) { console.warn('Failed to fetch client language'); }
     }
+    
+    // Convert to boolean for easy usage
+    const useEnglish = clientLanguage === 'en';
+    console.log(`[AutoRule] Client language: ${clientLanguage}, useEnglish: ${useEnglish}`);
 
     // פונקציית עזר לבחירת התבנית הנכונה (עברית/אנגלית)
+    // Returns the English template if: 1) Client prefers English AND 2) English is enabled for this action
     const getTemplate = (actionConfig, fieldHe, fieldEn) => {
-      if (clientLanguage === 'english' && actionConfig.enable_english) {
-        return actionConfig[fieldEn] || actionConfig[fieldHe];
+      if (useEnglish && actionConfig.enable_english && actionConfig[fieldEn]) {
+        return actionConfig[fieldEn];
       }
       return actionConfig[fieldHe];
     };
@@ -440,7 +447,15 @@ Deno.serve(async (req) => {
         const emailConfig = {
           to: to.join(','),
           subject: await replaceTokens(subjectTemplate, { mail, caseId, clientId }, base44),
-          body: await replaceTokens(bodyTemplate, { mail, caseId, clientId }, base44)
+          body: await replaceTokens(bodyTemplate, { mail, caseId, clientId }, base44),
+          // Include language metadata for approval email display
+          language: clientLanguage,
+          enable_english: actions.send_email.enable_english || false,
+          // Keep original templates for reference in approval email
+          subject_template_he: actions.send_email.subject_template,
+          subject_template_en: actions.send_email.subject_template_en,
+          body_template_he: actions.send_email.body_template,
+          body_template_en: actions.send_email.body_template_en
         };
         
         await handleAction('send_email', emailConfig, async () => {
@@ -531,7 +546,9 @@ Deno.serve(async (req) => {
           caseId: caseId,
           clientId: clientId,
           documentType: actions.save_file.document_type || 'other',
-          subfolder: actions.save_file.subfolder || ''
+          subfolder: actions.save_file.subfolder || '',
+          pathTemplate: actions.save_file.path_template || '',
+          attachmentCount: mail.attachments.length
         };
 
         await handleAction('save_file', uploadConfig, async () => {
@@ -589,7 +606,15 @@ Deno.serve(async (req) => {
         client_id: clientId,
         reminder_minutes: actions.calendar_event.reminder_minutes || 1440,
         create_meet_link: actions.calendar_event.create_meet_link || false,
-        attendees: actions.calendar_event.attendees || []
+        attendees: actions.calendar_event.attendees || [],
+        // Include language metadata for approval email display
+        language: clientLanguage,
+        enable_english: actions.calendar_event.enable_english || false,
+        timing_base: actions.calendar_event.timing_base,
+        timing_offset: actions.calendar_event.timing_offset,
+        timing_unit: actions.calendar_event.timing_unit,
+        timing_direction: actions.calendar_event.timing_direction,
+        time_of_day: timeOfDay
       };
       
       await handleAction('calendar_event', eventData, async () => {
@@ -649,11 +674,23 @@ Deno.serve(async (req) => {
 
       const alertData = {
         case_id: caseId,
+        client_id: clientId,
+        alert_type: actions.create_alert.alert_type || 'reminder',
         deadline_type: actions.create_alert.alert_type || 'reminder',
         description: await replaceTokens(alertTemplate || 'התרעה מאוטומציה', { mail, caseId, clientId }, base44),
-        due_date: calculatedDay, // <--- תיקון: משתמשים בתאריך שחושב בשורה הקודמת
+        message: await replaceTokens(alertTemplate || 'התרעה מאוטומציה', { mail, caseId, clientId }, base44),
+        due_date: calculatedDay,
         status: 'pending',
-        is_critical: actions.create_alert.alert_type === 'deadline',
+        is_critical: actions.create_alert.alert_type === 'deadline' || actions.create_alert.alert_type === 'urgent',
+        // Include language metadata for approval email display
+        language: clientLanguage,
+        enable_english: actions.create_alert.enable_english || false,
+        timing_base: actions.create_alert.timing_base,
+        timing_offset: actions.create_alert.timing_offset,
+        timing_unit: actions.create_alert.timing_unit,
+        timing_direction: actions.create_alert.timing_direction,
+        time_of_day: timeOfDay,
+        recipients: actions.create_alert.recipients || [],
         metadata: {
           execution_time: dueDateTime,
           recipients: actions.create_alert.recipients || [],
@@ -717,6 +754,7 @@ Deno.serve(async (req) => {
       extracted_info: extractedInfo,
       case_id: caseId,
       client_id: clientId,
+      client_language: clientLanguage,
       execution_time_ms: executionTime 
     }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
 
