@@ -183,8 +183,18 @@ async function executeBatchActions(base44, batch, context) {
   const results = [];
   let successCount = 0;
   let failCount = 0;
+  
+  // Get client language for proper execution
+  let clientLanguage = 'he';
+  if (batch.client_id) {
+    try {
+      const client = await base44.asServiceRole.entities.Client.get(batch.client_id);
+      if (client?.communication_language) clientLanguage = client.communication_language;
+    } catch (e) { console.warn('[Executor] Failed to fetch client language'); }
+  }
 
   console.log(`[Executor] Starting execution of ${actions.length} actions for Batch ${batch.id}`);
+  console.log(`[Executor] Client language: ${clientLanguage}`);
 
   for (const action of actions.filter(a => a.enabled !== false)) {
     try {
@@ -194,8 +204,11 @@ async function executeBatchActions(base44, batch, context) {
 
             switch (type) {
                 case 'send_email': {
+          // The subject and body in config are already in the correct language (determined by executeAutomationRule)
           const formattedBody = `<div style="white-space: pre-wrap; font-family: 'Segoe UI', Arial, sans-serif; color: ${EMAIL_BRAND.colors.text};">${config.body}</div>`;
-          const brandedBody = generateEmailLayout(formattedBody, config.subject);
+          const emailLang = config.language || clientLanguage || 'he';
+          const brandedBody = generateEmailLayout(formattedBody, config.subject, emailLang);
+          console.log(`[Executor] Sending email to ${config.to} in language: ${emailLang}`);
           result = await base44.functions.invoke('sendEmail', {
             to: config.to,
             subject: config.subject,
@@ -238,9 +251,18 @@ async function executeBatchActions(base44, batch, context) {
         }
           
         case 'calendar_event': {
+          // Title and description in config are already in the correct language
+          console.log(`[Executor] Creating calendar event: ${config.title}`);
           result = await base44.functions.invoke('createCalendarEvent', {
-            ...config,
-            case_id: batch.case_id
+            title: config.title,
+            description: config.description,
+            start_date: config.start_date,
+            duration_minutes: config.duration_minutes || 60,
+            case_id: config.case_id || batch.case_id,
+            client_id: config.client_id || batch.client_id,
+            reminder_minutes: config.reminder_minutes || 1440,
+            create_meet_link: config.create_meet_link || false,
+            attendees: config.attendees || []
           });
           const resultData = result?.data || result;
           if (resultData?.error) throw new Error(resultData.error);
@@ -249,7 +271,7 @@ async function executeBatchActions(base44, batch, context) {
               case_id: config.case_id || batch.case_id,
               deadline_type: 'hearing',
               description: config.title || config.description || 'אירוע מאוטומציה',
-              due_date: config.start_date || new Date().toISOString().split('T')[0],
+              due_date: config.start_date ? config.start_date.split('T')[0] : new Date().toISOString().split('T')[0],
               status: 'pending',
               is_critical: false,
               metadata: {
@@ -262,16 +284,45 @@ async function executeBatchActions(base44, batch, context) {
           } catch (e) { console.warn('[Executor] Failed to create local Deadline:', e.message); }
           break;
         }
-                case 'save_file':
+        
+        case 'create_alert': {
+          // Message/description in config is already in the correct language
+          console.log(`[Executor] Creating alert: ${config.description || config.message}`);
+          try {
+            const deadline = await base44.asServiceRole.entities.Deadline.create({
+              case_id: config.case_id || batch.case_id,
+              deadline_type: config.alert_type || config.deadline_type || 'reminder',
+              description: config.description || config.message || 'התרעה מאוטומציה',
+              due_date: config.due_date || new Date().toISOString().split('T')[0],
+              status: 'pending',
+              is_critical: config.is_critical || config.alert_type === 'urgent' || config.alert_type === 'deadline',
+              assigned_to_email: config.recipients?.[0] || null,
+              metadata: {
+                execution_time: config.time_of_day,
+                recipients: config.recipients || [],
+                source: 'automation_batch_public',
+                language: config.language
+              }
+            });
+            result = { id: deadline.id };
+          } catch (e) {
+            throw new Error(`Failed to create alert: ${e.message}`);
+          }
+          break;
+        }
+                case 'save_file': {
+          console.log(`[Executor] Uploading files to Dropbox`);
           result = await base44.functions.invoke('uploadToDropbox', {
-            mailId: batch.mail_id,
-            caseId: batch.case_id,
-            clientId: batch.client_id,
-            documentType: config.document_type || 'other',
+            mailId: config.mailId || batch.mail_id,
+            caseId: config.caseId || batch.case_id,
+            clientId: config.clientId || batch.client_id,
+            documentType: config.documentType || config.document_type || 'other',
             subfolder: config.subfolder || ''
           });
-          if (result.error) throw new Error(result.error);
+          const uploadResult = result?.data || result;
+          if (uploadResult?.error) throw new Error(uploadResult.error);
           break;
+        }
       }
 
       results.push({ id: action.idempotency_key, status: 'success', data: result?.data || 'ok' });
