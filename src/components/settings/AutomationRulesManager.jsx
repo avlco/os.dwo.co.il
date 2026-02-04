@@ -24,6 +24,8 @@ import {
 } from "@/components/ui/dropdown-menu";
 
 import RuleOptimizationBanner from '../mailrules/RuleOptimizationBanner';
+import TreePathPicker from '../automation/TreePathPicker';
+import FilenameTemplateInput from '../common/FilenameTemplateInput';
 
 const AVAILABLE_TOKENS = [
   { key: '{Case_No}', label: 'מספר תיק' },
@@ -65,7 +67,15 @@ const defaultRule = {
         subject_template_en: '',
         body_template_en: ''
     },
-    save_file: { enabled: false, path_template: '' },
+    save_file: { 
+      enabled: false, 
+      schema_id: '', 
+      path_selections: {}, 
+      filename_template: '{Original_Filename}',
+      path_template: '', 
+      document_type: 'other',
+      subfolder: ''
+    },
         calendar_event: { 
         enabled: false, 
         title_template: '', 
@@ -895,7 +905,8 @@ export default function AutomationRulesManager() {
                       <Label className="font-medium">{t('automation_rules.action_save_file')}</Label>
                     </div>
                     {currentRule.action_bundle.save_file.enabled && (
-                      <div className="pr-6 space-y-3">
+                      <div className="pr-6 space-y-4">
+                        {/* Document Type */}
                         <div>
                           <Label className="text-sm">{t('automation_rules.document_type')}</Label>
                           <select
@@ -916,18 +927,45 @@ export default function AutomationRulesManager() {
                             <option value="other">{t('automation_rules.other')}</option>
                           </select>
                         </div>
+
+                        {/* NEW: Tree Path Picker */}
+                        <TreePathPicker
+                          schemaId={currentRule.action_bundle.save_file.schema_id}
+                          pathSelections={currentRule.action_bundle.save_file.path_selections || {}}
+                          onSchemaChange={(schemaId) => updateAction('save_file', 'schema_id', schemaId)}
+                          onPathSelectionsChange={(selections) => updateAction('save_file', 'path_selections', selections)}
+                        />
+
+                        {/* NEW: Filename Template */}
                         <div>
-                          <Label className="text-sm">{t('automation_rules.subfolder')}</Label>
-                          <Input
-                            value={currentRule.action_bundle.save_file.subfolder || ''}
-                            onChange={e => updateAction('save_file', 'subfolder', e.target.value)}
-                            placeholder={t('automation_rules.subfolder_placeholder')}
+                          <Label className="text-sm">תבנית שם קובץ</Label>
+                          <FilenameTemplateInput
+                            value={currentRule.action_bundle.save_file.filename_template || '{Original_Filename}'}
+                            onChange={(v) => updateAction('save_file', 'filename_template', v)}
+                            placeholder="{Case_No}_{Date}"
                             className="dark:bg-slate-800 dark:border-slate-600"
                           />
                         </div>
-                        <p className="text-xs text-slate-400">
-                          {t('automation_rules.dropbox_hint')}
-                        </p>
+
+                        {/* Legacy fields - kept for backward compatibility */}
+                        {!currentRule.action_bundle.save_file.schema_id && (
+                          <div className="p-3 bg-amber-50 dark:bg-amber-900/20 rounded border border-amber-200 dark:border-amber-800">
+                            <p className="text-xs text-amber-700 dark:text-amber-300 mb-2">
+                              ⚠️ מצב תאימות לאחור - בחר סכמה למעלה למעבר למבנה החדש
+                            </p>
+                            <div className="space-y-2">
+                              <div>
+                                <Label className="text-xs text-slate-500">{t('automation_rules.subfolder')}</Label>
+                                <Input
+                                  value={currentRule.action_bundle.save_file.subfolder || ''}
+                                  onChange={e => updateAction('save_file', 'subfolder', e.target.value)}
+                                  placeholder={t('automation_rules.subfolder_placeholder')}
+                                  className="dark:bg-slate-800 dark:border-slate-600 h-8 text-sm"
+                                />
+                              </div>
+                            </div>
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>
