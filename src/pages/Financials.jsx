@@ -2,8 +2,10 @@ import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { base44 } from '@/api/base44Client';
 import { useTranslation } from 'react-i18next';
-import { format, startOfMonth, endOfMonth, isAfter, isBefore } from 'date-fns';
+import { startOfMonth, endOfMonth, isAfter, isBefore } from 'date-fns';
 import PageHeader from '../components/ui/PageHeader';
+import { useDateTimeSettings } from '../components/DateTimeSettingsProvider';
+import { formatForDateInput, formatForDateTimeInput } from '../components/utils/dateTimeUtils';
 import DataTable from '../components/ui/DataTable';
 import StatusBadge from '../components/ui/StatusBadge';
 import StatsCard from '../components/ui/StatsCard';
@@ -47,6 +49,7 @@ import { Textarea } from "@/components/ui/textarea";
 export default function Financials() {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
+  const { formatDate, formatDateTime } = useDateTimeSettings();
   const today = new Date();
   const monthStart = startOfMonth(today);
   const monthEnd = endOfMonth(today);
@@ -56,7 +59,7 @@ export default function Financials() {
   const [invoiceForm, setInvoiceForm] = useState({
     invoice_number: '',
     client_id: '',
-    issued_date: format(today, 'yyyy-MM-dd'),
+    issued_date: formatForDateInput(today),
     due_date: '',
     currency: 'ILS',
     subtotal: 0,
@@ -69,7 +72,7 @@ export default function Financials() {
     description: '',
     hours: '',
     rate: 500,
-    date_worked: format(today, "yyyy-MM-dd'T'HH:mm"),
+    date_worked: formatForDateTimeInput(today),
     is_billable: true,
   });
 
@@ -108,7 +111,7 @@ export default function Financials() {
       setInvoiceForm({
         invoice_number: '',
         client_id: '',
-        issued_date: format(today, 'yyyy-MM-dd'),
+        issued_date: formatForDateInput(today),
         due_date: '',
         currency: 'ILS',
         subtotal: 0,
@@ -129,7 +132,7 @@ export default function Financials() {
         description: '',
         hours: '',
         rate: 500,
-        date_worked: format(today, "yyyy-MM-dd'T'HH:mm"),
+        date_worked: formatForDateTimeInput(today),
         is_billable: true,
       });
     },
@@ -138,7 +141,7 @@ export default function Financials() {
   const updateInvoiceStatusMutation = useMutation({
     mutationFn: ({ id, status }) => base44.entities.Invoice.update(id, { 
       status, 
-      paid_date: status === 'paid' ? format(today, 'yyyy-MM-dd') : null 
+      paid_date: status === 'paid' ? formatForDateInput(today) : null 
     }),
     onSuccess: () => {
       queryClient.invalidateQueries(['invoices']);
@@ -206,7 +209,7 @@ export default function Financials() {
       accessorKey: 'issued_date',
       cell: ({ row }) => (
         <span className="dark:text-slate-300">
-          {row.original.issued_date ? format(new Date(row.original.issued_date), 'dd/MM/yyyy') : '-'}
+          {formatDate(row.original.issued_date)}
         </span>
       ),
     },
@@ -377,9 +380,7 @@ export default function Financials() {
                             <span>{getCaseNumber(entry.case_id)}</span>
                             <span>•</span>
                             <span>
-                              {entry.date_worked
-                                ? format(new Date(entry.date_worked), 'dd/MM/yyyy HH:mm')
-                                : '-'}
+                              {formatDateTime(entry.date_worked)}
                             </span>
                           </div>
                         </div>
