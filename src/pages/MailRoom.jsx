@@ -10,18 +10,17 @@ import { Link } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../components/ui/tabs";
 import { useToast } from "../components/ui/use-toast";
-import { format } from 'date-fns';
-import { he, enUS } from 'date-fns/locale';
 import { Skeleton } from "../components/ui/skeleton";
 import MailThreadCard from "../components/mailroom/MailThreadCard";
 import AutomationLogCard from "../components/mailroom/AutomationLogCard";
+import { useDateTimeSettings } from '../components/DateTimeSettingsProvider';
 
 export default function MailRoom() {
   const { t, i18n } = useTranslation();
   const isRTL = i18n.language === 'he';
-  const dateLocale = isRTL ? he : enUS;
   const queryClient = useQueryClient();
   const { toast } = useToast();
+  const { formatTime } = useDateTimeSettings();
   
   const [activeTab, setActiveTab] = useState('inbox');
   const [lastSyncTime, setLastSyncTime] = useState(null);
@@ -290,7 +289,7 @@ export default function MailRoom() {
             <div className="text-sm text-slate-500 dark:text-slate-400 flex items-center gap-2">
               <Clock className="w-4 h-4" />
               {lastSyncTime ? (
-                <span>{t('mail_room.last_sync', 'Last sync')}: {format(lastSyncTime, 'HH:mm', { locale: dateLocale })}</span>
+                <span>{t('mail_room.last_sync', 'Last sync')}: {formatTime(lastSyncTime)}</span>
               ) : (
                 <span>{t('common.not_synced_yet')}</span>
               )}
