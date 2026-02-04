@@ -317,6 +317,7 @@ export default function AutomationRulesManager() {
   };
 
   const [isSaving, setIsSaving] = useState(false);
+  const [fieldErrors, setFieldErrors] = useState({});
 
   const handleSave = async () => {
     const data = {
@@ -326,6 +327,9 @@ export default function AutomationRulesManager() {
         senders: sendersInput.split(',').map(s => s.trim()).filter(Boolean)
       }
     };
+
+    // Clear previous errors
+    setFieldErrors({});
 
     // Validate for duplicate catch_config before saving
     setIsSaving(true);
@@ -338,6 +342,26 @@ export default function AutomationRulesManager() {
       const validationResult = validationResponse.data;
       
       if (!validationResult.valid) {
+        // Determine which fields cause the conflict
+        const errors = {};
+        const conflictFields = validationResult.conflictFields || [];
+        
+        if (conflictFields.includes('senders') || data.catch_config.senders?.length > 0) {
+          errors.senders = `כפילות עם חוק "${validationResult.conflictingRuleName}"`;
+        }
+        if (conflictFields.includes('subject_contains') || data.catch_config.subject_contains) {
+          errors.subject_contains = `כפילות עם חוק "${validationResult.conflictingRuleName}"`;
+        }
+        if (conflictFields.includes('body_contains') || data.catch_config.body_contains) {
+          errors.body_contains = `כפילות עם חוק "${validationResult.conflictingRuleName}"`;
+        }
+        
+        // If no specific fields, show general error
+        if (Object.keys(errors).length === 0) {
+          errors.general = validationResult.error || t('automation_rules.duplicate_rule_error');
+        }
+        
+        setFieldErrors(errors);
         toast.error(validationResult.error || t('automation_rules.duplicate_rule_error'));
         setIsSaving(false);
         return;
@@ -558,22 +582,36 @@ export default function AutomationRulesManager() {
               </div>
               <div>
                 <Label className="dark:text-slate-300">{t('automation_rules.sender_from')}</Label>
-                <Input value={sendersInput} onChange={e => setSendersInput(e.target.value)} placeholder={t('automation_rules.sender_placeholder')} className="dark:bg-slate-900 dark:border-slate-600 dark:text-slate-200" />
+                <Input 
+                  value={sendersInput} 
+                  onChange={e => { setSendersInput(e.target.value); setFieldErrors(prev => ({...prev, senders: null})); }} 
+                  placeholder={t('automation_rules.sender_placeholder')} 
+                  className={`dark:bg-slate-900 dark:border-slate-600 dark:text-slate-200 ${fieldErrors.senders ? 'border-red-500 dark:border-red-500' : ''}`} 
+                />
+                {fieldErrors.senders && <p className="text-sm text-red-500 mt-1">{fieldErrors.senders}</p>}
               </div>
               <div>
                 <Label className="dark:text-slate-300">{t('automation_rules.subject_text')}</Label>
-                <Input value={currentRule.catch_config.subject_contains} onChange={e => setCurrentRule({...currentRule, catch_config: {...currentRule.catch_config, subject_contains: e.target.value}})} placeholder={t('automation_rules.subject_text_placeholder')} className="dark:bg-slate-900 dark:border-slate-600 dark:text-slate-200" />
+                <Input 
+                  value={currentRule.catch_config.subject_contains} 
+                  onChange={e => { setCurrentRule({...currentRule, catch_config: {...currentRule.catch_config, subject_contains: e.target.value}}); setFieldErrors(prev => ({...prev, subject_contains: null})); }} 
+                  placeholder={t('automation_rules.subject_text_placeholder')} 
+                  className={`dark:bg-slate-900 dark:border-slate-600 dark:text-slate-200 ${fieldErrors.subject_contains ? 'border-red-500 dark:border-red-500' : ''}`} 
+                />
+                {fieldErrors.subject_contains && <p className="text-sm text-red-500 mt-1">{fieldErrors.subject_contains}</p>}
               </div>
-                            <div>
+              <div>
                 <Label className="dark:text-slate-300">{t('automation_rules.body_text')}</Label>
                 <Textarea 
                   value={currentRule.catch_config.body_contains} 
-                  onChange={e => setCurrentRule({...currentRule, catch_config: {...currentRule.catch_config, body_contains: e.target.value}})} 
+                  onChange={e => { setCurrentRule({...currentRule, catch_config: {...currentRule.catch_config, body_contains: e.target.value}}); setFieldErrors(prev => ({...prev, body_contains: null})); }} 
                   placeholder={t('automation_rules.body_keywords')} 
-                  className="dark:bg-slate-900 dark:border-slate-600 dark:text-slate-200 min-h-[80px] resize-y" 
+                  className={`dark:bg-slate-900 dark:border-slate-600 dark:text-slate-200 min-h-[80px] resize-y ${fieldErrors.body_contains ? 'border-red-500 dark:border-red-500' : ''}`} 
                   rows={3}
                 />
+                {fieldErrors.body_contains && <p className="text-sm text-red-500 mt-1">{fieldErrors.body_contains}</p>}
               </div>
+              {fieldErrors.general && <p className="text-sm text-red-500 mt-1 p-2 bg-red-50 dark:bg-red-900/20 rounded">{fieldErrors.general}</p>}
             </TabsContent>
 
             <TabsContent value="map" className="space-y-4 pt-4">

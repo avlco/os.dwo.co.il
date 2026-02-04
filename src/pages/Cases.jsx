@@ -81,6 +81,7 @@ export default function Cases() {
     priority_level: 'medium',
     official_status_date: '',
   });
+  const [formErrors, setFormErrors] = useState({});
 
   const caseTypes = [
     { value: 'patent', label: t('cases.type_patent') },
@@ -225,6 +226,7 @@ export default function Cases() {
       official_status_date: '',
     });
     setEditingCase(null);
+    setFormErrors({});
   };
 
   const validateCaseForm = (data) => {
@@ -290,27 +292,69 @@ export default function Cases() {
 
   const handleSubmit = (e) => {
     e.preventDefault();
+    
+    // Clear previous errors
+    setFormErrors({});
+    const errors = {};
 
-    const validationErrors = validateCaseForm(formData);
-    if (validationErrors.length > 0) {
+    // Validate case_number - only digits allowed
+    if (!formData.case_number || formData.case_number.trim() === '') {
+      errors.case_number = 'מספר תיק הוא שדה חובה';
+    } else if (!/^[0-9]+$/.test(formData.case_number)) {
+      errors.case_number = 'מספר תיק חייב להכיל ספרות בלבד';
+    } else {
+      // Check for duplicate case_number
+      const isDuplicateCaseNumber = cases.some(c =>
+        c.case_number === formData.case_number &&
+        (!editingCase || c.id !== editingCase.id)
+      );
+      if (isDuplicateCaseNumber) {
+        errors.case_number = `מספר תיק "${formData.case_number}" כבר קיים במערכת`;
+      }
+    }
+
+    // Validate title
+    if (!formData.title || formData.title.trim() === '') {
+      errors.title = 'נושא התיק הוא שדה חובה';
+    } else {
+      // Check for duplicate title
+      const isDuplicateTitle = cases.some(c =>
+        c.title?.toLowerCase() === formData.title.toLowerCase() &&
+        (!editingCase || c.id !== editingCase.id)
+      );
+      if (isDuplicateTitle) {
+        errors.title = `נושא תיק "${formData.title}" כבר קיים במערכת`;
+      }
+    }
+
+    // Date validations
+    if (formData.filing_date && formData.renewal_date) {
+      const filing = new Date(formData.filing_date);
+      const renewal = new Date(formData.renewal_date);
+      if (renewal <= filing) {
+        errors.renewal_date = 'תאריך חידוש חייב להיות אחרי תאריך ההגשה';
+      }
+    }
+
+    if (formData.filing_date && formData.expiry_date) {
+      const filing = new Date(formData.filing_date);
+      const expiry = new Date(formData.expiry_date);
+      if (expiry <= filing) {
+        errors.expiry_date = 'תאריך פקיעה חייב להיות אחרי תאריך ההגשה';
+      }
+    }
+
+    if (formData.hourly_rate && parseFloat(formData.hourly_rate) < 0) {
+      errors.hourly_rate = 'תעריף שעתי חייב להיות מספר חיובי';
+    }
+
+    // If there are errors, show them and stop
+    if (Object.keys(errors).length > 0) {
+      setFormErrors(errors);
       toast({
         variant: "destructive",
         title: "שגיאת ולידציה",
-        description: validationErrors.join(', '),
-      });
-      return;
-    }
-
-    const isDuplicate = cases.some(c =>
-      c.case_number === formData.case_number &&
-      (!editingCase || c.id !== editingCase.id)
-    );
-
-    if (isDuplicate) {
-      toast({
-        variant: "destructive",
-        title: "מספר תיק כבר קיים",
-        description: `קיים כבר תיק במספר "${formData.case_number}"`,
+        description: "יש לתקן את השדות המסומנים",
       });
       return;
     }
@@ -638,11 +682,12 @@ export default function Cases() {
                 <Label className="dark:text-slate-300">{t('cases.case_number_required')}</Label>
                 <Input
                   value={formData.case_number}
-                  onChange={(e) => setFormData({ ...formData, case_number: e.target.value })}
-                  placeholder="P-2024-001"
+                  onChange={(e) => { setFormData({ ...formData, case_number: e.target.value }); setFormErrors(prev => ({...prev, case_number: null})); }}
+                  placeholder="12345"
                   required
-                  className="dark:bg-slate-900 dark:border-slate-600"
+                  className={`dark:bg-slate-900 dark:border-slate-600 ${formErrors.case_number ? 'border-red-500 dark:border-red-500' : ''}`}
                 />
+                {formErrors.case_number && <p className="text-sm text-red-500">{formErrors.case_number}</p>}
               </div>
               <div className="space-y-2">
                 <Label className="dark:text-slate-300">{t('cases.case_type_required')}</Label>
@@ -690,11 +735,12 @@ export default function Cases() {
               <Label className="dark:text-slate-300">{t('cases.case_title_field')}</Label>
               <Input
                 value={formData.title}
-                onChange={(e) => setFormData({ ...formData, title: e.target.value })}
+                onChange={(e) => { setFormData({ ...formData, title: e.target.value }); setFormErrors(prev => ({...prev, title: null})); }}
                 placeholder={t('cases.case_title_placeholder')}
                 required
-                className="dark:bg-slate-900 dark:border-slate-600"
+                className={`dark:bg-slate-900 dark:border-slate-600 ${formErrors.title ? 'border-red-500 dark:border-red-500' : ''}`}
               />
+              {formErrors.title && <p className="text-sm text-red-500">{formErrors.title}</p>}
             </div>
 
             <div className="grid grid-cols-3 gap-4">

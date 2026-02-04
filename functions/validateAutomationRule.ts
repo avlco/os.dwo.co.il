@@ -91,11 +91,30 @@ Deno.serve(async (req) => {
       if (ruleId && rule.id === ruleId) continue;
       
       if (areCatchConfigsEqual(rule.catch_config, catchConfig)) {
+        // Determine which fields are conflicting
+        const conflictFields = [];
+        const norm1 = normalizeCatchConfig(rule.catch_config);
+        const norm2 = normalizeCatchConfig(catchConfig);
+        
+        if (norm1.senders.length > 0 && norm2.senders.length > 0 && 
+            JSON.stringify(norm1.senders) === JSON.stringify(norm2.senders)) {
+          conflictFields.push('senders');
+        }
+        if (norm1.subject_contains && norm2.subject_contains && 
+            norm1.subject_contains === norm2.subject_contains) {
+          conflictFields.push('subject_contains');
+        }
+        if (norm1.body_contains && norm2.body_contains && 
+            norm1.body_contains === norm2.body_contains) {
+          conflictFields.push('body_contains');
+        }
+        
         return new Response(JSON.stringify({ 
           valid: false, 
           error: 'קיים כבר כלל אוטומציה עם תנאי סינון זהים',
           conflictingRuleId: rule.id,
-          conflictingRuleName: rule.name
+          conflictingRuleName: rule.name,
+          conflictFields
         }), { 
           headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
         });
