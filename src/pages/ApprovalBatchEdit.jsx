@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { createPageUrl } from '../utils';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { base44 } from '@/api/base44Client';
-import { format } from 'date-fns';
+import { useDateTimeSettings } from '../components/DateTimeSettingsProvider';
 import {
   ArrowRight,
   CheckCircle,
@@ -55,6 +55,7 @@ export default function ApprovalBatchEdit() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { toast } = useToast();
+  const { formatDateTime } = useDateTimeSettings();
   
   const ACTION_LABELS = {
     send_email: t('approval_batch_edit.action_send_email'),
@@ -352,7 +353,7 @@ return response;
               <Clock className="w-4 h-4 text-slate-500" />
               <span className="text-slate-600 dark:text-slate-400">{t('approval_batch_edit.expiry_label')}</span>
               <span className={`font-medium ${isExpired ? 'text-red-600' : 'dark:text-slate-200'}`}>
-                {batch?.expires_at ? format(new Date(batch.expires_at), 'dd/MM/yyyy HH:mm') : '-'}
+                {formatDateTime(batch?.expires_at)}
                 {isExpired && ` (${t('approval_batch_edit.expired')})`}
               </span>
             </div>
