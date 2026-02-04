@@ -179,7 +179,7 @@ export default function MailRoom() {
     return () => clearInterval(interval);
   }, []);
 
-  const formatTime = (seconds) => {
+  const formatTimerSeconds = (seconds) => {
     const mins = Math.floor(seconds / 60);
     const secs = seconds % 60;
     return `${mins}:${secs.toString().padStart(2, '0')}`;
@@ -294,7 +294,7 @@ export default function MailRoom() {
                 <span>{t('common.not_synced_yet')}</span>
               )}
               <span className="text-slate-400">|</span>
-              <span className="font-medium">{t('common.next_in')} {formatTime(nextSyncIn)}</span>
+              <span className="font-medium">{t('common.next_in')} {formatTimerSeconds(nextSyncIn)}</span>
             </div>
           </div>
 
