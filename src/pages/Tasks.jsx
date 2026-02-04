@@ -2,8 +2,9 @@ import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { base44 } from '@/api/base44Client';
 import { useTranslation } from 'react-i18next';
-import { format, isBefore } from 'date-fns';
+import { isBefore } from 'date-fns';
 import PageHeader from '../components/ui/PageHeader';
+import { useDateTimeSettings } from '../components/DateTimeSettingsProvider';
 import StatusBadge from '../components/ui/StatusBadge';
 import EmptyState from '../components/ui/EmptyState';
 import {
@@ -38,6 +39,7 @@ export default function Tasks() {
   const { t, i18n } = useTranslation();
   const isRTL = i18n.language === 'he';
   const queryClient = useQueryClient();
+  const { formatDate } = useDateTimeSettings();
   const today = new Date();
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState('all');
@@ -276,7 +278,7 @@ export default function Tasks() {
                         )}
                         {task.due_date && (
                           <p className={`text-sm mt-2 ${isOverdue(task) ? 'text-rose-600 dark:text-rose-400 font-medium' : 'text-slate-500 dark:text-slate-400'}`}>
-                            {t('tasks_page.due_label')} {format(new Date(task.due_date), 'dd/MM/yyyy')}
+                            {t('tasks_page.due_label')} {formatDate(task.due_date)}
                             {isOverdue(task) && ` ${t('tasks_page.overdue')}`}
                           </p>
                         )}
@@ -320,7 +322,7 @@ export default function Tasks() {
                           <p className="font-medium text-slate-500 dark:text-slate-400 line-through">{task.title}</p>
                           {task.completed_at && (
                             <p className="text-sm text-slate-400 dark:text-slate-500 mt-1">
-                              {t('tasks_page.completed_on')}{format(new Date(task.completed_at), 'dd/MM/yyyy')}
+                              {t('tasks_page.completed_on')}{formatDate(task.completed_at)}
                             </p>
                           )}
                         </div>

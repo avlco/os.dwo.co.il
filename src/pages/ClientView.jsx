@@ -4,9 +4,8 @@ import { base44 } from '@/api/base44Client';
 import { Link, useNavigate } from 'react-router-dom';
 import { createPageUrl } from '../utils';
 import { useTranslation } from 'react-i18next';
-import { format } from 'date-fns';
-import { he } from 'date-fns/locale';
 import StatusBadge from '../components/ui/StatusBadge';
+import { useDateTimeSettings } from '../components/DateTimeSettingsProvider';
 import {
   ArrowRight,
   ArrowLeft,
@@ -49,6 +48,7 @@ export default function ClientView() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { toast } = useToast();
+  const { formatDate } = useDateTimeSettings();
   const urlParams = new URLSearchParams(window.location.search);
   const clientId = urlParams.get('id');
 
@@ -388,7 +388,7 @@ export default function ClientView() {
                           <div key={inv.id} className="flex justify-between items-center p-3 border border-slate-200 dark:border-slate-700 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-700/50">
                             <div>
                               <p className="font-bold text-sm dark:text-slate-200">{inv.invoice_number}</p>
-                              <p className="text-xs text-slate-500">{format(new Date(inv.issued_date), 'dd/MM/yyyy')}</p>
+                              <p className="text-xs text-slate-500">{formatDate(inv.issued_date)}</p>
                             </div>
                             <div className={isRTL ? 'text-left' : 'text-right'}>
                               <p className="font-bold dark:text-slate-200">₪{inv.total?.toLocaleString()}</p>
