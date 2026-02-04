@@ -138,6 +138,11 @@ export default function CaseView() {
     queryFn: () => base44.entities.User.list(),
   });
 
+  const { data: allCases = [] } = useQuery({
+    queryKey: ['allCases'],
+    queryFn: () => base44.entities.Case.list('-created_date', 500),
+  });
+
   const { data: deadlines = [] } = useQuery({
     queryKey: ['deadlines', caseId],
     queryFn: () => base44.entities.Deadline.filter({ case_id: caseId }, '-due_date'),
