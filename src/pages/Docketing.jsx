@@ -2,9 +2,10 @@ import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { base44 } from '@/api/base44Client';
 import { useTranslation } from 'react-i18next';
-import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameMonth, isSameDay, addMonths, subMonths, isToday, isBefore } from 'date-fns';
-import { he } from 'date-fns/locale';
+import { startOfMonth, endOfMonth, eachDayOfInterval, isSameMonth, isSameDay, addMonths, subMonths, isToday, isBefore } from 'date-fns';
 import PageHeader from '../components/ui/PageHeader';
+import { useDateTimeSettings } from '../components/DateTimeSettingsProvider';
+import { formatForDateInput } from '../components/utils/dateTimeUtils';
 import StatusBadge from '../components/ui/StatusBadge';
 import {
   Calendar,
@@ -37,6 +38,7 @@ export default function Docketing() {
   const { t, i18n } = useTranslation();
   const isRTL = i18n.language === 'he';
   const queryClient = useQueryClient();
+  const { formatDate, formatCalendar } = useDateTimeSettings();
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [selectedDate, setSelectedDate] = useState(null);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
@@ -103,7 +105,7 @@ export default function Docketing() {
   const openCreateDialog = (date = null) => {
     resetForm();
     if (date) {
-      setFormData(prev => ({ ...prev, due_date: format(date, 'yyyy-MM-dd') }));
+      setFormData(prev => ({ ...prev, due_date: formatForDateInput(date) }));
     }
     setIsDialogOpen(true);
   };
@@ -164,7 +166,7 @@ export default function Docketing() {
               <Card className="dark:bg-slate-800 dark:border-slate-700">
                 <CardHeader className="flex flex-row items-center justify-between pb-2">
                   <CardTitle className="text-lg font-semibold dark:text-slate-200">
-                    {format(currentMonth, 'MMMM yyyy', { locale: isRTL ? he : undefined })}
+                    {formatCalendar(currentMonth, 'MMMM yyyy')}
                   </CardTitle>
                   <div className="flex gap-2">
                     <Button variant="ghost" size="icon" onClick={() => setCurrentMonth(subMonths(currentMonth, 1))} className="dark:hover:bg-slate-700">
@@ -210,7 +212,7 @@ export default function Docketing() {
                             ${!isSameMonth(day, currentMonth) ? 'text-slate-300 dark:text-slate-600' : 'dark:text-slate-200'}
                           `}
                         >
-                          <span className="block">{format(day, 'd')}</span>
+                          <span className="block">{formatCalendar(day, 'd')}</span>
                           {hasDeadlines && (
                             <div className="absolute bottom-1 left-1/2 -translate-x-1/2 flex gap-0.5">
                               {hasOverdue ? (
@@ -237,7 +239,7 @@ export default function Docketing() {
                   <CardHeader>
                     <CardTitle className="text-lg flex items-center gap-2 dark:text-slate-200">
                       <Calendar className="w-5 h-5 text-blue-500" />
-                      {format(selectedDate, 'dd MMMM yyyy', { locale: isRTL ? he : undefined })}
+                      {formatCalendar(selectedDate, 'dd MMMM yyyy')}
                     </CardTitle>
                   </CardHeader>
                   <CardContent className="space-y-3">
@@ -306,7 +308,7 @@ export default function Docketing() {
                       <div key={deadline.id} className="p-3 bg-rose-50 dark:bg-rose-900/20 rounded-xl border border-rose-100 dark:border-rose-800">
                         <p className="font-medium text-slate-800 dark:text-slate-200">{deadline.description}</p>
                         <p className="text-sm text-rose-600 dark:text-rose-400 mt-1">
-                          {format(new Date(deadline.due_date), 'dd/MM/yyyy')}
+                          {formatDate(deadline.due_date)}
                         </p>
                         <Button 
                           size="sm" 
@@ -341,10 +343,10 @@ export default function Docketing() {
                       >
                         <div className="w-14 h-14 rounded-xl bg-slate-100 dark:bg-slate-700 flex flex-col items-center justify-center">
                           <span className="text-lg font-bold text-slate-700 dark:text-slate-200">
-                            {format(new Date(deadline.due_date), 'd')}
+                            {formatCalendar(deadline.due_date, 'd')}
                           </span>
                           <span className="text-xs text-slate-500 dark:text-slate-400">
-                            {format(new Date(deadline.due_date), 'MMM', { locale: isRTL ? he : undefined })}
+                            {formatCalendar(deadline.due_date, 'MMM')}
                           </span>
                         </div>
                         <div className="flex-1 min-w-0">
