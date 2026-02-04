@@ -281,8 +281,8 @@ export default function Docketing() {
                       upcomingDeadlines.map(deadline => (
                         <div key={deadline.id} className="flex items-center gap-3 p-3 bg-slate-50 dark:bg-slate-700/50 rounded-xl">
                           <div className="w-10 h-10 rounded-lg bg-amber-100 dark:bg-amber-900/30 flex flex-col items-center justify-center text-xs">
-                            <span className="font-bold text-amber-700 dark:text-amber-400">{format(new Date(deadline.due_date), 'd')}</span>
-                            <span className="text-amber-600 dark:text-amber-500">{format(new Date(deadline.due_date), 'MMM', { locale: isRTL ? he : undefined })}</span>
+                            <span className="font-bold text-amber-700 dark:text-amber-400">{formatCalendar(deadline.due_date, 'd')}</span>
+                            <span className="text-amber-600 dark:text-amber-500">{formatCalendar(deadline.due_date, 'MMM')}</span>
                           </div>
                           <div className="flex-1 min-w-0">
                             <p className="font-medium text-slate-800 dark:text-slate-200 truncate">{deadline.description}</p>
