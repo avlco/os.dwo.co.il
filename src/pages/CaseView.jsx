@@ -3,8 +3,9 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { base44 } from '@/api/base44Client';
 import { Link, useNavigate } from 'react-router-dom';
 import { createPageUrl } from '../utils';
-import { format } from 'date-fns';
 import StatusBadge from '../components/ui/StatusBadge';
+import { useDateTimeSettings } from '../components/DateTimeSettingsProvider';
+import { formatForDateInput } from '../components/utils/dateTimeUtils';
 import {
   ArrowRight,
   Calendar,
@@ -84,6 +85,7 @@ export default function CaseView() {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
   const { toast } = useToast();
+  const { formatDate, formatDateTime } = useDateTimeSettings();
   const urlParams = new URLSearchParams(window.location.search);
   const caseId = urlParams.get('id');
 
@@ -106,7 +108,7 @@ export default function CaseView() {
   const [timeEntryForm, setTimeEntryForm] = useState({
     description: '',
     hours: '',
-    date_worked: format(new Date(), 'yyyy-MM-dd'),
+    date_worked: formatForDateInput(new Date()),
     is_billable: true,
     rate: 500,
   });
@@ -223,7 +225,7 @@ export default function CaseView() {
       setTimeEntryForm({
         description: '',
         hours: '',
-        date_worked: format(new Date(), 'yyyy-MM-dd'),
+        date_worked: formatForDateInput(new Date()),
         is_billable: true,
         rate: 500,
       });
@@ -361,37 +363,37 @@ export default function CaseView() {
                 <div>
                   <p className="text-sm text-slate-500">{t('case_view.filing_date')}</p>
                   <p className="font-medium">
-                    {currentCase.filing_date ? format(new Date(currentCase.filing_date), 'dd/MM/yyyy') : '-'}
+                    {formatDate(currentCase.filing_date)}
                   </p>
                 </div>
                 <div>
                   <p className="text-sm text-slate-500">{t('case_view.priority_date')}</p>
                   <p className="font-medium">
-                    {currentCase.priority_date ? format(new Date(currentCase.priority_date), 'dd/MM/yyyy') : '-'}
+                    {formatDate(currentCase.priority_date)}
                   </p>
                 </div>
                 <div>
                   <p className="text-sm text-slate-500">{t('case_view.grant_date')}</p>
                   <p className="font-medium">
-                    {currentCase.grant_date ? format(new Date(currentCase.grant_date), 'dd/MM/yyyy') : '-'}
+                    {formatDate(currentCase.grant_date)}
                   </p>
                 </div>
                 <div>
                   <p className="text-sm text-slate-500">{t('case_view.expiry_date')}</p>
                   <p className="font-medium">
-                    {currentCase.expiry_date ? format(new Date(currentCase.expiry_date), 'dd/MM/yyyy') : '-'}
+                    {formatDate(currentCase.expiry_date)}
                   </p>
                 </div>
                 <div>
                   <p className="text-sm text-slate-500">{t('case_view.renewal_date')}</p>
                   <p className="font-medium">
-                    {currentCase.renewal_date ? format(new Date(currentCase.renewal_date), 'dd/MM/yyyy') : '-'}
+                    {formatDate(currentCase.renewal_date)}
                   </p>
                 </div>
                 <div>
                   <p className="text-sm text-slate-500">{t('case_view.official_status_date')}</p>
                   <p className="font-medium">
-                    {currentCase.official_status_date ? format(new Date(currentCase.official_status_date), 'dd/MM/yyyy') : '-'}
+                    {formatDate(currentCase.official_status_date)}
                   </p>
                 </div>
                 <div className="md:col-span-2">
@@ -428,7 +430,7 @@ export default function CaseView() {
                       <div className="flex-1">
                         <p className="font-medium text-slate-800">{deadline.description}</p>
                         <p className="text-sm text-slate-500">
-                          {format(new Date(deadline.due_date), 'dd/MM/yyyy')}
+                          {formatDate(deadline.due_date)}
                         </p>
                       </div>
                       <StatusBadge status={deadline.status} />
@@ -469,7 +471,7 @@ export default function CaseView() {
                         <p className="font-medium text-slate-800">{task.title}</p>
                         {task.due_date && (
                           <p className="text-sm text-slate-500">
-                            {format(new Date(task.due_date), 'dd/MM/yyyy')}
+                            {formatDate(task.due_date)}
                           </p>
                         )}
                       </div>
@@ -527,7 +529,7 @@ export default function CaseView() {
                       <div className="flex-1">
                         <p className="font-medium text-slate-800">{entry.description}</p>
                         <p className="text-sm text-slate-500">
-                          {format(new Date(entry.date_worked), 'dd/MM/yyyy')}
+                          {formatDate(entry.date_worked)}
                         </p>
                       </div>
                       <div className="text-left">
