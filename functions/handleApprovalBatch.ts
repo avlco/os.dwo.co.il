@@ -101,16 +101,31 @@ async function executeBatchActions(base44, batch, context) {
           } catch (e) { console.warn('[Executor] Failed to create local Deadline:', e.message); }
           break;
         }
-                case 'save_file':
-          result = await base44.functions.invoke('uploadToDropbox', {
+                case 'save_file': {
+          // Build upload params - supports both NEW SCHEMA and LEGACY modes
+          const uploadParams = {
             mailId: batch.mail_id,
             caseId: batch.case_id,
             clientId: batch.client_id,
-            documentType: config.document_type || 'other',
-            subfolder: config.subfolder || ''
-          });
-          if (result.error) throw new Error(result.error);
+            documentType: config.document_type || 'other'
+          };
+          
+          // NEW SCHEMA FLOW: If config has schema_id, use new path building
+          if (config.schema_id) {
+            uploadParams.schema_id = config.schema_id;
+            uploadParams.path_selections = config.path_selections || {};
+            uploadParams.filename_template = config.filename_template || '{Original_Filename}';
+          } 
+          // LEGACY FLOW: Use subfolder/path_template
+          else {
+            uploadParams.subfolder = config.subfolder || '';
+          }
+          
+          result = await base44.functions.invoke('uploadToDropbox', uploadParams);
+          const resultData = result?.data || result;
+          if (resultData?.error) throw new Error(resultData.error);
           break;
+        }
       }
 
       results.push({ id: action.idempotency_key, status: 'success', data: result?.data || 'ok' });
