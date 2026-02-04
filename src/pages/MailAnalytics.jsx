@@ -2,9 +2,10 @@ import React, { useState, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { base44 } from '@/api/base44Client';
 import { useTranslation } from 'react-i18next';
-import { format, subDays, startOfDay, eachDayOfInterval } from 'date-fns';
-import { he } from 'date-fns/locale';
+import { subDays, startOfDay, eachDayOfInterval } from 'date-fns';
 import PageHeader from '../components/ui/PageHeader';
+import { useDateTimeSettings } from '../components/DateTimeSettingsProvider';
+import { formatForDateInput } from '../components/utils/dateTimeUtils';
 import {
   Mail,
   TrendingUp,
@@ -43,6 +44,7 @@ const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899'
 export default function MailAnalytics() {
   const { t, i18n } = useTranslation();
   const isRTL = i18n.language === 'he';
+  const { formatCalendar } = useDateTimeSettings();
   const [dateRange, setDateRange] = useState('30');
   const [user, setUser] = useState(null);
   const [isAdmin, setIsAdmin] = useState(false);
@@ -125,12 +127,12 @@ export default function MailAnalytics() {
   // Mail volume by day
   const days = eachDayOfInterval({ start: startDate, end: new Date() });
   const mailVolumeData = days.map(day => {
-    const dayStr = format(day, 'yyyy-MM-dd');
+    const dayStr = formatForDateInput(day);
     const count = filteredMails.filter(m => 
-      format(new Date(m.received_at), 'yyyy-MM-dd') === dayStr
+      formatForDateInput(m.received_at) === dayStr
     ).length;
     return {
-      date: format(day, 'dd/MM', { locale: isRTL ? he : undefined }),
+      date: formatCalendar(day, 'dd/MM'),
       count,
     };
   });

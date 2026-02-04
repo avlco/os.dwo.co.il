@@ -5,10 +5,11 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { BarChart, Activity, TrendingUp, AlertCircle } from 'lucide-react';
-import { format } from 'date-fns';
-import { he } from 'date-fns/locale';
+import { useDateTimeSettings } from '../components/DateTimeSettingsProvider';
 
 export default function AutomationMetrics() {
+  const { formatDateTime } = useDateTimeSettings();
+  
   // שלוף לוגים מ-Activity (activity_type = 'automation_log')
   const { data: allActivities = [], isLoading } = useQuery({
     queryKey: ['automationLogs'],
@@ -123,7 +124,7 @@ export default function AutomationMetrics() {
                         <p className="font-medium">{log.metadata?.rule_name || 'Unknown'}</p>
                         <p className="text-sm text-slate-500">{log.description}</p>
                         <p className="text-xs text-slate-400">
-                          {format(new Date(log.created_at), 'dd/MM/yyyy HH:mm', { locale: he })}
+                          {formatDateTime(log.created_at)}
                         </p>
                       </div>
                       <div className="flex items-center gap-2">
