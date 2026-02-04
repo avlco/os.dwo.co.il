@@ -1,5 +1,11 @@
 // @ts-nocheck
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.6';
+import { 
+  sanitizeName, 
+  buildPathFromSchema, 
+  buildLegacyDefaultPath, 
+  resolveFilenameTemplate 
+} from './utils/folderPathBuilders.js';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -148,11 +154,6 @@ async function getGoogleToken(base44) {
 // 3. DROPBOX OPERATIONS
 // ========================================
 
-function sanitizeName(name) {
-  if (!name) return 'Unknown';
-  return name.replace(/[\\/:*?"<>|]/g, '').replace(/\s+/g, ' ').trim() || 'Unknown';
-}
-
 async function ensureDropboxFolder(accessToken, folderPath) {
   try {
     const response = await fetch('https://api.dropboxapi.com/2/files/create_folder_v2', {
@@ -205,162 +206,16 @@ async function createSharedLink(accessToken, filePath) {
 }
 
 // ========================================
-// 4. PATH BUILDING - NEW SCHEMA + LEGACY SUPPORT
+// 4. PATH BUILDING - Using imported functions from folderPathBuilders.js
 // ========================================
 
 /**
- * Resolves a dynamic level value based on source and format (for FolderTreeSchema)
- */
-function resolveDynamicLevel(level, context) {
-  const { source, format } = level;
-  
-  switch (source) {
-    case 'client': {
-      if (!context.client) return '_לא_משוייך';
-      const fmt = format || '{client_number} - {client_name}';
-      return fmt
-        .replace('{client_number}', sanitizeName(context.client.client_number || ''))
-        .replace('{client_name}', sanitizeName(context.client.name || ''))
-        .replace('{client_id}', context.client.id || '');
-    }
-    
-    case 'case': {
-      if (!context.caseData) return 'ממתין_לשיוך';
-      const fmt = format || '{case_number}';
-      return fmt
-        .replace('{case_number}', sanitizeName(context.caseData.case_number || ''))
-        .replace('{case_title}', sanitizeName(context.caseData.title || ''))
-        .replace('{case_type}', sanitizeName(context.caseData.case_type || ''))
-        .replace('{application_number}', sanitizeName(context.caseData.application_number || ''));
-    }
-    
-    case 'user': {
-      if (!context.user) return 'system';
-      const fmt = format || '{user_name}';
-      return fmt
-        .replace('{user_name}', sanitizeName(context.user.full_name || context.user.email || ''))
-        .replace('{user_email}', sanitizeName(context.user.email || ''))
-        .replace('{department}', sanitizeName(context.user.department || ''));
-    }
-    
-    case 'date': {
-      const now = new Date();
-      const fmt = format || '{year}';
-      return fmt
-        .replace('{year}', now.getFullYear().toString())
-        .replace('{month}', String(now.getMonth() + 1).padStart(2, '0'))
-        .replace('{day}', String(now.getDate()).padStart(2, '0'))
-        .replace('{year_month}', `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`);
-    }
-    
-    default:
-      return 'unknown';
-  }
-}
-
-/**
- * Resolves static/pool level value from path_selections
- */
-function resolveStaticOrPoolLevel(level, pathSelections) {
-  const selection = pathSelections?.[level.key];
-  
-  if (!selection) {
-    // For static levels with single value, use that value
-    if (level.type === 'static' && level.values?.length === 1) {
-      return level.values[0].code;
-    }
-    return null;
-  }
-  
-  const matchingValue = level.values?.find(v => v.code === selection);
-  return matchingValue ? matchingValue.code : selection;
-}
-
-/**
- * NEW: Build path from FolderTreeSchema entity
- */
-function buildPathFromSchema(schema, pathSelections = {}, context = {}) {
-  if (!schema || !schema.levels || !Array.isArray(schema.levels)) {
-    console.warn('[UploadToDropbox] Invalid schema, falling back to default path');
-    return buildDefaultPath(context);
-  }
-  
-  const parts = [];
-  
-  // Add root path
-  if (schema.root_path) {
-    parts.push(schema.root_path.replace(/^\/+|\/+$/g, ''));
-  }
-  
-  // Sort levels by order
-  const sortedLevels = [...schema.levels].sort((a, b) => (a.order || 0) - (b.order || 0));
-  
-  for (const level of sortedLevels) {
-    let folderName = null;
-    
-    switch (level.type) {
-      case 'dynamic':
-        folderName = resolveDynamicLevel(level, context);
-        break;
-        
-      case 'static':
-      case 'pool':
-        folderName = resolveStaticOrPoolLevel(level, pathSelections);
-        break;
-        
-      default:
-        console.warn(`[UploadToDropbox] Unknown level type: ${level.type}`);
-    }
-    
-    if (folderName) {
-      parts.push(sanitizeName(folderName));
-    } else if (level.required !== false) {
-      console.warn(`[UploadToDropbox] Missing required level: ${level.key}`);
-      parts.push(`_${level.key}_`);
-    }
-  }
-  
-  // Add optional subfolder from context
-  if (context.subfolder) {
-    parts.push(sanitizeName(context.subfolder));
-  }
-  
-  return '/' + parts.join('/');
-}
-
-/**
- * Resolves filename template with tokens
- */
-function resolveFilenameTemplate(template, context, originalFilename) {
-  if (!template) return originalFilename || 'document';
-  
-  let result = template;
-  
-  // Token replacements
-  result = result.replace(/{Case_No}/g, context.caseData?.case_number || '');
-  result = result.replace(/{Client_Name}/g, context.client?.name || '');
-  result = result.replace(/{Client_No}/g, context.client?.client_number || '');
-  result = result.replace(/{Case_Type}/g, context.caseData?.case_type || '');
-  result = result.replace(/{Official_No}/g, context.caseData?.application_number || '');
-  result = result.replace(/{Mail_Subject}/g, context.mail?.subject || '');
-  result = result.replace(/{Mail_Date}/g, context.mail?.received_at ? new Date(context.mail.received_at).toISOString().split('T')[0] : new Date().toISOString().split('T')[0]);
-  result = result.replace(/{Date}/g, new Date().toISOString().split('T')[0]);
-  result = result.replace(/{Year}/g, new Date().getFullYear().toString());
-  result = result.replace(/{Month}/g, String(new Date().getMonth() + 1).padStart(2, '0'));
-  result = result.replace(/{Original_Filename}/g, originalFilename || 'document');
-  
-  // Clean up empty tokens
-  result = result.replace(/\{\w+\}/g, '').replace(/\s+/g, ' ').trim();
-  
-  return sanitizeName(result) || originalFilename || 'document';
-}
-
-/**
  * LEGACY: Build path from old folder_structure array (backward compatibility)
+ * This handles the old metadata.folder_structure format from IntegrationConnection
  */
 function buildDropboxPathLegacy(folderStructure, context) {
   if (!folderStructure || !Array.isArray(folderStructure) || folderStructure.length === 0) {
-    return buildDefaultPath(context);
+    return buildLegacyDefaultPath(context);
   }
 
   const sorted = [...folderStructure].sort((a, b) => (a.order || 0) - (b.order || 0));
@@ -421,37 +276,6 @@ function buildDropboxPathLegacy(folderStructure, context) {
         }
         break;
     }
-  }
-
-  if (context.subfolder) {
-    parts.push(sanitizeName(context.subfolder));
-  }
-
-  return '/' + parts.join('/');
-}
-
-/**
- * DEFAULT: Canonical path structure
- */
-function buildDefaultPath(context) {
-  const parts = ['DWO', 'לקוחות - משרד'];
-
-  if (context.client) {
-    const num = sanitizeName(context.client.client_number || context.client.number || '');
-    const name = sanitizeName(context.client.name || '');
-    parts.push(`${num} - ${name}`);
-  } else {
-    parts.push('_לא_משוייך');
-  }
-
-  if (context.caseData) {
-    parts.push(sanitizeName(context.caseData.case_number || ''));
-  } else {
-    parts.push('ממתין_לשיוך');
-  }
-
-  if (context.documentType) {
-    parts.push(sanitizeName(context.documentType));
   }
 
   if (context.subfolder) {
@@ -632,7 +456,7 @@ Deno.serve(async (req) => {
         // Resolve filename - NEW TEMPLATE or LEGACY
         let filename;
         if (filename_template && usingNewSchema) {
-          filename = resolveFilenameTemplate(filename_template, { client, caseData, mail }, originalFilename);
+          filename = resolveFilenameTemplate(filename_template, { client, caseData, mail, originalFilename });
           // Preserve extension
           const ext = originalFilename.includes('.') ? originalFilename.split('.').pop() : '';
           if (ext && !filename.endsWith(`.${ext}`)) {
