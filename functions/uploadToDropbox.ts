@@ -205,18 +205,164 @@ async function createSharedLink(accessToken, filePath) {
 }
 
 // ========================================
-// 4. PATH BUILDING (from folder_structure)
+// 4. PATH BUILDING - NEW SCHEMA + LEGACY SUPPORT
 // ========================================
 
-function buildDropboxPath(folderStructure, context) {
-  // context: { client, caseData, documentType, subfolder }
+/**
+ * Resolves a dynamic level value based on source and format (for FolderTreeSchema)
+ */
+function resolveDynamicLevel(level, context) {
+  const { source, format } = level;
+  
+  switch (source) {
+    case 'client': {
+      if (!context.client) return '_לא_משוייך';
+      const fmt = format || '{client_number} - {client_name}';
+      return fmt
+        .replace('{client_number}', sanitizeName(context.client.client_number || ''))
+        .replace('{client_name}', sanitizeName(context.client.name || ''))
+        .replace('{client_id}', context.client.id || '');
+    }
+    
+    case 'case': {
+      if (!context.caseData) return 'ממתין_לשיוך';
+      const fmt = format || '{case_number}';
+      return fmt
+        .replace('{case_number}', sanitizeName(context.caseData.case_number || ''))
+        .replace('{case_title}', sanitizeName(context.caseData.title || ''))
+        .replace('{case_type}', sanitizeName(context.caseData.case_type || ''))
+        .replace('{application_number}', sanitizeName(context.caseData.application_number || ''));
+    }
+    
+    case 'user': {
+      if (!context.user) return 'system';
+      const fmt = format || '{user_name}';
+      return fmt
+        .replace('{user_name}', sanitizeName(context.user.full_name || context.user.email || ''))
+        .replace('{user_email}', sanitizeName(context.user.email || ''))
+        .replace('{department}', sanitizeName(context.user.department || ''));
+    }
+    
+    case 'date': {
+      const now = new Date();
+      const fmt = format || '{year}';
+      return fmt
+        .replace('{year}', now.getFullYear().toString())
+        .replace('{month}', String(now.getMonth() + 1).padStart(2, '0'))
+        .replace('{day}', String(now.getDate()).padStart(2, '0'))
+        .replace('{year_month}', `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`);
+    }
+    
+    default:
+      return 'unknown';
+  }
+}
 
+/**
+ * Resolves static/pool level value from path_selections
+ */
+function resolveStaticOrPoolLevel(level, pathSelections) {
+  const selection = pathSelections?.[level.key];
+  
+  if (!selection) {
+    // For static levels with single value, use that value
+    if (level.type === 'static' && level.values?.length === 1) {
+      return level.values[0].code;
+    }
+    return null;
+  }
+  
+  const matchingValue = level.values?.find(v => v.code === selection);
+  return matchingValue ? matchingValue.code : selection;
+}
+
+/**
+ * NEW: Build path from FolderTreeSchema entity
+ */
+function buildPathFromSchema(schema, pathSelections = {}, context = {}) {
+  if (!schema || !schema.levels || !Array.isArray(schema.levels)) {
+    console.warn('[UploadToDropbox] Invalid schema, falling back to default path');
+    return buildDefaultPath(context);
+  }
+  
+  const parts = [];
+  
+  // Add root path
+  if (schema.root_path) {
+    parts.push(schema.root_path.replace(/^\/+|\/+$/g, ''));
+  }
+  
+  // Sort levels by order
+  const sortedLevels = [...schema.levels].sort((a, b) => (a.order || 0) - (b.order || 0));
+  
+  for (const level of sortedLevels) {
+    let folderName = null;
+    
+    switch (level.type) {
+      case 'dynamic':
+        folderName = resolveDynamicLevel(level, context);
+        break;
+        
+      case 'static':
+      case 'pool':
+        folderName = resolveStaticOrPoolLevel(level, pathSelections);
+        break;
+        
+      default:
+        console.warn(`[UploadToDropbox] Unknown level type: ${level.type}`);
+    }
+    
+    if (folderName) {
+      parts.push(sanitizeName(folderName));
+    } else if (level.required !== false) {
+      console.warn(`[UploadToDropbox] Missing required level: ${level.key}`);
+      parts.push(`_${level.key}_`);
+    }
+  }
+  
+  // Add optional subfolder from context
+  if (context.subfolder) {
+    parts.push(sanitizeName(context.subfolder));
+  }
+  
+  return '/' + parts.join('/');
+}
+
+/**
+ * Resolves filename template with tokens
+ */
+function resolveFilenameTemplate(template, context, originalFilename) {
+  if (!template) return originalFilename || 'document';
+  
+  let result = template;
+  
+  // Token replacements
+  result = result.replace(/{Case_No}/g, context.caseData?.case_number || '');
+  result = result.replace(/{Client_Name}/g, context.client?.name || '');
+  result = result.replace(/{Client_No}/g, context.client?.client_number || '');
+  result = result.replace(/{Case_Type}/g, context.caseData?.case_type || '');
+  result = result.replace(/{Official_No}/g, context.caseData?.application_number || '');
+  result = result.replace(/{Mail_Subject}/g, context.mail?.subject || '');
+  result = result.replace(/{Mail_Date}/g, context.mail?.received_at ? new Date(context.mail.received_at).toISOString().split('T')[0] : new Date().toISOString().split('T')[0]);
+  result = result.replace(/{Date}/g, new Date().toISOString().split('T')[0]);
+  result = result.replace(/{Year}/g, new Date().getFullYear().toString());
+  result = result.replace(/{Month}/g, String(new Date().getMonth() + 1).padStart(2, '0'));
+  result = result.replace(/{Original_Filename}/g, originalFilename || 'document');
+  
+  // Clean up empty tokens
+  result = result.replace(/\{\w+\}/g, '').replace(/\s+/g, ' ').trim();
+  
+  return sanitizeName(result) || originalFilename || 'document';
+}
+
+/**
+ * LEGACY: Build path from old folder_structure array (backward compatibility)
+ */
+function buildDropboxPathLegacy(folderStructure, context) {
   if (!folderStructure || !Array.isArray(folderStructure) || folderStructure.length === 0) {
-    // FALLBACK: canonical path (matches listDropboxFiles.ts)
     return buildDefaultPath(context);
   }
 
-  // Sort by order
   const sorted = [...folderStructure].sort((a, b) => (a.order || 0) - (b.order || 0));
   const parts = [];
 
@@ -277,7 +423,6 @@ function buildDropboxPath(folderStructure, context) {
     }
   }
 
-  // Optional subfolder
   if (context.subfolder) {
     parts.push(sanitizeName(context.subfolder));
   }
@@ -285,8 +430,10 @@ function buildDropboxPath(folderStructure, context) {
   return '/' + parts.join('/');
 }
 
+/**
+ * DEFAULT: Canonical path structure
+ */
 function buildDefaultPath(context) {
-  // Canonical: /DWO/לקוחות - משרד/{client_number} - {client_name}/{case_number}
   const parts = ['DWO', 'לקוחות - משרד'];
 
   if (context.client) {
@@ -368,7 +515,17 @@ Deno.serve(async (req) => {
 
     const rawBody = await req.json();
     const params = rawBody.body || rawBody;
-    const { mailId, caseId, clientId, documentType, subfolder } = params;
+    const { 
+      mailId, 
+      caseId, 
+      clientId, 
+      documentType, 
+      subfolder,
+      // NEW: FolderTreeSchema parameters
+      schema_id,
+      path_selections,
+      filename_template
+    } = params;
 
     if (!mailId) {
       return new Response(JSON.stringify({ error: 'mailId is required' }), {
@@ -376,7 +533,7 @@ Deno.serve(async (req) => {
       });
     }
 
-    console.log(`[UploadToDropbox] Starting - Mail: ${mailId}, Case: ${caseId || 'none'}, Type: ${documentType || 'other'}`);
+    console.log(`[UploadToDropbox] Starting - Mail: ${mailId}, Case: ${caseId || 'none'}, Type: ${documentType || 'other'}, Schema: ${schema_id || 'legacy'}`);
 
     // 1. Fetch Mail
     const mail = await base44.asServiceRole.entities.Mail.get(mailId);
@@ -420,13 +577,42 @@ Deno.serve(async (req) => {
       console.warn('[UploadToDropbox] Google token not available:', e.message);
     }
 
-    // 5. Build Path
-    const folderPath = buildDropboxPath(folderStructure, {
-      client,
-      caseData,
-      documentType: documentType || 'other',
-      subfolder
-    });
+    // 5. Build Path - NEW SCHEMA OR LEGACY
+    let folderPath;
+    let usingNewSchema = false;
+    
+    if (schema_id) {
+      // NEW FLOW: Use FolderTreeSchema
+      console.log(`[UploadToDropbox] Using new FolderTreeSchema: ${schema_id}`);
+      try {
+        const schema = await base44.asServiceRole.entities.FolderTreeSchema.get(schema_id);
+        if (schema && schema.is_active !== false) {
+          folderPath = buildPathFromSchema(schema, path_selections || {}, {
+            client,
+            caseData,
+            mail,
+            documentType: documentType || 'other',
+            subfolder
+          });
+          usingNewSchema = true;
+          console.log(`[UploadToDropbox] Schema path built: ${folderPath}`);
+        } else {
+          console.warn(`[UploadToDropbox] Schema ${schema_id} not found or inactive, falling back to legacy`);
+        }
+      } catch (schemaError) {
+        console.error(`[UploadToDropbox] Failed to load schema ${schema_id}:`, schemaError.message);
+      }
+    }
+    
+    // LEGACY FALLBACK: Use old folder_structure or default path
+    if (!usingNewSchema) {
+      folderPath = buildDropboxPathLegacy(folderStructure, {
+        client,
+        caseData,
+        documentType: documentType || 'other',
+        subfolder
+      });
+    }
 
     console.log(`[UploadToDropbox] Target path: ${folderPath}`);
 
@@ -441,7 +627,20 @@ Deno.serve(async (req) => {
 
     for (const attachment of mail.attachments) {
       try {
-        const filename = sanitizeName(attachment.filename || attachment.name || 'unnamed');
+        const originalFilename = attachment.filename || attachment.name || 'unnamed';
+        
+        // Resolve filename - NEW TEMPLATE or LEGACY
+        let filename;
+        if (filename_template && usingNewSchema) {
+          filename = resolveFilenameTemplate(filename_template, { client, caseData, mail }, originalFilename);
+          // Preserve extension
+          const ext = originalFilename.includes('.') ? originalFilename.split('.').pop() : '';
+          if (ext && !filename.endsWith(`.${ext}`)) {
+            filename = `${filename}.${ext}`;
+          }
+        } else {
+          filename = sanitizeName(originalFilename);
+        }
 
         // Download
         const fileContent = await downloadAttachment(attachment, googleToken, gmailMessageId);
