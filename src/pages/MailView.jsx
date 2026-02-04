@@ -1,12 +1,11 @@
 import React from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tantml/react-query';
 import { base44 } from '@/api/base44Client';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
 import { createPageUrl } from '../utils';
-import { format } from 'date-fns';
-import { he, enUS } from 'date-fns/locale';
 import StatusBadge from '../components/ui/StatusBadge';
+import { useDateTimeSettings } from '../components/DateTimeSettingsProvider';
 import {
   ArrowRight,
   Mail,
@@ -27,9 +26,9 @@ import { useToast } from "@/components/ui/use-toast";
 export default function MailView() {
   const { t, i18n } = useTranslation();
   const isRTL = i18n.language === 'he';
-  const dateLocale = isRTL ? he : enUS;
   const queryClient = useQueryClient();
   const { toast } = useToast();
+  const { formatDateTime } = useDateTimeSettings();
   const urlParams = new URLSearchParams(window.location.search);
   const mailId = urlParams.get('id');
 
@@ -326,7 +325,7 @@ export default function MailView() {
                 </p>
                 <div className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-300">
                   <Calendar className="w-3 h-3" />
-                  {format(new Date(currentMail.received_at), 'dd/MM/yyyy HH:mm', { locale: dateLocale })}
+                  {formatDateTime(currentMail.received_at)}
                 </div>
               </div>
 
