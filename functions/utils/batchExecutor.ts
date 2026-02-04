@@ -94,7 +94,7 @@ export async function executeBatchActions(base44, batch, context) {
   const results = [];
   const rollbackStack = [];
   
-  // Get client language for proper execution
+  // Get client language for proper execution (fallback only - should already be in action config)
   let clientLanguage = 'he';
   if (batch.client_id) {
     try {
@@ -107,7 +107,7 @@ export async function executeBatchActions(base44, batch, context) {
   const sortedActions = sortActionsByExecutionOrder(batch.actions_current);
   
   console.log(`[BatchExecutor] Starting execution of ${sortedActions.length} actions`);
-  console.log(`[BatchExecutor] Client language: ${clientLanguage}`);
+  console.log(`[BatchExecutor] Client language fallback: ${clientLanguage}`);
   console.log(`[BatchExecutor] Order: ${sortedActions.map(a => a.action_type).join(' → ')}`);
   
   let hasRevertibleFailure = false;
@@ -388,17 +388,20 @@ async function tryReserveExecution(base44, action, batch, context = {}) {
 
 /**
  * Execute a single action (called only after successful reserve)
+ * Language is already embedded in action.config.language by executeAutomationRule
  */
 async function executeAction(base44, action, batch, context = {}) {
   const config = action.config || {};
+  // Language is already determined and embedded in config by executeAutomationRule
+  const actionLang = config.language || 'he';
   
   switch (action.action_type) {
     case 'create_task': {
       const taskData = {
         title: config.title || `משימה מבאטש ${batch.id}`,
         description: config.description || '',
-        case_id: batch.case_id || null,
-        client_id: batch.client_id || null,
+        case_id: config.case_id || batch.case_id || null,
+        client_id: config.client_id || batch.client_id || null,
         mail_id: batch.mail_id || null,
         status: 'pending',
         priority: config.priority || 'medium',
@@ -413,14 +416,23 @@ async function executeAction(base44, action, batch, context = {}) {
     }
     
     case 'billing': {
+      // Validate required fields for billing
+      const billingCaseId = config.case_id || batch.case_id;
+      if (!billingCaseId) {
+        console.warn(`[BatchExecutor] Billing action: missing case_id`);
+        throw new Error('Billing requires case_id - no case associated with this email');
+      }
+      
       const timeEntryData = {
-        case_id: batch.case_id || null,
+        case_id: billingCaseId,
+        client_id: config.client_id || batch.client_id || null,
         description: config.description || batch.mail_subject || 'חיוב אוטומטי',
         hours: config.hours || 0.25,
         rate: config.rate || config.hourly_rate || 800,
-        date_worked: new Date().toISOString(),
+        date_worked: config.date_worked || new Date().toISOString().split('T')[0],
         is_billable: true,
-        billed: false
+        billed: false,
+        user_email: config.user_email || null
       };
       
       const timeEntry = await base44.asServiceRole.entities.TimeEntry.create(timeEntryData);
@@ -429,7 +441,7 @@ async function executeAction(base44, action, batch, context = {}) {
     
     case 'create_deadline': {
       const deadlineData = {
-        case_id: batch.case_id || null,
+        case_id: config.case_id || batch.case_id || null,
         deadline_type: config.deadline_type || 'custom',
         description: config.description || config.title || 'מועד מבאטש אישור',
         due_date: config.due_date,
@@ -443,7 +455,7 @@ async function executeAction(base44, action, batch, context = {}) {
     
     case 'create_alert': {
       // Message/description in config is already in the correct language
-      console.log(`[BatchExecutor] Creating alert/deadline: ${config.description || config.message}`);
+      console.log(`[BatchExecutor] Creating alert/deadline: ${config.description || config.message} (lang: ${actionLang})`);
       
       const deadlineData = {
         case_id: config.case_id || batch.case_id || null,
@@ -458,7 +470,7 @@ async function executeAction(base44, action, batch, context = {}) {
           recipients: config.recipients || [],
           source: 'batch_executor',
           approval_batch_id: batch.id,
-          language: config.language
+          language: actionLang
         }
       };
       
@@ -467,12 +479,11 @@ async function executeAction(base44, action, batch, context = {}) {
     }
     
     case 'send_email': {
-      // The subject and body in config are already in the correct language
-      const emailLang = config.language || 'he';
+      // Subject and body in config are already in the correct language (determined by executeAutomationRule)
       const formattedBody = `<div style="white-space: pre-wrap; font-family: 'Segoe UI', Arial, sans-serif;">${config.body}</div>`;
-      const brandedBody = generateEmailLayout(formattedBody, config.subject, emailLang);
+      const brandedBody = generateEmailLayout(formattedBody, config.subject, actionLang);
       
-      console.log(`[BatchExecutor] Sending email to ${config.to} in language: ${emailLang}`);
+      console.log(`[BatchExecutor] Sending email to ${config.to} in language: ${actionLang}`);
       
       const emailResult = await base44.functions.invoke('sendEmail', {
         to: config.to,
@@ -508,7 +519,7 @@ async function executeAction(base44, action, batch, context = {}) {
     
     case 'calendar_event': {
       // Title and description in config are already in the correct language
-      console.log(`[BatchExecutor] Creating calendar event: ${config.title}`);
+      console.log(`[BatchExecutor] Creating calendar event: ${config.title} (lang: ${actionLang})`);
       
       const eventResult = await base44.functions.invoke('createCalendarEvent', {
         title: config.title || config.title_template,
@@ -540,7 +551,8 @@ async function executeAction(base44, action, batch, context = {}) {
             google_event_id: resultData?.google_event_id || null,
             html_link: resultData?.htmlLink || null,
             meet_link: resultData?.meetLink || null,
-            source: 'batch_executor'
+            source: 'batch_executor',
+            language: actionLang
           }
         });
       } catch (e) { console.warn('[BatchExecutor] Failed to create local Deadline:', e.message); }
@@ -561,7 +573,7 @@ function getEntityForActionType(actionType) {
     'create_task': 'Task',
     'billing': 'TimeEntry',
     'create_deadline': 'Deadline',
-    'create_alert': 'Activity',
+    'create_alert': 'Deadline', // create_alert creates Deadline entities
     'send_email': 'Email',
     'save_file': 'Dropbox',
     'calendar_event': 'CalendarEvent'
@@ -597,8 +609,8 @@ async function performRollback(base44, rollbackStack) {
           break;
         
         case 'create_alert':
-          await base44.asServiceRole.entities.Activity.delete(item.id);
-          console.log(`[Rollback] ✅ Deleted Activity ${item.id}`);
+          await base44.asServiceRole.entities.Deadline.delete(item.id);
+          console.log(`[Rollback] ✅ Deleted Deadline (alert) ${item.id}`);
           break;
       }
       
