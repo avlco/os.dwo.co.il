@@ -307,6 +307,7 @@ async function runAutomation(base44, mails, userId) {
         if (data.extracted_info) Object.assign(extractedBuffer, data.extracted_info);
         if (data.case_id) extractedBuffer.case_id = data.case_id;
         if (data.client_id) extractedBuffer.client_id = data.client_id;
+        if (data.client_language) extractedBuffer.client_language = data.client_language;
 
         if (data.results) {
             const pending = data.results.filter(r => r.status === 'pending_batch');
@@ -315,14 +316,15 @@ async function runAutomation(base44, mails, userId) {
       }
 
       if (actionsBuffer.length > 0) {
-        console.log(`[Automation] 📦 Creating approval batch...`);
+        console.log(`[Automation] 📦 Creating approval batch with ${actionsBuffer.length} actions...`);
         // עדכון סטטוס - ממתין לאישור
         try {
           const batchRes = await base44.functions.invoke('aggregateApprovalBatch', {
               mailId: mail.id,
               actionsToApprove: actionsBuffer,
               extractedInfo: extractedBuffer,
-              userId: userId
+              userId: userId,
+              clientLanguage: extractedBuffer.client_language || 'he'
           });
           
           // עדכון המייל עם מזהה האצווה וסטטוס ממתין לאישור
