@@ -899,7 +899,9 @@ export default function AutomationRulesManager() {
           </Tabs>
           <DialogFooter>
             <Button variant="outline" onClick={() => setIsEditModalOpen(false)} className="dark:border-slate-600 dark:text-slate-200">{t('common.cancel')}</Button>
-            <Button onClick={handleSave} className="bg-slate-800 hover:bg-slate-700 dark:bg-slate-600 dark:hover:bg-slate-500">{t('settings.save_rule')}</Button>
+            <Button onClick={handleSave} disabled={isSaving} className="bg-slate-800 hover:bg-slate-700 dark:bg-slate-600 dark:hover:bg-slate-500">
+              {isSaving ? t('common.saving') : t('settings.save_rule')}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
