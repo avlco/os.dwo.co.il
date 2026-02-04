@@ -313,6 +313,11 @@ export default function Cases() {
       }
     }
 
+    // Validate client_id - required field
+    if (!formData.client_id || formData.client_id.trim() === '') {
+      errors.client_id = 'לקוח הוא שדה חובה';
+    }
+
     // Validate title
     if (!formData.title || formData.title.trim() === '') {
       errors.title = 'נושא התיק הוא שדה חובה';
@@ -745,12 +750,12 @@ export default function Cases() {
 
             <div className="grid grid-cols-3 gap-4">
               <div className="space-y-2">
-                <Label className="dark:text-slate-300">{t('cases.client')}</Label>
+                <Label className="dark:text-slate-300">{t('cases.client')} <span className="text-red-500">*</span></Label>
                 <Select
                   value={formData.client_id || undefined}
-                  onValueChange={(v) => setFormData({ ...formData, client_id: v })}
+                  onValueChange={(v) => { setFormData({ ...formData, client_id: v }); setFormErrors(prev => ({...prev, client_id: null})); }}
                 >
-                  <SelectTrigger className="dark:bg-slate-900 dark:border-slate-600">
+                  <SelectTrigger className={`dark:bg-slate-900 dark:border-slate-600 ${formErrors.client_id ? 'border-red-500 dark:border-red-500' : ''}`}>
                     <SelectValue placeholder={t('cases.select_client')} />
                   </SelectTrigger>
                   <SelectContent className="dark:bg-slate-800 dark:border-slate-700">
@@ -761,6 +766,7 @@ export default function Cases() {
                     ))}
                   </SelectContent>
                 </Select>
+                {formErrors.client_id && <p className="text-sm text-red-500">{formErrors.client_id}</p>}
               </div>
               <div className="space-y-2">
                 <Label className="dark:text-slate-300">{t('cases.assigned_lawyer')}</Label>
