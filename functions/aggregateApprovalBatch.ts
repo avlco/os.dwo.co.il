@@ -348,12 +348,41 @@ function renderApprovalEmail({
 
       // 5) שמירת קבצים ב-Dropbox
       if (type === 'save_file') {
-        const path = config.path || config.dropbox_folder_path || config.dropbox_path;
+        const path = config.path || config.dropbox_folder_path || config.dropbox_path || config.pathTemplate;
+        const docType = config.documentType || config.document_type;
+        const subfolder = config.subfolder;
+        const attachmentCount = config.attachmentCount;
 
         return `
           <div style="background: #f8f9fa; padding: 12px; margin-bottom: 10px; border-radius: 6px; border-${align}: 4px solid ${BRAND.colors.primary}; text-align: ${align};">
             <div style="font-weight: bold; color: ${BRAND.colors.text}; font-size: 15px;">${icon} ${escapeHtml(desc)}</div>
+            ${renderRow({ label: isHebrew ? 'סוג מסמך' : 'Document Type', value: docType, align })}
+            ${renderRow({ label: isHebrew ? 'תת-תיקייה' : 'Subfolder', value: subfolder, align })}
             ${renderRow({ label: isHebrew ? 'מיקום (path)' : 'Path', value: path, align })}
+            ${renderRow({ label: isHebrew ? 'קבצים מצורפים' : 'Attachments', value: attachmentCount, align })}
+          </div>
+        `;
+      }
+      
+      // 6) התרעה / דוקטינג (create_alert)
+      if (type === 'create_alert') {
+        icon = '⏰';
+        desc = isHebrew ? 'התרעה / דוקטינג' : 'Alert / Docketing';
+        
+        const alertType = config.alert_type || config.deadline_type;
+        const message = config.message || config.description;
+        const dueDate = config.due_date;
+        const timingInfo = config.timing_offset ? 
+          `${config.timing_offset} ${config.timing_unit || 'days'} ${config.timing_direction || 'after'}` : '';
+
+        return `
+          <div style="background: #f8f9fa; padding: 12px; margin-bottom: 10px; border-radius: 6px; border-${align}: 4px solid ${BRAND.colors.primary}; text-align: ${align};">
+            <div style="font-weight: bold; color: ${BRAND.colors.text}; font-size: 15px;">${icon} ${escapeHtml(desc)}</div>
+            ${renderRow({ label: isHebrew ? 'סוג התרעה' : 'Alert Type', value: alertType, align })}
+            ${renderRow({ label: isHebrew ? 'הודעה' : 'Message', value: truncateText(message, 260), align })}
+            ${renderRow({ label: isHebrew ? 'תאריך יעד' : 'Due Date', value: dueDate, align })}
+            ${renderRow({ label: isHebrew ? 'תזמון' : 'Timing', value: timingInfo, align })}
+            ${renderRow({ label: isHebrew ? 'נשלחת גרסה באנגלית' : 'English version', value: yesNo(config.enable_english && shouldSendEnglishVersion, language), align })}
           </div>
         `;
       }
@@ -411,7 +440,7 @@ Deno.serve(async (req) => {
 
   try {
     const base44 = createClientFromRequest(req);
-    const { mailId, actionsToApprove, extractedInfo, userId } = await req.json();
+    const { mailId, actionsToApprove, extractedInfo, userId, clientLanguage } = await req.json();
 
     if (!mailId || !actionsToApprove?.length) {
       return new Response(JSON.stringify({ success: true, message: 'No actions' }), {
@@ -505,22 +534,26 @@ Deno.serve(async (req) => {
           } catch (e) {}
         }
 
-        let clientCommunicationLanguage = 'he';
-        if (batch.client_id) {
+        // Determine client communication language
+        let clientCommunicationLanguage = clientLanguage || 'he';
+        if (!clientLanguage && batch.client_id) {
           try {
             const client = await base44.entities.Client.get(batch.client_id);
             if (client?.communication_language) clientCommunicationLanguage = client.communication_language;
           } catch (e) {}
         }
+        
+        console.log(`[AggregateApprovalBatch] Client communication language: ${clientCommunicationLanguage}`);
+        console.log(`[AggregateApprovalBatch] Actions count: ${batch.actions_current?.length || 0}`);
 
         const emailHtml = renderApprovalEmail({
           batch: { ...batch, actions_current: batch.actions_current },
           approveUrl,
           rejectUrl,
           editUrl,
-          language: 'he',
+          language: 'he', // Approval email UI is always in Hebrew (for the approver)
           caseName,
-          clientCommunicationLanguage,
+          clientCommunicationLanguage, // This indicates whether the CLIENT will receive English versions
         });
 
         await base44.functions.invoke('sendEmail', {
