@@ -316,7 +316,9 @@ export default function AutomationRulesManager() {
     setIsEditModalOpen(true);
   };
 
-  const handleSave = () => {
+  const [isSaving, setIsSaving] = useState(false);
+
+  const handleSave = async () => {
     const data = {
       ...currentRule,
       catch_config: {
@@ -324,10 +326,32 @@ export default function AutomationRulesManager() {
         senders: sendersInput.split(',').map(s => s.trim()).filter(Boolean)
       }
     };
-    if (currentRule.id) {
-      updateMutation.mutate({ id: currentRule.id, data });
-    } else {
-      createMutation.mutate(data);
+
+    // Validate for duplicate catch_config before saving
+    setIsSaving(true);
+    try {
+      const validationResponse = await base44.functions.invoke('validateAutomationRule', {
+        ruleId: currentRule.id || null,
+        catchConfig: data.catch_config
+      });
+
+      const validationResult = validationResponse.data;
+      
+      if (!validationResult.valid) {
+        toast.error(validationResult.error || t('automation_rules.duplicate_rule_error'));
+        setIsSaving(false);
+        return;
+      }
+
+      if (currentRule.id) {
+        updateMutation.mutate({ id: currentRule.id, data });
+      } else {
+        createMutation.mutate(data);
+      }
+    } catch (error) {
+      toast.error(t('common.error') + ': ' + error.message);
+    } finally {
+      setIsSaving(false);
     }
   };
 
