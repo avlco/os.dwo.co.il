@@ -19,13 +19,28 @@ function normalizeCatchConfig(catchConfig) {
 }
 
 /**
+ * Checks if a catch_config has meaningful filter criteria
+ */
+function hasMeaningfulCriteria(normalizedConfig) {
+  if (!normalizedConfig) return false;
+  return (
+    normalizedConfig.senders.length > 0 ||
+    normalizedConfig.subject_contains.length > 0 ||
+    normalizedConfig.body_contains.length > 0
+  );
+}
+
+/**
  * Compares two catch_config objects for equality
+ * Returns true only if both have the same meaningful criteria
  */
 function areCatchConfigsEqual(config1, config2) {
   const norm1 = normalizeCatchConfig(config1);
   const norm2 = normalizeCatchConfig(config2);
   
+  // If either is empty/null, they are not considered equal (allow empty rules)
   if (!norm1 || !norm2) return false;
+  if (!hasMeaningfulCriteria(norm1) || !hasMeaningfulCriteria(norm2)) return false;
   
   // Compare senders arrays (already sorted)
   if (norm1.senders.length !== norm2.senders.length) return false;
