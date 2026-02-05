@@ -270,16 +270,15 @@ export default function CaseView() {
 
     // Validate title
     if (!editCaseForm.title || editCaseForm.title.trim() === '') {
-      errors.title = 'נושא התיק הוא שדה חובה';
-    } else {
-      // Check for duplicate title (excluding current case)
-      const isDuplicateTitle = allCases.some(c =>
-        c.title?.toLowerCase() === editCaseForm.title.toLowerCase() && c.id !== caseId
-      );
-      if (isDuplicateTitle) {
-        errors.title = `נושא תיק "${editCaseForm.title}" כבר קיים במערכת`;
-      }
-    }
+  errors.title = 'שם התיק הוא שדה חובה';
+} else {
+  const isDuplicateTitle = allCases.some(c =>
+    c.title?.toLowerCase() === editCaseForm.title.toLowerCase() && c.id !== caseId
+  );
+  if (isDuplicateTitle) {
+    errors.title = `שם תיק \"${editCaseForm.title}\" כבר קיים במערכת`;
+  }
+}
 
     // If there are errors, show them and stop
     if (Object.keys(errors).length > 0) {
@@ -651,7 +650,7 @@ export default function CaseView() {
             </div>
             
             <div className="space-y-2">
-              <Label>{t('case_view.case_title_label')}</Label>
+<Label>שם התיק</Label>
               <Input
                 value={editCaseForm.title}
                 onChange={(e) => { setEditCaseForm({ ...editCaseForm, title: e.target.value }); setFormErrors(prev => ({...prev, title: null})); }}
@@ -777,13 +776,18 @@ export default function CaseView() {
             </div>
 
             <div className="space-y-2">
-              <Label>{t('case_view.notes_label')}</Label>
-              <Textarea
-                value={editCaseForm.notes}
-                onChange={(e) => setEditCaseForm({ ...editCaseForm, notes: e.target.value })}
-                rows={3}
-              />
-            </div>
+  <Label>תיאור התיק</Label>
+  <Textarea
+    value={editCaseForm.notes}
+    onChange={(e) => setEditCaseForm({ ...editCaseForm, notes: e.target.value })}
+    rows={2}
+    style={{ overflow: 'hidden', resize: 'none' }}
+    onInput={(e) => {
+      e.target.style.height = 'auto';
+      e.target.style.height = `${e.target.scrollHeight}px`;
+    }}
+  />
+</div>
 
             <div className="flex justify-end gap-3 pt-4">
               <Button
