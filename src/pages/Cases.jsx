@@ -237,8 +237,9 @@ export default function Cases() {
     }
 
     if (!data.title || data.title.trim() === '') {
-      errors.push('נושא התיק הוא שדה חובה');
-    }
+  errors.push('שם התיק הוא שדה חובה');
+}
+
 
     if (data.filing_date && data.renewal_date) {
       const filing = new Date(data.filing_date);
@@ -318,19 +319,26 @@ export default function Cases() {
       errors.client_id = 'לקוח הוא שדה חובה';
     }
 
-    // Validate title
-    if (!formData.title || formData.title.trim() === '') {
-      errors.title = 'נושא התיק הוא שדה חובה';
-    } else {
-      // Check for duplicate title
-      const isDuplicateTitle = cases.some(c =>
-        c.title?.toLowerCase() === formData.title.toLowerCase() &&
-        (!editingCase || c.id !== editingCase.id)
-      );
-      if (isDuplicateTitle) {
-        errors.title = `נושא תיק "${formData.title}" כבר קיים במערכת`;
-      }
-    }
+    // Validate title (case name)
+if (!formData.title || formData.title.trim() === '') {
+  errors.title = 'שם התיק הוא שדה חובה';
+} else if (!formData.client_id || formData.client_id.trim() === '') {
+  // We can't enforce "unique within client" without a client
+  errors.client_id = errors.client_id || 'לקוח הוא שדה חובה';
+} else {
+  // Check for duplicate title ONLY within the same client (excluding current case when editing)
+  const normalizedTitle = formData.title.trim().toLowerCase();
+  const isDuplicateTitle = cases.some(c =>
+    (c.client_id === formData.client_id) &&
+    (c.title || '').trim().toLowerCase() === normalizedTitle &&
+    (!editingCase || c.id !== editingCase.id)
+  );
+
+  if (isDuplicateTitle) {
+    errors.title = `שם תיק \"${formData.title}\" כבר קיים אצל הלקוח שנבחר`;
+  }
+}
+
 
     // Date validations
     if (formData.filing_date && formData.renewal_date) {
@@ -737,16 +745,21 @@ export default function Cases() {
             </div>
 
             <div className="space-y-2">
-              <Label className="dark:text-slate-300">{t('cases.case_title_field')}</Label>
-              <Input
-                value={formData.title}
-                onChange={(e) => { setFormData({ ...formData, title: e.target.value }); setFormErrors(prev => ({...prev, title: null})); }}
-                placeholder={t('cases.case_title_placeholder')}
-                required
-                className={`dark:bg-slate-900 dark:border-slate-600 ${formErrors.title ? 'border-red-500 dark:border-red-500' : ''}`}
-              />
-              {formErrors.title && <p className="text-sm text-red-500">{formErrors.title}</p>}
-            </div>
+  <Label className="dark:text-slate-300">
+    שם התיק <span className="text-red-500">*</span>
+  </Label>
+  <Input
+    value={formData.title}
+    onChange={(e) => {
+      setFormData({ ...formData, title: e.target.value });
+      setFormErrors(prev => ({ ...prev, title: null }));
+    }}
+    placeholder={t('cases.case_title_placeholder')}
+    required
+    className={`dark:bg-slate-900 dark:border-slate-600 ${formErrors.title ? 'border-red-500 dark:border-red-500' : ''}`}
+  />
+  {formErrors.title && <p className="text-sm text-red-500">{formErrors.title}</p>}
+</div>
 
             <div className="grid grid-cols-3 gap-4">
               <div className="space-y-2">
@@ -869,14 +882,19 @@ export default function Cases() {
             </div>
 
             <div className="space-y-2">
-              <Label className="dark:text-slate-300">{t('cases.notes')}</Label>
-              <Textarea
-                value={formData.notes}
-                onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-                rows={3}
-                className="dark:bg-slate-900 dark:border-slate-600"
-              />
-            </div>
+  <Label className="dark:text-slate-300">תיאור התיק</Label>
+  <Textarea
+    value={formData.notes}
+    onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+    rows={2}
+    className="dark:bg-slate-900 dark:border-slate-600"
+    style={{ overflow: 'hidden', resize: 'none' }}
+    onInput={(e) => {
+      e.target.style.height = 'auto';
+      e.target.style.height = `${e.target.scrollHeight}px`;
+    }}
+  />
+</div>
 
             <div className="flex justify-end gap-3 pt-4">
               <Button
