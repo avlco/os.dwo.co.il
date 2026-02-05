@@ -650,7 +650,9 @@ export default function CaseView() {
             </div>
             
             <div className="space-y-2">
-<Label>שם התיק</Label>
+<Label>
+  שם התיק <span className="text-red-500">*</span>
+</Label>
               <Input
                 value={editCaseForm.title}
                 onChange={(e) => { setEditCaseForm({ ...editCaseForm, title: e.target.value }); setFormErrors(prev => ({...prev, title: null})); }}
