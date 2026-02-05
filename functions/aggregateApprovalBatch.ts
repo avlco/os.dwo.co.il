@@ -198,7 +198,9 @@ function renderApprovalEmail({
   rejectUrl,
   editUrl,
   language = 'he',
-  caseName,
+  caseNumber,
+  caseTitle,
+  clientName,
   clientCommunicationLanguage = 'he',
 }) {
   const isHebrew = language === 'he';
@@ -414,14 +416,25 @@ function renderApprovalEmail({
 
     <div style="background-color: #ffffff; padding: 5px;">
       <table style="width: 100%; margin-bottom: 20px;">
-        <tr>
-          <td><strong>נושא:</strong> ${escapeHtml(batch.mail_subject || '-')}</td>
-        </tr>
-        <tr>
-          <td><strong>מאת:</strong> ${escapeHtml(batch.mail_from || '-')}</td>
-        </tr>
-        ${caseName ? `<tr><td><strong>תיק:</strong> ${escapeHtml(caseName)}</td></tr>` : ''}
-      </table>
+  <tr>
+    <td><strong>נושא:</strong> ${escapeHtml(batch.mail_subject || '-')}</td>
+  </tr>
+  <tr>
+    <td><strong>מאת:</strong> ${escapeHtml(batch.mail_from || '-')}</td>
+  </tr>
+  <tr>
+    <td><strong>שם הלקוח:</strong> ${escapeHtml(clientName || '-')}</td>
+  </tr>
+  <tr>
+    <td><strong>שם התיק:</strong> ${escapeHtml(caseTitle || '-')}</td>
+  </tr>
+  <tr>
+    <td><strong>מספר התיק:</strong> ${escapeHtml(caseNumber || '-')}</td>
+  </tr>
+  <tr>
+    <td><strong>שפת תקשורת:</strong> ${escapeHtml(clientCommunicationLanguage === 'en' ? 'אנגלית' : 'עברית')}</td>
+  </tr>
+</table>
 
       <h3>פעולות ממתינות לאישור:</h3>
       ${actionsList}
@@ -534,34 +547,37 @@ Deno.serve(async (req) => {
         const editUrl = `${appUrl}/ApprovalBatchEdit?batchId=${batch.id}`;
 
         let caseName = null;
-        if (batch.case_id) {
-          try {
-            const c = await base44.entities.Case.get(batch.case_id);
-            caseName = c?.case_number;
-          } catch (e) {}
-        }
+if (batch.case_id) {
+  try {
+    const c = await base44.entities.Case.get(batch.case_id);
+    caseName = c?.case_number;
+  } catch (e) {}
+}
 
-        // Determine client communication language
-        let clientCommunicationLanguage = clientLanguage || 'he';
-        if (!clientLanguage && batch.client_id) {
-          try {
-            const client = await base44.entities.Client.get(batch.client_id);
-            if (client?.communication_language) clientCommunicationLanguage = client.communication_language;
-          } catch (e) {}
-        }
+// Determine client communication language
+let clientCommunicationLanguage = clientLanguage || 'he';
+if (!clientLanguage && batch.client_id) {
+  try {
+    const client = await base44.entities.Client.get(batch.client_id);
+    if (client?.communication_language) clientCommunicationLanguage = client.communication_language;
+  } catch (e) {}
+}
         
         console.log(`[AggregateApprovalBatch] Client communication language: ${clientCommunicationLanguage}`);
         console.log(`[AggregateApprovalBatch] Actions count: ${batch.actions_current?.length || 0}`);
 
         const emailHtml = renderApprovalEmail({
-          batch: { ...batch, actions_current: batch.actions_current },
-          approveUrl,
-          rejectUrl,
-          editUrl,
-          language: 'he', // Approval email UI is always in Hebrew (for the approver)
-          caseName,
-          clientCommunicationLanguage, // This indicates whether the CLIENT will receive English versions
-        });
+  batch: { ...batch, actions_current: batch.actions_current },
+  approveUrl,
+  rejectUrl,
+  editUrl,
+  language: 'he', // Approval email UI is always in Hebrew (for the approver)
+  caseNumber,
+  caseTitle,
+  clientName,
+  clientCommunicationLanguage, // This indicates whether the CLIENT will receive English versions
+});
+
 
         await base44.functions.invoke('sendEmail', {
           to: approverEmail,
