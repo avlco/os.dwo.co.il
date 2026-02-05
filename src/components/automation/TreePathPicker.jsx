@@ -5,51 +5,53 @@ import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { base44 } from '@/api/base44Client';
 import { useQuery } from '@tanstack/react-query';
-import { 
+import {
   ChevronRight,
   Lock,
   FolderTree,
+  FolderOpen,
+  Folder,
   List,
   Loader2,
   AlertCircle
 } from 'lucide-react';
 
-const LEVEL_TYPE_ICONS = {
-  dynamic: Lock,
-  static: FolderTree,
-  pool: List
+const SOURCE_LABELS = {
+  client: 'לקוח',
+  case: 'תיק',
+  user: 'משתמש',
+  date: 'תאריך'
 };
 
 export default function TreePathPicker({ schemaId, pathSelections, onSchemaChange, onPathSelectionsChange }) {
   const { t } = useTranslation();
   const [previewPath, setPreviewPath] = useState('/...');
 
-  // Fetch all active schemas
   const { data: schemas = [], isLoading: schemasLoading } = useQuery({
     queryKey: ['folderTreeSchemas'],
     queryFn: () => base44.entities.FolderTreeSchema.filter({ is_active: true }),
   });
 
-  // Get the selected schema
   const selectedSchema = schemas.find(s => s.id === schemaId);
 
-  // Update preview whenever selections change
   useEffect(() => {
     if (selectedSchema) {
       setPreviewPath(generatePreview(selectedSchema, pathSelections));
+    } else {
+      setPreviewPath('/...');
     }
   }, [selectedSchema, pathSelections]);
 
   const generatePreview = (schema, selections) => {
     if (!schema?.levels) return '/...';
-    
+
     const parts = [];
     if (schema.root_path) {
       parts.push(schema.root_path.replace(/^\/+|\/+$/g, ''));
     }
-    
+
     const sortedLevels = [...schema.levels].sort((a, b) => (a.order || 0) - (b.order || 0));
-    
+
     for (const level of sortedLevels) {
       switch (level.type) {
         case 'dynamic':
@@ -63,13 +65,14 @@ export default function TreePathPicker({ schemaId, pathSelections, onSchemaChang
             parts.push(selected || `<${level.label || level.key}>`);
           }
           break;
-        case 'pool':
+        case 'pool': {
           const selected = selections?.[level.key];
           parts.push(selected || `<${level.label || level.key}>`);
           break;
+        }
       }
     }
-    
+
     return '/' + parts.join('/');
   };
 
@@ -78,18 +81,16 @@ export default function TreePathPicker({ schemaId, pathSelections, onSchemaChang
     onPathSelectionsChange(newSelections);
   };
 
-  // Get available values for a pool level (considering dependencies)
   const getAvailableValues = (level) => {
     if (!level.values) return [];
-    
-    // If level depends on another, filter values based on parent selection
+
     if (level.depends_on && level.conditional_values) {
       const parentSelection = pathSelections?.[level.depends_on];
       if (parentSelection && level.conditional_values[parentSelection]) {
         return level.conditional_values[parentSelection];
       }
     }
-    
+
     return level.values;
   };
 
@@ -112,111 +113,160 @@ export default function TreePathPicker({ schemaId, pathSelections, onSchemaChang
     );
   }
 
+  const sortedLevels = selectedSchema
+    ? [...selectedSchema.levels].sort((a, b) => (a.order || 0) - (b.order || 0))
+    : [];
+
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       {/* Schema Selection */}
-      <div className="space-y-2">
-        <Label className="text-sm">סכמת מבנה תיקיות</Label>
+      <div className="space-y-1.5">
+        <Label className="text-sm">נתיב שמירה</Label>
         <Select value={schemaId || ''} onValueChange={onSchemaChange}>
           <SelectTrigger className="dark:bg-slate-800 dark:border-slate-600">
-            <SelectValue placeholder="בחר סכמה..." />
+            <SelectValue placeholder="בחר מבנה תיקיות..." />
           </SelectTrigger>
           <SelectContent className="dark:bg-slate-800">
             {schemas.map(schema => (
               <SelectItem key={schema.id} value={schema.id}>
                 <div className="flex items-center gap-2">
-                  <FolderTree className="w-3 h-3" />
+                  <FolderTree className="w-3.5 h-3.5 text-blue-500" />
                   {schema.name}
                   {schema.is_default && (
-                    <Badge variant="outline" className="text-[10px] h-4">ברירת מחדל</Badge>
+                    <Badge variant="outline" className="text-[10px] h-4 px-1.5">ברירת מחדל</Badge>
                   )}
                 </div>
               </SelectItem>
             ))}
           </SelectContent>
         </Select>
-        {selectedSchema?.description && (
-          <p className="text-xs text-slate-500 dark:text-slate-400">
-            {selectedSchema.description}
-          </p>
-        )}
       </div>
 
-      {/* Path Configuration */}
+      {/* Visual Tree */}
       {selectedSchema && (
-        <div className="space-y-3 p-4 bg-slate-50 dark:bg-slate-900 rounded-lg border dark:border-slate-700">
-          <Label className="text-sm font-medium">קביעת נתיב</Label>
-          
-          {selectedSchema.levels
-            .sort((a, b) => (a.order || 0) - (b.order || 0))
-            .map((level, index) => {
-              const TypeIcon = LEVEL_TYPE_ICONS[level.type];
+        <div className="rounded-lg border dark:border-slate-700 overflow-hidden">
+          {/* Tree Header - Root */}
+          <div className="flex items-center gap-2 px-3 py-2 bg-slate-100 dark:bg-slate-800 border-b dark:border-slate-700">
+            <FolderOpen className="w-4 h-4 text-amber-500" />
+            <span className="text-sm font-medium text-slate-700 dark:text-slate-200 font-mono dir-ltr">
+              {selectedSchema.root_path || '/'}
+            </span>
+          </div>
+
+          {/* Tree Levels */}
+          <div className="bg-white dark:bg-slate-900 py-1">
+            {sortedLevels.map((level, index) => {
+              const isLast = index === sortedLevels.length - 1;
               const availableValues = getAvailableValues(level);
-              
+              const isSelected = level.type === 'dynamic' ||
+                (level.type === 'static' && level.values?.length === 1) ||
+                pathSelections?.[level.key];
+
               return (
-                <div key={level.key || index} className="flex items-start gap-3">
-                  <div className="pt-1">
-                    <Badge variant="outline" className="text-[10px] h-6">
-                      <TypeIcon className="w-3 h-3 ml-1" />
-                      {level.label || level.key}
-                    </Badge>
-                  </div>
-                  
-                  <div className="flex-1">
-                    {level.type === 'dynamic' ? (
-                      <div className="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
-                        <Lock className="w-4 h-4" />
-                        <span>נקבע אוטומטית מ{level.source === 'client' ? 'לקוח' : level.source === 'case' ? 'תיק' : level.source}</span>
+                <div key={level.key || index} className="relative">
+                  <div className="flex items-center min-h-[40px]">
+                    {/* Tree lines */}
+                    <div className="flex-shrink-0 w-8 flex justify-center relative">
+                      {/* Vertical line */}
+                      <div
+                        className={`absolute top-0 w-px bg-slate-300 dark:bg-slate-600 ${isLast ? 'h-1/2' : 'h-full'}`}
+                        style={{ right: '50%' }}
+                      />
+                      {/* Horizontal branch */}
+                      <div
+                        className="absolute top-1/2 h-px bg-slate-300 dark:bg-slate-600"
+                        style={{ right: '0', width: '50%' }}
+                      />
+                    </div>
+
+                    {/* Level content */}
+                    <div className="flex-1 flex items-center gap-2 py-1.5 pr-1 pl-3">
+                      {/* Folder icon */}
+                      {level.type === 'dynamic' ? (
+                        <div className="w-7 h-7 rounded flex items-center justify-center bg-slate-100 dark:bg-slate-800 flex-shrink-0">
+                          <Lock className="w-3.5 h-3.5 text-slate-400" />
+                        </div>
+                      ) : isSelected ? (
+                        <FolderOpen className="w-5 h-5 text-amber-500 flex-shrink-0" />
+                      ) : (
+                        <Folder className="w-5 h-5 text-slate-400 flex-shrink-0" />
+                      )}
+
+                      {/* Level label + control */}
+                      <div className="flex-1 min-w-0">
+                        {level.type === 'dynamic' ? (
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm text-slate-500 dark:text-slate-400">
+                              {level.label || level.key}
+                            </span>
+                            <Badge variant="secondary" className="text-[10px] h-5 px-1.5 bg-slate-100 dark:bg-slate-800">
+                              {SOURCE_LABELS[level.source] || level.source} - אוטומטי
+                            </Badge>
+                          </div>
+                        ) : level.type === 'static' && level.values?.length === 1 ? (
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm font-medium text-slate-700 dark:text-slate-200">
+                              {level.values[0].name || level.values[0].code}
+                            </span>
+                            <Badge variant="outline" className="text-[10px] h-5 px-1.5">קבוע</Badge>
+                          </div>
+                        ) : (
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs text-slate-500 dark:text-slate-400 flex-shrink-0">
+                              {level.label || level.key}:
+                            </span>
+                            <Select
+                              value={pathSelections?.[level.key] || ''}
+                              onValueChange={(v) => handleSelectionChange(level.key, v)}
+                            >
+                              <SelectTrigger className="h-7 text-sm dark:bg-slate-800 dark:border-slate-600 max-w-[220px]">
+                                <SelectValue placeholder={`בחר...`} />
+                              </SelectTrigger>
+                              <SelectContent className="dark:bg-slate-800">
+                                {availableValues.map(val => (
+                                  <SelectItem key={val.code} value={val.code} className="text-sm">
+                                    {val.name}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        )}
                       </div>
-                    ) : level.type === 'static' && level.values?.length === 1 ? (
-                      <div className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-300">
-                        <span className="font-medium">{level.values[0].name || level.values[0].code}</span>
-                        <Badge variant="outline" className="text-[10px]">קבוע</Badge>
-                      </div>
-                    ) : (
-                      <Select 
-                        value={pathSelections?.[level.key] || ''} 
-                        onValueChange={(v) => handleSelectionChange(level.key, v)}
-                      >
-                        <SelectTrigger className="h-8 text-sm dark:bg-slate-800 dark:border-slate-600">
-                          <SelectValue placeholder={`בחר ${level.label || level.key}...`} />
-                        </SelectTrigger>
-                        <SelectContent className="dark:bg-slate-800">
-                          {availableValues.map(val => (
-                            <SelectItem key={val.code} value={val.code} className="text-sm">
-                              {val.name} <code className="text-xs text-slate-400">({val.code})</code>
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    )}
+                    </div>
                   </div>
                 </div>
               );
             })}
-        </div>
-      )}
-
-      {/* Path Preview */}
-      {selectedSchema && (
-        <div className="p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
-          <Label className="text-xs text-blue-800 dark:text-blue-200 mb-2 block">תצוגה מקדימה:</Label>
-          <div className="flex items-center gap-1 flex-wrap">
-            {previewPath.split('/').filter(Boolean).map((part, i, arr) => (
-              <React.Fragment key={i}>
-                <Badge 
-                  variant={part.startsWith('[') || part.startsWith('<') ? 'secondary' : 'default'}
-                  className="font-mono text-xs"
-                >
-                  {part}
-                </Badge>
-                {i < arr.length - 1 && <ChevronRight className="w-3 h-3 text-slate-400" />}
-              </React.Fragment>
-            ))}
           </div>
-          <p className="text-xs text-slate-500 dark:text-slate-400 mt-2 font-mono dir-ltr text-left">
-            {previewPath}
-          </p>
+
+          {/* Path Preview - Prominent */}
+          <div className="px-3 py-2.5 bg-blue-50 dark:bg-blue-950/40 border-t border-blue-200 dark:border-blue-900">
+            <div className="flex items-center gap-2 flex-wrap" dir="ltr">
+              {previewPath.split('/').filter(Boolean).map((part, i, arr) => {
+                const isDynamic = part.startsWith('[');
+                const isPlaceholder = part.startsWith('<');
+                return (
+                  <React.Fragment key={i}>
+                    <span
+                      className={`text-xs font-mono px-1.5 py-0.5 rounded ${
+                        isDynamic
+                          ? 'bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300'
+                          : isPlaceholder
+                            ? 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 border border-dashed border-amber-300 dark:border-amber-700'
+                            : 'bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300'
+                      }`}
+                    >
+                      {part}
+                    </span>
+                    {i < arr.length - 1 && (
+                      <ChevronRight className="w-3 h-3 text-slate-400 flex-shrink-0" />
+                    )}
+                  </React.Fragment>
+                );
+              })}
+            </div>
+          </div>
         </div>
       )}
     </div>
