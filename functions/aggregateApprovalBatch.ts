@@ -378,17 +378,15 @@ function renderApprovalEmail({
 
       // 6) שמירת קבצים ב-Dropbox (save_file)
       if (type === 'save_file') {
-        const path = config.path || config.dropbox_folder_path || config.dropbox_path || config.pathTemplate;
         const docType = config.documentType || config.document_type;
-        const subfolder = config.subfolder;
         const attachmentCount = config.attachmentCount;
+        const filenameTemplate = config.filename_template;
 
         return `
           <div style="background: #f8f9fa; padding: 12px; margin-bottom: 10px; border-radius: 6px; border-${align}: 4px solid ${BRAND.colors.primary}; text-align: ${align};">
             <div style="font-weight: bold; color: ${BRAND.colors.text}; font-size: 15px;">${icon} ${escapeHtml(desc)}</div>
             ${renderRow({ label: isHebrew ? 'סוג מסמך' : 'Document Type', value: docType, align })}
-            ${renderRow({ label: isHebrew ? 'תת-תיקייה' : 'Subfolder', value: subfolder, align })}
-            ${renderRow({ label: isHebrew ? 'מיקום (path)' : 'Path', value: path, align })}
+            ${renderRow({ label: isHebrew ? 'תבנית שם קובץ' : 'Filename Template', value: filenameTemplate, align })}
             ${renderRow({ label: isHebrew ? 'קבצים מצורפים' : 'Attachments', value: attachmentCount, align })}
           </div>
         `;

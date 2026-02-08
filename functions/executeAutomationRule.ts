@@ -206,7 +206,7 @@ async function logAutomationExecution(base44, logData) {
         details = ` [אל: ${cfg.to}, נושא: ${cfg.subject}]`;
       }
       else if (action.action === 'save_file') {
-        details = ` [תיקייה: ${cfg.subfolder || 'ראשי'}]`;
+        details = ` [תבנית: ${cfg.filename_template || 'ברירת מחדל'}]`;
       }
       else if (action.action === 'calendar_event') {
         details = ` [${cfg.title} בתאריך ${cfg.start_date.split('T')[0]}]`;
@@ -547,8 +547,9 @@ Deno.serve(async (req) => {
           caseId: caseId,
           clientId: clientId,
           documentType: actions.save_file.document_type || 'other',
-          subfolder: actions.save_file.subfolder || '',
-          pathTemplate: actions.save_file.path_template || '',
+          schema_id: actions.save_file.schema_id || null,
+          path_selections: actions.save_file.path_selections || {},
+          filename_template: actions.save_file.filename_template || '{Original_Filename}',
           attachmentCount: mail.attachments.length
         };
 
