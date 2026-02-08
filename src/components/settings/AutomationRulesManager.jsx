@@ -14,7 +14,7 @@ import { Badge } from "@/components/ui/badge";
 import { base44 } from '@/api/base44Client';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from "sonner";
-import { Plus, Edit, Trash2, X, Braces, ShieldCheck, Copy, Wand2, Upload, Download } from 'lucide-react';
+import { Plus, Edit, Trash2, X, Braces, ShieldCheck, Copy, Upload } from 'lucide-react';
 import ImportExportDialog from '../import-export/ImportExportDialog';
 import {
   DropdownMenu,
@@ -24,7 +24,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 
 import RuleOptimizationBanner from '../mailrules/RuleOptimizationBanner';
-import TreePathPicker from '../automation/TreePathPicker';
+import PathBuilder from '../automation/PathBuilder';
 import FilenameTemplateInput from '../common/FilenameTemplateInput';
 import { FILENAME_TOKENS as AVAILABLE_TOKENS } from '@/constants/filenameTokens';
 
@@ -60,8 +60,8 @@ const defaultRule = {
     },
     save_file: {
       enabled: false,
-      schema_id: '',
-      path_selections: {},
+      path_segments: [],
+      root_path: '/DWO',
       filename_template: '{Original_Filename}'
     },
         calendar_event: { 
@@ -894,12 +894,11 @@ export default function AutomationRulesManager() {
                     </div>
                     {currentRule.action_bundle.save_file.enabled && (
                       <div className="pr-6 space-y-4">
-                        {/* Path Picker */}
-                        <TreePathPicker
-                          schemaId={currentRule.action_bundle.save_file.schema_id}
-                          pathSelections={currentRule.action_bundle.save_file.path_selections || {}}
-                          onSchemaChange={(schemaId) => updateAction('save_file', 'schema_id', schemaId)}
-                          onPathSelectionsChange={(selections) => updateAction('save_file', 'path_selections', selections)}
+                        {/* Path Builder */}
+                        <PathBuilder
+                          segments={currentRule.action_bundle.save_file.path_segments || []}
+                          rootPath={currentRule.action_bundle.save_file.root_path || '/DWO'}
+                          onChange={(segments) => updateAction('save_file', 'path_segments', segments)}
                         />
 
                         {/* Filename Template */}

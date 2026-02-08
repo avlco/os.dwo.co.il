@@ -7,7 +7,6 @@ import PageHeader from '../components/ui/PageHeader';
 import UserManagement from '../components/settings/UserManagement';
 
 import IntegrationsTab from '../components/settings/IntegrationsTab';
-import TreeSchemaManager from '../components/settings/TreeSchemaManager';
 import DateTimePreferences from '../components/settings/DateTimePreferences';
 import {
   User,
@@ -15,8 +14,7 @@ import {
   Shield,
   Users,
   Settings as SettingsIcon,
-  Link2,
-  FolderTree
+  Link2
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -119,12 +117,6 @@ export default function Settings() {
             </TabsTrigger>
           )}
 
-          {user?.role === 'admin' && (
-            <TabsTrigger value="folder-structure" className="gap-2 dark:text-slate-300 dark:data-[state=active]:bg-slate-700">
-              <FolderTree className="w-4 h-4" />
-              מבנה תיקיות
-            </TabsTrigger>
-          )}
           <TabsTrigger value="integrations" className="gap-2 dark:text-slate-300 dark:data-[state=active]:bg-slate-700">
             <Link2 className="w-4 h-4" />
             אינטגרציות
@@ -334,14 +326,6 @@ export default function Settings() {
         <TabsContent value="users">
           <div className="max-w-4xl mx-auto">
             <UserManagement currentUser={user} />
-          </div>
-        </TabsContent>
-
-
-
-        <TabsContent value="folder-structure">
-          <div className="max-w-5xl mx-auto">
-            <TreeSchemaManager />
           </div>
         </TabsContent>
 

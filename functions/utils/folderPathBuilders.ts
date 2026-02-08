@@ -373,5 +373,229 @@ export function generatePathPreview(schema, pathSelections = {}) {
   return '/' + parts.join('/');
 }
 
+// ========================================
+// PATH SEGMENTS BUILDER - New simplified format
+// ========================================
+
+/**
+ * Available fields for path segments
+ * Maps field keys to resolver functions
+ */
+export const PATH_SEGMENT_FIELDS = {
+  // Client fields
+  client_name: {
+    label: 'שם לקוח',
+    labelEn: 'Client Name',
+    category: 'client',
+    resolver: (ctx) => ctx.client?.name || ''
+  },
+  client_number: {
+    label: 'מספר לקוח',
+    labelEn: 'Client Number',
+    category: 'client',
+    resolver: (ctx) => ctx.client?.client_number || ''
+  },
+  client_country: {
+    label: 'מדינת לקוח',
+    labelEn: 'Client Country',
+    category: 'client',
+    resolver: (ctx) => ctx.client?.country || ''
+  },
+
+  // Case fields
+  case_title: {
+    label: 'שם תיק',
+    labelEn: 'Case Title',
+    category: 'case',
+    resolver: (ctx) => ctx.caseData?.title || ''
+  },
+  case_number: {
+    label: 'מספר תיק',
+    labelEn: 'Case Number',
+    category: 'case',
+    resolver: (ctx) => ctx.caseData?.case_number || ''
+  },
+  case_type: {
+    label: 'סוג תיק',
+    labelEn: 'Case Type',
+    category: 'case',
+    resolver: (ctx) => ctx.caseData?.case_type || ''
+  },
+  application_number: {
+    label: 'מספר בקשה',
+    labelEn: 'Application Number',
+    category: 'case',
+    resolver: (ctx) => ctx.caseData?.application_number || ''
+  },
+  territory: {
+    label: 'מדינת הגשה',
+    labelEn: 'Territory',
+    category: 'case',
+    resolver: (ctx) => ctx.caseData?.territory || ''
+  },
+};
+
+/**
+ * Resolves a single path segment to its string value
+ * @param {object} segment - Segment configuration
+ * @param {object} context - Context with client, caseData, etc.
+ * @returns {string} - Resolved segment value
+ */
+function resolveSegmentValue(segment, context) {
+  switch (segment.type) {
+    case 'fixed':
+      return segment.value || '';
+
+    case 'field': {
+      const fieldConfig = PATH_SEGMENT_FIELDS[segment.field];
+      if (!fieldConfig) {
+        console.warn(`[PathBuilder] Unknown field: ${segment.field}`);
+        return '';
+      }
+      return fieldConfig.resolver(context);
+    }
+
+    case 'combined': {
+      const separator = segment.separator || ' - ';
+      const values = (segment.fields || [])
+        .map(fieldKey => {
+          const fieldConfig = PATH_SEGMENT_FIELDS[fieldKey];
+          if (!fieldConfig) return '';
+          return fieldConfig.resolver(context);
+        })
+        .filter(v => v);
+      return values.join(separator);
+    }
+
+    default:
+      console.warn(`[PathBuilder] Unknown segment type: ${segment.type}`);
+      return '';
+  }
+}
+
+/**
+ * Builds a Dropbox path from path_segments array
+ * @param {array} segments - Array of segment configurations
+ * @param {object} context - Context object { client, caseData, mail }
+ * @param {string} rootPath - Optional root path (default: '/DWO')
+ * @returns {object} - { path: string, parts: array, levelsNeedingChronological: array }
+ */
+export function buildPathFromSegments(segments, context = {}, rootPath = '/DWO') {
+  if (!segments || !Array.isArray(segments) || segments.length === 0) {
+    console.warn('[PathBuilder] Invalid or empty segments');
+    return null;
+  }
+
+  const parts = [];
+  const levelsNeedingChronological = [];
+
+  // Add root path
+  if (rootPath) {
+    parts.push(rootPath.replace(/^\/+|\/+$/g, ''));
+  }
+
+  for (let i = 0; i < segments.length; i++) {
+    const segment = segments[i];
+    const separator = segment.separator || ' - ';
+    const numbering = segment.numbering || 'none';
+
+    // Resolve the base name for this segment
+    let baseName = resolveSegmentValue(segment, context);
+
+    if (!baseName) {
+      // Handle missing values
+      if (segment.type === 'field') {
+        const fieldConfig = PATH_SEGMENT_FIELDS[segment.field];
+        baseName = fieldConfig?.category === 'client' ? '_לא_משוייך' : 'ממתין_לשיוך';
+      } else if (segment.type === 'combined') {
+        baseName = '_ממתין_';
+      } else {
+        continue; // Skip empty fixed segments
+      }
+    }
+
+    baseName = sanitizeName(baseName);
+
+    // Handle numbering
+    if (numbering === 'prefix' || numbering === 'suffix') {
+      // Chronological numbering - mark for resolution
+      levelsNeedingChronological.push({
+        levelIndex: i,
+        pathIndex: parts.length,
+        baseName,
+        numbering: { type: 'chronological', position: numbering },
+        separator
+      });
+      // Add placeholder
+      parts.push(`__CHRONO_${i}__${baseName}`);
+    } else {
+      // No numbering
+      parts.push(baseName);
+    }
+  }
+
+  return {
+    path: '/' + parts.join('/'),
+    parts,
+    levelsNeedingChronological
+  };
+}
+
+/**
+ * Generates a preview of the path from segments (for UI display)
+ * @param {array} segments - Array of segment configurations
+ * @param {string} rootPath - Optional root path
+ * @returns {string} - Preview path string
+ */
+export function generateSegmentsPreview(segments, rootPath = '/DWO') {
+  if (!segments || !Array.isArray(segments) || segments.length === 0) {
+    return '/...';
+  }
+
+  const parts = [];
+
+  if (rootPath) {
+    parts.push(rootPath.replace(/^\/+|\/+$/g, ''));
+  }
+
+  for (const segment of segments) {
+    const separator = segment.separator || ' - ';
+    const numbering = segment.numbering || 'none';
+    let displayName = '';
+
+    switch (segment.type) {
+      case 'fixed':
+        displayName = segment.value || '...';
+        break;
+
+      case 'field': {
+        const fieldConfig = PATH_SEGMENT_FIELDS[segment.field];
+        displayName = `{${fieldConfig?.label || segment.field}}`;
+        break;
+      }
+
+      case 'combined': {
+        const fieldLabels = (segment.fields || []).map(fieldKey => {
+          const fieldConfig = PATH_SEGMENT_FIELDS[fieldKey];
+          return `{${fieldConfig?.label || fieldKey}}`;
+        });
+        displayName = fieldLabels.join(separator);
+        break;
+      }
+    }
+
+    // Add numbering indicator
+    if (numbering === 'prefix') {
+      displayName = `###${separator}${displayName}`;
+    } else if (numbering === 'suffix') {
+      displayName = `${displayName}${separator}###`;
+    }
+
+    parts.push(displayName);
+  }
+
+  return '/' + parts.join('/');
+}
+
 // Export formatFolderNameWithNumber for use in uploadToDropbox
 export { formatFolderNameWithNumber };

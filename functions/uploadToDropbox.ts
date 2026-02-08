@@ -3,6 +3,7 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.6';
 import {
   sanitizeName,
   buildPathFromSchema,
+  buildPathFromSegments,
   resolveFilenameTemplate,
   formatFolderNameWithNumber
 } from './utils/folderPathBuilders.js';
@@ -339,6 +340,8 @@ Deno.serve(async (req) => {
       documentType,
       schema_id,
       path_selections,
+      path_segments,  // New: direct path segments
+      root_path,      // New: optional root path for segments
       filename_template
     } = params;
 
@@ -391,10 +394,53 @@ Deno.serve(async (req) => {
       console.warn('[UploadToDropbox] Google token not available:', e.message);
     }
 
-    // 5. Build Path from FolderTreeSchema
+    // 5. Build Path - supports both new path_segments and legacy schema_id
     let folderPath;
 
-    if (schema_id) {
+    // Helper function to resolve chronological numbering
+    const resolveChronologicalLevels = async (pathResult) => {
+      if (!pathResult.levelsNeedingChronological || pathResult.levelsNeedingChronological.length === 0) {
+        return pathResult.path;
+      }
+
+      console.log(`[UploadToDropbox] Resolving ${pathResult.levelsNeedingChronological.length} chronological levels`);
+      const parts = [...pathResult.parts];
+
+      for (const levelInfo of pathResult.levelsNeedingChronological) {
+        const parentParts = parts.slice(0, levelInfo.pathIndex);
+        const parentPath = '/' + parentParts.join('/');
+
+        const resolvedName = await resolveChronologicalFolder(
+          dropboxToken,
+          parentPath,
+          levelInfo.baseName,
+          levelInfo.numbering,
+          levelInfo.separator
+        );
+
+        parts[levelInfo.pathIndex] = resolvedName;
+      }
+
+      return '/' + parts.join('/');
+    };
+
+    // Option 1: New path_segments format (direct path building)
+    if (path_segments && Array.isArray(path_segments) && path_segments.length > 0) {
+      console.log(`[UploadToDropbox] Using path_segments (${path_segments.length} segments)`);
+      try {
+        const pathResult = buildPathFromSegments(path_segments, { client, caseData, mail }, root_path || '/DWO');
+
+        if (pathResult) {
+          folderPath = await resolveChronologicalLevels(pathResult);
+          console.log(`[UploadToDropbox] Segments path built: ${folderPath}`);
+        }
+      } catch (segmentsError) {
+        console.error(`[UploadToDropbox] Failed to build from segments:`, segmentsError.message);
+      }
+    }
+
+    // Option 2: Legacy schema_id format
+    if (!folderPath && schema_id) {
       console.log(`[UploadToDropbox] Using FolderTreeSchema: ${schema_id}`);
       try {
         const schema = await base44.asServiceRole.entities.FolderTreeSchema.get(schema_id);
@@ -406,34 +452,7 @@ Deno.serve(async (req) => {
           });
 
           if (pathResult) {
-            // Handle chronological numbering if needed
-            if (pathResult.levelsNeedingChronological && pathResult.levelsNeedingChronological.length > 0) {
-              console.log(`[UploadToDropbox] Resolving ${pathResult.levelsNeedingChronological.length} chronological levels`);
-              const parts = [...pathResult.parts];
-
-              // Process each level that needs chronological numbering
-              for (const levelInfo of pathResult.levelsNeedingChronological) {
-                // Build parent path up to this level
-                const parentParts = parts.slice(0, levelInfo.pathIndex);
-                const parentPath = '/' + parentParts.join('/');
-
-                // Resolve the folder name (find existing or calculate new number)
-                const resolvedName = await resolveChronologicalFolder(
-                  dropboxToken,
-                  parentPath,
-                  levelInfo.baseName,
-                  levelInfo.numbering,
-                  levelInfo.separator
-                );
-
-                // Replace placeholder with resolved name
-                parts[levelInfo.pathIndex] = resolvedName;
-              }
-
-              folderPath = '/' + parts.join('/');
-            } else {
-              folderPath = pathResult.path;
-            }
+            folderPath = await resolveChronologicalLevels(pathResult);
             console.log(`[UploadToDropbox] Schema path built: ${folderPath}`);
           }
         } else {
@@ -444,7 +463,7 @@ Deno.serve(async (req) => {
       }
     }
 
-    // Fallback: default path if no schema resolved
+    // Fallback: default path if no path resolved
     if (!folderPath) {
       const parts = ['DWO', 'לקוחות - משרד'];
       if (client) {
