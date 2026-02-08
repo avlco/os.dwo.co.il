@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from 'react';
-import { useTranslation } from 'react-i18next';
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -7,19 +6,17 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { 
-  Plus, 
-  Trash2, 
-  ChevronUp, 
+import {
+  Plus,
+  Trash2,
+  ChevronUp,
   ChevronDown,
   FolderTree,
   User,
   Briefcase,
-  Calendar,
   List,
   Lock,
   Loader2,
-  GripVertical,
   ChevronRight
 } from 'lucide-react';
 
@@ -46,13 +43,6 @@ const LEVEL_TYPES = {
     color: 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200',
     description: 'בחירה מרשימת ערכים מוגדרת'
   }
-};
-
-// Numbering types
-const NUMBERING_TYPES = {
-  none: { label: 'ללא מספור', labelEn: 'None' },
-  chronological: { label: 'כרונולוגי', labelEn: 'Chronological' },
-  entity_field: { label: 'משדה ישות', labelEn: 'From Entity Field' }
 };
 
 const DYNAMIC_SOURCES = [
@@ -131,8 +121,6 @@ const DEFAULT_LEVEL = {
 };
 
 export default function TreeSchemaBuilder({ initialSchema, onSave, onCancel, isSaving }) {
-  const { t } = useTranslation();
-  
   const [schema, setSchema] = useState(DEFAULT_SCHEMA);
   const [errors, setErrors] = useState({});
 
