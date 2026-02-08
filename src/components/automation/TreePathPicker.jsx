@@ -18,9 +18,7 @@ import {
 
 const SOURCE_LABELS = {
   client: 'לקוח',
-  case: 'תיק',
-  user: 'משתמש',
-  date: 'תאריך'
+  case: 'תיק'
 };
 
 export default function TreePathPicker({ schemaId, pathSelections, onSchemaChange, onPathSelectionsChange }) {
@@ -42,6 +40,9 @@ export default function TreePathPicker({ schemaId, pathSelections, onSchemaChang
     }
   }, [selectedSchema, pathSelections]);
 
+  // Helper to get string value from either format (string or {code, name})
+  const getValue = (val) => typeof val === 'string' ? val : (val?.name || val?.code || '');
+
   const generatePreview = (schema, selections) => {
     if (!schema?.levels) return '/...';
 
@@ -53,24 +54,42 @@ export default function TreePathPicker({ schemaId, pathSelections, onSchemaChang
     const sortedLevels = [...schema.levels].sort((a, b) => (a.order || 0) - (b.order || 0));
 
     for (const level of sortedLevels) {
+      const numbering = level.numbering || { type: 'none' };
+      const separator = level.separator || ' - ';
+      let folderName = '';
+
       switch (level.type) {
         case 'dynamic':
-          parts.push(`[${level.label || level.key}]`);
+          folderName = `[${level.label || level.key}]`;
           break;
-        case 'static':
-          if (level.values?.length === 1 && level.values[0].code) {
-            parts.push(level.values[0].code);
+        case 'static': {
+          if (level.values?.length === 1) {
+            folderName = getValue(level.values[0]);
           } else {
             const selected = selections?.[level.key];
-            parts.push(selected || `<${level.label || level.key}>`);
+            folderName = selected || `<${level.label || level.key}>`;
           }
           break;
+        }
+        case 'list':
         case 'pool': {
           const selected = selections?.[level.key];
-          parts.push(selected || `<${level.label || level.key}>`);
+          folderName = selected || `<${level.label || level.key}>`;
           break;
         }
       }
+
+      // Add numbering indicator for preview
+      if (numbering.type !== 'none') {
+        const numIndicator = numbering.type === 'chronological' ? '###' : '#';
+        if (numbering.position === 'suffix') {
+          folderName = `${folderName}${separator}${numIndicator}`;
+        } else {
+          folderName = `${numIndicator}${separator}${folderName}`;
+        }
+      }
+
+      parts.push(folderName);
     }
 
     return '/' + parts.join('/');
@@ -206,7 +225,7 @@ export default function TreePathPicker({ schemaId, pathSelections, onSchemaChang
                         ) : level.type === 'static' && level.values?.length === 1 ? (
                           <div className="flex items-center gap-2">
                             <span className="text-sm font-medium text-slate-700 dark:text-slate-200">
-                              {level.values[0].name || level.values[0].code}
+                              {getValue(level.values[0])}
                             </span>
                             <Badge variant="outline" className="text-[10px] h-5 px-1.5">קבוע</Badge>
                           </div>
@@ -223,11 +242,14 @@ export default function TreePathPicker({ schemaId, pathSelections, onSchemaChang
                                 <SelectValue placeholder={`בחר...`} />
                               </SelectTrigger>
                               <SelectContent className="dark:bg-slate-800">
-                                {availableValues.map(val => (
-                                  <SelectItem key={val.code} value={val.code} className="text-sm">
-                                    {val.name}
-                                  </SelectItem>
-                                ))}
+                                {availableValues.map((val, idx) => {
+                                  const valueStr = getValue(val);
+                                  return (
+                                    <SelectItem key={valueStr || idx} value={valueStr} className="text-sm">
+                                      {valueStr}
+                                    </SelectItem>
+                                  );
+                                })}
                               </SelectContent>
                             </Select>
                           </div>

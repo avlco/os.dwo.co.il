@@ -3,7 +3,8 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.6';
 import {
   sanitizeName,
   buildPathFromSchema,
-  resolveFilenameTemplate
+  resolveFilenameTemplate,
+  formatFolderNameWithNumber
 } from './utils/folderPathBuilders.js';
 
 const corsHeaders = {
@@ -204,6 +205,79 @@ async function createSharedLink(accessToken, filePath) {
   return data.url;
 }
 
+/**
+ * Lists folders in a Dropbox directory
+ */
+async function listDropboxFolders(accessToken, path) {
+  try {
+    const response = await fetch('https://api.dropboxapi.com/2/files/list_folder', {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path: path || '', include_deleted: false, include_mounted_folders: true }),
+    });
+    const data = await response.json();
+    if (data.error) {
+      if (data.error['.tag'] === 'path' && data.error.path['.tag'] === 'not_found') {
+        return [];
+      }
+      throw new Error(data.error_summary || 'Failed to list folder');
+    }
+    return (data.entries || []).filter(e => e['.tag'] === 'folder').map(e => e.name);
+  } catch (error) {
+    console.warn(`[UploadToDropbox] listDropboxFolders error for ${path}:`, error.message);
+    return [];
+  }
+}
+
+/**
+ * Finds an existing folder by base name or calculates next chronological number
+ * @returns {string} The full folder name (with number if applicable)
+ */
+async function resolveChronologicalFolder(accessToken, parentPath, baseName, numbering, separator = ' - ') {
+  const existingFolders = await listDropboxFolders(accessToken, parentPath);
+  const position = numbering?.position || 'prefix';
+
+  // Pattern to extract number and name from folder names
+  // Supports both "001 - Name" and "Name - 001" formats
+  const extractParts = (folderName) => {
+    if (position === 'prefix') {
+      const match = folderName.match(/^(\d+)\s*[-–]\s*(.+)$/);
+      if (match) return { num: parseInt(match[1], 10), name: match[2].trim() };
+    } else {
+      const match = folderName.match(/^(.+)\s*[-–]\s*(\d+)$/);
+      if (match) return { num: parseInt(match[2], 10), name: match[1].trim() };
+    }
+    return null;
+  };
+
+  // Search for existing folder with this base name
+  for (const folder of existingFolders) {
+    const parts = extractParts(folder);
+    if (parts && parts.name.toLowerCase() === baseName.toLowerCase()) {
+      console.log(`[UploadToDropbox] Found existing folder: ${folder}`);
+      return folder;
+    }
+    // Also check if folder matches exactly (without number)
+    if (folder.toLowerCase() === baseName.toLowerCase()) {
+      return folder;
+    }
+  }
+
+  // Not found - calculate next number
+  let maxNum = 0;
+  for (const folder of existingFolders) {
+    const parts = extractParts(folder);
+    if (parts && parts.num > maxNum) {
+      maxNum = parts.num;
+    }
+  }
+
+  const nextNum = String(maxNum + 1).padStart(3, '0');
+  const newFolderName = formatFolderNameWithNumber(baseName, nextNum, numbering, separator);
+  console.log(`[UploadToDropbox] Creating new folder with number: ${newFolderName}`);
+  return newFolderName;
+}
+
 // ========================================
 // 4. ATTACHMENT DOWNLOAD
 // ========================================
@@ -325,12 +399,43 @@ Deno.serve(async (req) => {
       try {
         const schema = await base44.asServiceRole.entities.FolderTreeSchema.get(schema_id);
         if (schema && schema.is_active !== false) {
-          folderPath = buildPathFromSchema(schema, path_selections || {}, {
+          const pathResult = buildPathFromSchema(schema, path_selections || {}, {
             client,
             caseData,
             mail
           });
-          console.log(`[UploadToDropbox] Schema path built: ${folderPath}`);
+
+          if (pathResult) {
+            // Handle chronological numbering if needed
+            if (pathResult.levelsNeedingChronological && pathResult.levelsNeedingChronological.length > 0) {
+              console.log(`[UploadToDropbox] Resolving ${pathResult.levelsNeedingChronological.length} chronological levels`);
+              const parts = [...pathResult.parts];
+
+              // Process each level that needs chronological numbering
+              for (const levelInfo of pathResult.levelsNeedingChronological) {
+                // Build parent path up to this level
+                const parentParts = parts.slice(0, levelInfo.pathIndex);
+                const parentPath = '/' + parentParts.join('/');
+
+                // Resolve the folder name (find existing or calculate new number)
+                const resolvedName = await resolveChronologicalFolder(
+                  dropboxToken,
+                  parentPath,
+                  levelInfo.baseName,
+                  levelInfo.numbering,
+                  levelInfo.separator
+                );
+
+                // Replace placeholder with resolved name
+                parts[levelInfo.pathIndex] = resolvedName;
+              }
+
+              folderPath = '/' + parts.join('/');
+            } else {
+              folderPath = pathResult.path;
+            }
+            console.log(`[UploadToDropbox] Schema path built: ${folderPath}`);
+          }
         } else {
           console.warn(`[UploadToDropbox] Schema ${schema_id} not found or inactive`);
         }
