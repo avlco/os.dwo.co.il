@@ -103,10 +103,10 @@ function resolveDynamicLevel(level, context) {
 
 /**
  * Resolves a static or list level value based on path_selections
- * Values can be either strings or {code, name} objects (for backward compatibility)
+ * Values can be either strings or {code, name, numbering} objects
  * @param {object} level - Level configuration
  * @param {object} pathSelections - User's path selections keyed by level.key
- * @returns {string|null} - Resolved folder name or null if not selected
+ * @returns {object} - { name: resolved folder name, numbering: value-specific numbering or null }
  */
 function resolveStaticOrPoolLevel(level, pathSelections) {
   const selection = pathSelections?.[level.key];
@@ -117,9 +117,9 @@ function resolveStaticOrPoolLevel(level, pathSelections) {
   if (!selection) {
     // For static levels with single value, use that value
     if (level.type === 'static' && level.values?.length === 1) {
-      return getValue(level.values[0]);
+      return { name: getValue(level.values[0]), numbering: null };
     }
-    return null;
+    return { name: null, numbering: null };
   }
 
   // Find matching value - handle both string and object formats
@@ -128,7 +128,15 @@ function resolveStaticOrPoolLevel(level, pathSelections) {
     return valStr === selection || v?.code === selection;
   });
 
-  return matchingValue ? getValue(matchingValue) : selection;
+  if (matchingValue) {
+    return {
+      name: getValue(matchingValue),
+      // For list type, get numbering from the value object
+      numbering: (level.type === 'list' && matchingValue?.numbering) ? matchingValue.numbering : null
+    };
+  }
+
+  return { name: selection, numbering: null };
 }
 
 /**
@@ -181,7 +189,7 @@ export function buildPathFromSchema(schema, pathSelections = {}, context = {}) {
 
   for (let i = 0; i < sortedLevels.length; i++) {
     const level = sortedLevels[i];
-    const numbering = level.numbering || { type: 'none' };
+    let numbering = level.numbering || { type: 'none' };
     const separator = level.separator || ' - ';
     let baseName = null;
     let entityNumber = null;
@@ -194,11 +202,24 @@ export function buildPathFromSchema(schema, pathSelections = {}, context = {}) {
         break;
       }
 
-      case 'static':
-      case 'list':
-      case 'pool':
-        baseName = resolveStaticOrPoolLevel(level, pathSelections);
+      case 'static': {
+        // Static type has no numbering
+        const resolved = resolveStaticOrPoolLevel(level, pathSelections);
+        baseName = resolved.name;
+        numbering = { type: 'none' }; // Force no numbering for static
         break;
+      }
+
+      case 'list':
+      case 'pool': {
+        const resolved = resolveStaticOrPoolLevel(level, pathSelections);
+        baseName = resolved.name;
+        // For list type, use value-specific numbering if available
+        if (resolved.numbering) {
+          numbering = resolved.numbering;
+        }
+        break;
+      }
 
       default:
         console.warn(`[PathBuilder] Unknown level type: ${level.type}`);
@@ -301,7 +322,7 @@ export function generatePathPreview(schema, pathSelections = {}) {
   const sortedLevels = [...schema.levels].sort((a, b) => (a.order || 0) - (b.order || 0));
 
   for (const level of sortedLevels) {
-    const numbering = level.numbering || { type: 'none' };
+    let numbering = level.numbering || { type: 'none' };
     const separator = level.separator || ' - ';
     let folderName = '';
 
@@ -311,6 +332,8 @@ export function generatePathPreview(schema, pathSelections = {}) {
         break;
 
       case 'static':
+        // Static type has no numbering
+        numbering = { type: 'none' };
         if (level.values?.length === 1) {
           folderName = getValue(level.values[0]);
         } else {
@@ -323,6 +346,13 @@ export function generatePathPreview(schema, pathSelections = {}) {
       case 'pool': {
         const selected = pathSelections[level.key];
         folderName = selected || `<${level.label || level.key}>`;
+        // For list type, get numbering from the selected value
+        if (selected && level.values) {
+          const selectedValue = level.values.find(v => getValue(v) === selected);
+          if (selectedValue?.numbering) {
+            numbering = selectedValue.numbering;
+          }
+        }
         break;
       }
     }

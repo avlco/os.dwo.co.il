@@ -70,13 +70,30 @@ const ENTITY_NUMBER_FIELDS = {
   ],
 };
 
-// Entity fields for display name
+// Entity display presets - simplified options for users
+const ENTITY_DISPLAY_PRESETS = {
+  client: [
+    { value: 'number_name', label: 'מספר לקוח - שם לקוח', source_field: 'name', numbering_type: 'entity_field', numbering_field: 'client_number' },
+    { value: 'name_only', label: 'שם לקוח בלבד', source_field: 'name', numbering_type: 'none', numbering_field: '' },
+    { value: 'number_only', label: 'מספר לקוח בלבד', source_field: 'client_number', numbering_type: 'none', numbering_field: '' },
+  ],
+  case: [
+    { value: 'number_name', label: 'מספר תיק - שם תיק', source_field: 'title', numbering_type: 'entity_field', numbering_field: 'case_number' },
+    { value: 'name_only', label: 'שם תיק בלבד', source_field: 'title', numbering_type: 'none', numbering_field: '' },
+    { value: 'number_only', label: 'מספר תיק בלבד', source_field: 'case_number', numbering_type: 'none', numbering_field: '' },
+    { value: 'type_only', label: 'סוג תיק בלבד', source_field: 'case_type', numbering_type: 'none', numbering_field: '' },
+  ],
+};
+
+// Entity fields for display name (kept for backward compatibility)
 const ENTITY_NAME_FIELDS = {
   client: [
     { value: 'name', label: 'שם לקוח' },
+    { value: 'client_number', label: 'מספר לקוח' },
   ],
   case: [
     { value: 'title', label: 'שם תיק' },
+    { value: 'case_number', label: 'מספר תיק' },
     { value: 'case_type', label: 'סוג תיק' },
   ],
 };
@@ -150,7 +167,10 @@ export default function TreeSchemaBuilder({ initialSchema, onSave, onCancel, isS
 
   // Level operations
   const addLevel = (type = 'static') => {
-    const labelMap = { dynamic: 'רמה דינמית', list: 'רמת בחירה', static: 'תיקייה' };
+    const labelMap = { dynamic: 'רמה דינמית', list: 'רמת בחירה', static: 'תיקייה קבועה' };
+
+    // Static = single fixed value, no numbering
+    // List = multiple values with per-value numbering options
     const newLevel = {
       ...DEFAULT_LEVEL,
       type,
@@ -159,7 +179,14 @@ export default function TreeSchemaBuilder({ initialSchema, onSave, onCancel, isS
       label: labelMap[type] || 'תיקייה',
       source: type === 'dynamic' ? 'client' : '',
       source_field: type === 'dynamic' ? 'name' : '',
-      values: type !== 'dynamic' ? [''] : [],
+      display_preset: type === 'dynamic' ? 'number_name' : '',
+      // Static: single value object, List: array of value objects with numbering
+      values: type === 'static'
+        ? [{ code: '', name: '' }]
+        : type === 'list'
+          ? [{ code: '', name: '', numbering: { type: 'none', position: 'prefix' } }]
+          : [],
+      // Numbering at level only for dynamic, list has per-value numbering
       numbering: {
         type: type === 'dynamic' ? 'entity_field' : 'none',
         field: type === 'dynamic' ? 'client_number' : '',
@@ -245,20 +272,64 @@ export default function TreeSchemaBuilder({ initialSchema, onSave, onCancel, isS
     });
   };
 
-  // Value operations for static/list levels (values are now simple strings)
+  // Value operations for static/list levels (values are objects with code, name, and optionally numbering)
   const addValue = (levelIndex) => {
     setSchema(prev => {
       const newLevels = [...prev.levels];
-      newLevels[levelIndex].values = [...(newLevels[levelIndex].values || []), ''];
+      const level = newLevels[levelIndex];
+      // For list type, include numbering in each value
+      const newValue = level.type === 'list'
+        ? { code: '', name: '', numbering: { type: 'none', position: 'prefix' } }
+        : { code: '', name: '' };
+      newLevels[levelIndex].values = [...(newLevels[levelIndex].values || []), newValue];
       return { ...prev, levels: newLevels };
     });
   };
 
-  const updateValue = (levelIndex, valueIndex, value) => {
+  const updateValue = (levelIndex, valueIndex, field, value) => {
     setSchema(prev => {
       const newLevels = [...prev.levels];
       const newValues = [...(newLevels[levelIndex].values || [])];
-      newValues[valueIndex] = value;
+
+      // Ensure value is an object
+      if (typeof newValues[valueIndex] === 'string') {
+        newValues[valueIndex] = { code: newValues[valueIndex], name: newValues[valueIndex] };
+      }
+
+      newValues[valueIndex] = { ...newValues[valueIndex], [field]: value };
+
+      // Auto-sync code with name for simplicity
+      if (field === 'name') {
+        newValues[valueIndex].code = value;
+      }
+
+      newLevels[levelIndex].values = newValues;
+      return { ...prev, levels: newLevels };
+    });
+  };
+
+  const updateValueNumbering = (levelIndex, valueIndex, field, value) => {
+    setSchema(prev => {
+      const newLevels = [...prev.levels];
+      const newValues = [...(newLevels[levelIndex].values || [])];
+
+      // Ensure value is an object with numbering
+      if (typeof newValues[valueIndex] === 'string') {
+        newValues[valueIndex] = {
+          code: newValues[valueIndex],
+          name: newValues[valueIndex],
+          numbering: { type: 'none', position: 'prefix' }
+        };
+      }
+      if (!newValues[valueIndex].numbering) {
+        newValues[valueIndex].numbering = { type: 'none', position: 'prefix' };
+      }
+
+      newValues[valueIndex].numbering = {
+        ...newValues[valueIndex].numbering,
+        [field]: value
+      };
+
       newLevels[levelIndex].values = newValues;
       return { ...prev, levels: newLevels };
     });
@@ -287,9 +358,12 @@ export default function TreeSchemaBuilder({ initialSchema, onSave, onCancel, isS
         if (!level.label?.trim()) {
           newErrors[`level_${index}_label`] = 'יש להגדיר תווית לרמה';
         }
-        // For static with single value or list - need at least one non-empty value
-        if (level.type !== 'dynamic') {
-          const hasValues = level.values?.some(v => typeof v === 'string' ? v.trim() : v?.name?.trim());
+        // For static/list - need at least one non-empty value
+        if (level.type === 'static' || level.type === 'list') {
+          const hasValues = level.values?.some(v => {
+            const name = typeof v === 'string' ? v : v?.name;
+            return name?.trim();
+          });
           if (!hasValues) {
             newErrors[`level_${index}_values`] = 'יש להגדיר לפחות ערך אחד';
           }
@@ -316,18 +390,39 @@ export default function TreeSchemaBuilder({ initialSchema, onSave, onCancel, isS
       ...schema,
       levels: schema.levels.map(level => {
         const cleanLevel = { ...level };
-        // Clean values - filter empty, handle both old and new format
+
+        // Clean values - keep as objects, filter empty
         if (level.type === 'dynamic') {
           cleanLevel.values = [];
         } else {
           cleanLevel.values = (level.values || [])
-            .map(v => typeof v === 'string' ? v : v?.name || v?.code || '')
-            .filter(v => v.trim());
+            .map(v => {
+              // Convert string to object if needed
+              if (typeof v === 'string') {
+                return { code: v, name: v };
+              }
+              // Ensure object has required fields
+              return {
+                code: v.code || v.name || '',
+                name: v.name || v.code || '',
+                name_en: v.name_en || '',
+                // Include numbering for list type values
+                ...(level.type === 'list' && v.numbering ? { numbering: v.numbering } : {})
+              };
+            })
+            .filter(v => v.name?.trim());
         }
-        // Ensure numbering exists
+
+        // Ensure numbering exists at level (for dynamic)
         if (!cleanLevel.numbering) {
           cleanLevel.numbering = { type: 'none', field: '', position: 'prefix' };
         }
+
+        // For static type, remove level numbering (no numbering for static)
+        if (level.type === 'static') {
+          cleanLevel.numbering = { type: 'none', field: '', position: 'prefix' };
+        }
+
         return cleanLevel;
       })
     };
@@ -482,7 +577,7 @@ export default function TreeSchemaBuilder({ initialSchema, onSave, onCancel, isS
             </div>
           ) : (
             schema.levels.map((level, index) => {
-              const typeConfig = LEVEL_TYPES[level.type];
+              const typeConfig = LEVEL_TYPES[level.type] || LEVEL_TYPES.list; // 'pool' -> 'list' backward compatibility
               const TypeIcon = typeConfig.icon;
               
               return (
@@ -540,14 +635,25 @@ export default function TreeSchemaBuilder({ initialSchema, onSave, onCancel, isS
                         </div>
                       </div>
 
-                      {/* Dynamic Level Options */}
+                      {/* Dynamic Level Options - Simplified with Presets */}
                       {level.type === 'dynamic' && (
                         <div className="grid grid-cols-2 gap-3">
                           <div>
                             <Label className="text-xs text-slate-500">ישות</Label>
                             <Select
                               value={level.source || 'client'}
-                              onValueChange={(v) => updateLevel(index, 'source', v)}
+                              onValueChange={(v) => {
+                                updateLevel(index, 'source', v);
+                                // Reset preset when source changes
+                                const presets = ENTITY_DISPLAY_PRESETS[v];
+                                if (presets?.length) {
+                                  const defaultPreset = presets[0];
+                                  updateLevel(index, 'display_preset', defaultPreset.value);
+                                  updateLevel(index, 'source_field', defaultPreset.source_field);
+                                  updateLevelNumbering(index, 'type', defaultPreset.numbering_type);
+                                  updateLevelNumbering(index, 'field', defaultPreset.numbering_field);
+                                }
+                              }}
                             >
                               <SelectTrigger className="h-8 text-sm dark:bg-slate-800">
                                 <SelectValue />
@@ -565,17 +671,26 @@ export default function TreeSchemaBuilder({ initialSchema, onSave, onCancel, isS
                             </Select>
                           </div>
                           <div>
-                            <Label className="text-xs text-slate-500">שדה לתצוגה</Label>
+                            <Label className="text-xs text-slate-500">תצוגה</Label>
                             <Select
-                              value={level.source_field || ''}
-                              onValueChange={(v) => updateLevel(index, 'source_field', v)}
+                              value={level.display_preset || 'number_name'}
+                              onValueChange={(v) => {
+                                const presets = ENTITY_DISPLAY_PRESETS[level.source];
+                                const preset = presets?.find(p => p.value === v);
+                                if (preset) {
+                                  updateLevel(index, 'display_preset', v);
+                                  updateLevel(index, 'source_field', preset.source_field);
+                                  updateLevelNumbering(index, 'type', preset.numbering_type);
+                                  updateLevelNumbering(index, 'field', preset.numbering_field);
+                                }
+                              }}
                             >
                               <SelectTrigger className="h-8 text-sm dark:bg-slate-800">
-                                <SelectValue placeholder="בחר שדה" />
+                                <SelectValue placeholder="בחר תצוגה" />
                               </SelectTrigger>
                               <SelectContent className="dark:bg-slate-800">
-                                {(ENTITY_NAME_FIELDS[level.source] || []).map(f => (
-                                  <SelectItem key={f.value} value={f.value}>{f.label}</SelectItem>
+                                {(ENTITY_DISPLAY_PRESETS[level.source] || []).map(p => (
+                                  <SelectItem key={p.value} value={p.value}>{p.label}</SelectItem>
                                 ))}
                               </SelectContent>
                             </Select>
@@ -583,26 +698,58 @@ export default function TreeSchemaBuilder({ initialSchema, onSave, onCancel, isS
                         </div>
                       )}
 
-                      {/* Static/List Level Values */}
-                      {level.type !== 'dynamic' && (
+                      {/* Static Level - Single Fixed Value, No Numbering */}
+                      {level.type === 'static' && (
                         <div className="space-y-2">
-                          <Label className="text-xs text-slate-500">
-                            ערכים {level.type === 'static' ? '(קבוע)' : '(לבחירה)'}
-                          </Label>
+                          <Label className="text-xs text-slate-500">שם התיקייה הקבועה</Label>
                           {errors[`level_${index}_values`] && (
                             <p className="text-xs text-red-500">{errors[`level_${index}_values`]}</p>
                           )}
-                          <div className="space-y-1">
+                          <Input
+                            value={typeof level.values?.[0] === 'string' ? level.values[0] : level.values?.[0]?.name || ''}
+                            onChange={(e) => updateValue(index, 0, 'name', e.target.value)}
+                            placeholder="לדוגמה: לקוחות DWO"
+                            className="h-8 text-sm dark:bg-slate-800"
+                          />
+                        </div>
+                      )}
+
+                      {/* List Level - Multiple Values with Per-Value Numbering */}
+                      {level.type === 'list' && (
+                        <div className="space-y-2">
+                          <Label className="text-xs text-slate-500">ערכים לבחירה</Label>
+                          {errors[`level_${index}_values`] && (
+                            <p className="text-xs text-red-500">{errors[`level_${index}_values`]}</p>
+                          )}
+                          <div className="space-y-2">
                             {(level.values || []).map((val, valIndex) => {
-                              const valStr = typeof val === 'string' ? val : val?.name || val?.code || '';
+                              const valName = typeof val === 'string' ? val : val?.name || '';
+                              const valNumbering = val?.numbering || { type: 'none', position: 'prefix' };
                               return (
-                                <div key={valIndex} className="flex items-center gap-2">
+                                <div key={valIndex} className="flex items-center gap-2 p-2 bg-white dark:bg-slate-800 rounded border dark:border-slate-600">
                                   <Input
-                                    value={valStr}
-                                    onChange={(e) => updateValue(index, valIndex, e.target.value)}
+                                    value={valName}
+                                    onChange={(e) => updateValue(index, valIndex, 'name', e.target.value)}
                                     placeholder="שם התיקייה"
-                                    className="h-7 text-xs flex-1 dark:bg-slate-800"
+                                    className="h-7 text-xs flex-1 dark:bg-slate-700"
                                   />
+                                  <Select
+                                    value={`${valNumbering.type}_${valNumbering.position}`}
+                                    onValueChange={(v) => {
+                                      const [type, position] = v.split('_');
+                                      updateValueNumbering(index, valIndex, 'type', type);
+                                      if (position) updateValueNumbering(index, valIndex, 'position', position);
+                                    }}
+                                  >
+                                    <SelectTrigger className="h-7 text-xs w-36 dark:bg-slate-700">
+                                      <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent className="dark:bg-slate-800">
+                                      <SelectItem value="none_prefix">ללא מספור</SelectItem>
+                                      <SelectItem value="chronological_prefix">001 - לפני</SelectItem>
+                                      <SelectItem value="chronological_suffix">001 - אחרי</SelectItem>
+                                    </SelectContent>
+                                  </Select>
                                   <button
                                     onClick={() => removeValue(index, valIndex)}
                                     className="p-1 hover:bg-red-100 dark:hover:bg-red-900/30 rounded"
@@ -624,58 +771,58 @@ export default function TreeSchemaBuilder({ initialSchema, onSave, onCancel, isS
                         </div>
                       )}
 
-                      {/* Numbering Configuration */}
-                      <div className="pt-2 border-t dark:border-slate-700">
-                        <Label className="text-xs text-slate-500 mb-2 block">מספור</Label>
-                        <div className="grid grid-cols-3 gap-2">
-                          <Select
-                            value={level.numbering?.type || 'none'}
-                            onValueChange={(v) => updateLevelNumbering(index, 'type', v)}
-                          >
-                            <SelectTrigger className="h-8 text-sm dark:bg-slate-800">
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent className="dark:bg-slate-800">
-                              <SelectItem value="none">ללא</SelectItem>
-                              <SelectItem value="chronological">כרונולוגי (001, 002...)</SelectItem>
-                              {level.type === 'dynamic' && (
-                                <SelectItem value="entity_field">משדה ישות</SelectItem>
-                              )}
-                            </SelectContent>
-                          </Select>
-
-                          {level.numbering?.type === 'entity_field' && level.source && (
+                      {/* Numbering Configuration - Only for Dynamic */}
+                      {level.type === 'dynamic' && (
+                        <div className="pt-2 border-t dark:border-slate-700">
+                          <Label className="text-xs text-slate-500 mb-2 block">מספור</Label>
+                          <div className="grid grid-cols-3 gap-2">
                             <Select
-                              value={level.numbering?.field || ''}
-                              onValueChange={(v) => updateLevelNumbering(index, 'field', v)}
-                            >
-                              <SelectTrigger className="h-8 text-sm dark:bg-slate-800">
-                                <SelectValue placeholder="שדה" />
-                              </SelectTrigger>
-                              <SelectContent className="dark:bg-slate-800">
-                                {(ENTITY_NUMBER_FIELDS[level.source] || []).map(f => (
-                                  <SelectItem key={f.value} value={f.value}>{f.label}</SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                          )}
-
-                          {level.numbering?.type !== 'none' && (
-                            <Select
-                              value={level.numbering?.position || 'prefix'}
-                              onValueChange={(v) => updateLevelNumbering(index, 'position', v)}
+                              value={level.numbering?.type || 'none'}
+                              onValueChange={(v) => updateLevelNumbering(index, 'type', v)}
                             >
                               <SelectTrigger className="h-8 text-sm dark:bg-slate-800">
                                 <SelectValue />
                               </SelectTrigger>
                               <SelectContent className="dark:bg-slate-800">
-                                <SelectItem value="prefix">מספר בהתחלה</SelectItem>
-                                <SelectItem value="suffix">מספר בסוף</SelectItem>
+                                <SelectItem value="none">ללא</SelectItem>
+                                <SelectItem value="chronological">כרונולוגי (001, 002...)</SelectItem>
+                                <SelectItem value="entity_field">משדה ישות</SelectItem>
                               </SelectContent>
                             </Select>
-                          )}
+
+                            {level.numbering?.type === 'entity_field' && level.source && (
+                              <Select
+                                value={level.numbering?.field || ''}
+                                onValueChange={(v) => updateLevelNumbering(index, 'field', v)}
+                              >
+                                <SelectTrigger className="h-8 text-sm dark:bg-slate-800">
+                                  <SelectValue placeholder="שדה" />
+                                </SelectTrigger>
+                                <SelectContent className="dark:bg-slate-800">
+                                  {(ENTITY_NUMBER_FIELDS[level.source] || []).map(f => (
+                                    <SelectItem key={f.value} value={f.value}>{f.label}</SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            )}
+
+                            {level.numbering?.type !== 'none' && (
+                              <Select
+                                value={level.numbering?.position || 'prefix'}
+                                onValueChange={(v) => updateLevelNumbering(index, 'position', v)}
+                              >
+                                <SelectTrigger className="h-8 text-sm dark:bg-slate-800">
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent className="dark:bg-slate-800">
+                                  <SelectItem value="prefix">מספר בהתחלה</SelectItem>
+                                  <SelectItem value="suffix">מספר בסוף</SelectItem>
+                                </SelectContent>
+                              </Select>
+                            )}
+                          </div>
                         </div>
-                      </div>
+                      )}
                     </div>
 
                     {/* Delete Level */}
@@ -707,7 +854,7 @@ export default function TreeSchemaBuilder({ initialSchema, onSave, onCancel, isS
               </>
             )}
             {schema.levels.map((level, index) => {
-              const typeConfig = LEVEL_TYPES[level.type] || LEVEL_TYPES.static;
+              const typeConfig = LEVEL_TYPES[level.type] || LEVEL_TYPES.list;
               const numType = level.numbering?.type || 'none';
               const numPos = level.numbering?.position || 'prefix';
               const sep = level.separator || ' - ';
