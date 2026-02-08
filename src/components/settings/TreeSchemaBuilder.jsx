@@ -482,7 +482,7 @@ export default function TreeSchemaBuilder({ initialSchema, onSave, onCancel, isS
             </div>
           ) : (
             schema.levels.map((level, index) => {
-              const typeConfig = LEVEL_TYPES[level.type];
+              const typeConfig = LEVEL_TYPES[level.type] || LEVEL_TYPES.list; // 'pool' -> 'list' backward compatibility
               const TypeIcon = typeConfig.icon;
               
               return (
@@ -707,7 +707,7 @@ export default function TreeSchemaBuilder({ initialSchema, onSave, onCancel, isS
               </>
             )}
             {schema.levels.map((level, index) => {
-              const typeConfig = LEVEL_TYPES[level.type] || LEVEL_TYPES.static;
+              const typeConfig = LEVEL_TYPES[level.type] || LEVEL_TYPES.list;
               const numType = level.numbering?.type || 'none';
               const numPos = level.numbering?.position || 'prefix';
               const sep = level.separator || ' - ';
