@@ -3,10 +3,14 @@
  * 
  * מודול זה מספק פונקציות אחידות לפורמט תאריכים וזמנים בכל המערכת.
  * הוא משתמש בהעדפות המשתמש (אם קיימות) או בברירות מחדל גלובליות.
+ * 
+ * חשוב: כל התאריכים מה-backend מגיעים ב-UTC (ISO 8601).
+ * פונקציות הפורמט ממירות אותם לאזור הזמן המוגדר בהגדרות המשתמש.
  */
 
 import { format as dateFnsFormat, parseISO } from 'date-fns';
 import { he, enUS } from 'date-fns/locale';
+import { toZonedTime, format as formatTz } from 'date-fns-tz';
 
 // ברירות מחדל גלובליות
 export const DEFAULT_SETTINGS = {
@@ -85,10 +89,10 @@ export function getLocale(language = 'he') {
 
 /**
  * פורמט תאריך
- * @param {Date|string|number} date - התאריך לפרמוט
+ * @param {Date|string|number} date - התאריך לפרמוט (UTC)
  * @param {Object} settings - הגדרות (אופציונלי)
  * @param {string} customFormat - פורמט מותאם אישית (אופציונלי)
- * @returns {string} התאריך המפורמט
+ * @returns {string} התאריך המפורמט באזור הזמן של המשתמש
  */
 export function formatDate(date, settings = null, customFormat = null) {
   if (!date) return '-';
@@ -96,20 +100,24 @@ export function formatDate(date, settings = null, customFormat = null) {
   const effectiveSettings = settings || getDateTimeSettings();
   const formatString = customFormat || effectiveSettings.dateFormat;
   const locale = getLocale(effectiveSettings.language);
+  const timezone = effectiveSettings.timezone || DEFAULT_SETTINGS.timezone;
   
   const dateObj = typeof date === 'string' ? parseISO(date) : new Date(date);
   
   if (isNaN(dateObj.getTime())) return '-';
   
-  return dateFnsFormat(dateObj, formatString, { locale });
+  // המרה מ-UTC לאזור הזמן של המשתמש
+  const zonedDate = toZonedTime(dateObj, timezone);
+  
+  return dateFnsFormat(zonedDate, formatString, { locale });
 }
 
 /**
  * פורמט שעה
- * @param {Date|string|number} date - התאריך/שעה לפרמוט
+ * @param {Date|string|number} date - התאריך/שעה לפרמוט (UTC)
  * @param {Object} settings - הגדרות (אופציונלי)
  * @param {string} customFormat - פורמט מותאם אישית (אופציונלי)
- * @returns {string} השעה המפורמטת
+ * @returns {string} השעה המפורמטת באזור הזמן של המשתמש
  */
 export function formatTime(date, settings = null, customFormat = null) {
   if (!date) return '-';
@@ -117,20 +125,24 @@ export function formatTime(date, settings = null, customFormat = null) {
   const effectiveSettings = settings || getDateTimeSettings();
   const formatString = customFormat || effectiveSettings.timeFormat;
   const locale = getLocale(effectiveSettings.language);
+  const timezone = effectiveSettings.timezone || DEFAULT_SETTINGS.timezone;
   
   const dateObj = typeof date === 'string' ? parseISO(date) : new Date(date);
   
   if (isNaN(dateObj.getTime())) return '-';
   
-  return dateFnsFormat(dateObj, formatString, { locale });
+  // המרה מ-UTC לאזור הזמן של המשתמש
+  const zonedDate = toZonedTime(dateObj, timezone);
+  
+  return dateFnsFormat(zonedDate, formatString, { locale });
 }
 
 /**
  * פורמט תאריך ושעה
- * @param {Date|string|number} date - התאריך/שעה לפרמוט
+ * @param {Date|string|number} date - התאריך/שעה לפרמוט (UTC)
  * @param {Object} settings - הגדרות (אופציונלי)
  * @param {string} customFormat - פורמט מותאם אישית (אופציונלי)
- * @returns {string} התאריך והשעה המפורמטים
+ * @returns {string} התאריך והשעה המפורמטים באזור הזמן של המשתמש
  */
 export function formatDateTime(date, settings = null, customFormat = null) {
   if (!date) return '-';
@@ -138,32 +150,40 @@ export function formatDateTime(date, settings = null, customFormat = null) {
   const effectiveSettings = settings || getDateTimeSettings();
   const formatString = customFormat || effectiveSettings.datetimeFormat;
   const locale = getLocale(effectiveSettings.language);
+  const timezone = effectiveSettings.timezone || DEFAULT_SETTINGS.timezone;
   
   const dateObj = typeof date === 'string' ? parseISO(date) : new Date(date);
   
   if (isNaN(dateObj.getTime())) return '-';
   
-  return dateFnsFormat(dateObj, formatString, { locale });
+  // המרה מ-UTC לאזור הזמן של המשתמש
+  const zonedDate = toZonedTime(dateObj, timezone);
+  
+  return dateFnsFormat(zonedDate, formatString, { locale });
 }
 
 /**
  * פורמט יחסי (לוח שנה) - לשימוש בתצוגות לוח שנה
- * @param {Date|string|number} date - התאריך לפרמוט
+ * @param {Date|string|number} date - התאריך לפרמוט (UTC)
  * @param {string} formatStr - פורמט date-fns
  * @param {Object} settings - הגדרות (אופציונלי)
- * @returns {string} התאריך המפורמט
+ * @returns {string} התאריך המפורמט באזור הזמן של המשתמש
  */
 export function formatCalendar(date, formatStr, settings = null) {
   if (!date) return '-';
   
   const effectiveSettings = settings || getDateTimeSettings();
   const locale = getLocale(effectiveSettings.language);
+  const timezone = effectiveSettings.timezone || DEFAULT_SETTINGS.timezone;
   
   const dateObj = typeof date === 'string' ? parseISO(date) : new Date(date);
   
   if (isNaN(dateObj.getTime())) return '-';
   
-  return dateFnsFormat(dateObj, formatStr, { locale });
+  // המרה מ-UTC לאזור הזמן של המשתמש
+  const zonedDate = toZonedTime(dateObj, timezone);
+  
+  return dateFnsFormat(zonedDate, formatStr, { locale });
 }
 
 /**
