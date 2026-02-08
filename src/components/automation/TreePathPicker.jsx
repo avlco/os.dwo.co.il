@@ -54,9 +54,9 @@ export default function TreePathPicker({ schemaId, pathSelections, onSchemaChang
     const sortedLevels = [...schema.levels].sort((a, b) => (a.order || 0) - (b.order || 0));
 
     for (const level of sortedLevels) {
-      const numbering = level.numbering || { type: 'none' };
       const separator = level.separator || ' - ';
       let folderName = '';
+      let numbering = level.numbering || { type: 'none' };
 
       switch (level.type) {
         case 'dynamic':
@@ -69,12 +69,21 @@ export default function TreePathPicker({ schemaId, pathSelections, onSchemaChang
             const selected = selections?.[level.key];
             folderName = selected || `<${level.label || level.key}>`;
           }
+          // Static type has no numbering
+          numbering = { type: 'none' };
           break;
         }
         case 'list':
         case 'pool': {
           const selected = selections?.[level.key];
           folderName = selected || `<${level.label || level.key}>`;
+          // For list type, get numbering from the selected value
+          if (selected && level.values) {
+            const selectedValue = level.values.find(v => getValue(v) === selected);
+            if (selectedValue?.numbering) {
+              numbering = selectedValue.numbering;
+            }
+          }
           break;
         }
       }

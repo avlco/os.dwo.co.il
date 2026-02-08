@@ -96,19 +96,6 @@ export default function FilenameTemplateInput({ value, onChange, placeholder, cl
           </code>
         </div>
       )}
-
-      {/* Token Reference */}
-      <div className="flex flex-wrap gap-1">
-        {FILENAME_TOKENS.slice(0, 6).map(token => (
-          <button
-            key={token.key}
-            onClick={() => handleInsertToken(token.key)}
-            className="text-[10px] px-1.5 py-0.5 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 rounded hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
-          >
-            {token.key}
-          </button>
-        ))}
-      </div>
     </div>
   );
 }
