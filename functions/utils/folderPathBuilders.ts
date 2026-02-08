@@ -56,130 +56,186 @@ export function resolveFilenameTemplate(template, context) {
 }
 
 /**
- * Resolves a dynamic level value based on source and format
+ * Resolves a dynamic level value based on source and source_field
  * @param {object} level - Level configuration
  * @param {object} context - Context with client, caseData, user, etc.
- * @returns {string} - Resolved folder name for this level
+ * @returns {object} - { name: display name, number: entity number or null }
  */
 function resolveDynamicLevel(level, context) {
-  const { source, format } = level;
-  
+  const { source, source_field, numbering } = level;
+
+  let displayName = '';
+  let entityNumber = null;
+
   switch (source) {
     case 'client': {
-      if (!context.client) return '_לא_משוייך';
-      const fmt = format || '{client_number} - {client_name}';
-      return fmt
-        .replace('{client_number}', sanitizeName(context.client.client_number || ''))
-        .replace('{client_name}', sanitizeName(context.client.name || ''))
-        .replace('{client_id}', context.client.id || '');
+      if (!context.client) {
+        return { name: '_לא_משוייך', number: null };
+      }
+      // Get display name from specified field
+      const field = source_field || 'name';
+      displayName = sanitizeName(context.client[field] || context.client.name || '');
+      // Get entity number if numbering is entity_field
+      if (numbering?.type === 'entity_field' && numbering.field) {
+        entityNumber = context.client[numbering.field] || context.client.client_number;
+      }
+      break;
     }
-    
+
     case 'case': {
-      if (!context.caseData) return 'ממתין_לשיוך';
-      const fmt = format || '{case_number}';
-      return fmt
-        .replace('{case_number}', sanitizeName(context.caseData.case_number || ''))
-        .replace('{case_title}', sanitizeName(context.caseData.title || ''))
-        .replace('{case_type}', sanitizeName(context.caseData.case_type || ''))
-        .replace('{application_number}', sanitizeName(context.caseData.application_number || ''));
+      if (!context.caseData) {
+        return { name: 'ממתין_לשיוך', number: null };
+      }
+      const field = source_field || 'title';
+      displayName = sanitizeName(context.caseData[field] || context.caseData.title || '');
+      if (numbering?.type === 'entity_field' && numbering.field) {
+        entityNumber = context.caseData[numbering.field] || context.caseData.case_number;
+      }
+      break;
     }
-    
-    case 'user': {
-      if (!context.user) return 'system';
-      const fmt = format || '{user_name}';
-      return fmt
-        .replace('{user_name}', sanitizeName(context.user.full_name || context.user.email || ''))
-        .replace('{user_email}', sanitizeName(context.user.email || ''))
-        .replace('{department}', sanitizeName(context.user.department || ''));
-    }
-    
-    case 'date': {
-      const now = new Date();
-      const fmt = format || '{year}';
-      return fmt
-        .replace('{year}', now.getFullYear().toString())
-        .replace('{month}', String(now.getMonth() + 1).padStart(2, '0'))
-        .replace('{day}', String(now.getDate()).padStart(2, '0'))
-        .replace('{year_month}', `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`);
-    }
-    
+
     default:
-      return 'unknown';
+      return { name: 'unknown', number: null };
   }
+
+  return { name: displayName, number: entityNumber };
 }
 
 /**
- * Resolves a static or pool level value based on path_selections
+ * Resolves a static or list level value based on path_selections
+ * Values can be either strings or {code, name} objects (for backward compatibility)
  * @param {object} level - Level configuration
  * @param {object} pathSelections - User's path selections keyed by level.key
  * @returns {string|null} - Resolved folder name or null if not selected
  */
 function resolveStaticOrPoolLevel(level, pathSelections) {
   const selection = pathSelections?.[level.key];
-  
+
+  // Helper to get value string from either format
+  const getValue = (val) => typeof val === 'string' ? val : (val?.name || val?.code || '');
+
   if (!selection) {
     // For static levels with single value, use that value
     if (level.type === 'static' && level.values?.length === 1) {
-      return level.values[0].code;
+      return getValue(level.values[0]);
     }
     return null;
   }
-  
-  // Find the matching value
-  const matchingValue = level.values?.find(v => v.code === selection);
-  return matchingValue ? matchingValue.code : selection;
+
+  // Find matching value - handle both string and object formats
+  const matchingValue = level.values?.find(v => {
+    const valStr = getValue(v);
+    return valStr === selection || v?.code === selection;
+  });
+
+  return matchingValue ? getValue(matchingValue) : selection;
+}
+
+/**
+ * Formats a folder name with numbering
+ * @param {string} name - The base folder name
+ * @param {string|number|null} number - The number to add
+ * @param {object} numbering - Numbering configuration { type, position }
+ * @param {string} separator - Separator between number and name
+ * @returns {string} - Formatted folder name
+ */
+function formatFolderNameWithNumber(name, number, numbering, separator = ' - ') {
+  if (!numbering || numbering.type === 'none' || !number) {
+    return name;
+  }
+
+  const numStr = String(number);
+  const position = numbering.position || 'prefix';
+
+  if (position === 'prefix') {
+    return `${numStr}${separator}${name}`;
+  } else {
+    return `${name}${separator}${numStr}`;
+  }
 }
 
 /**
  * Builds a Dropbox path from a FolderTreeSchema and context
+ * Returns both the path and metadata about levels that need chronological numbering
  * @param {object} schema - FolderTreeSchema object
- * @param {object} pathSelections - User's path selections { levelKey: selectedCode }
- * @param {object} context - Context object { client, caseData, user, mail, documentType, subfolder }
- * @returns {string} - Complete Dropbox path
+ * @param {object} pathSelections - User's path selections { levelKey: selectedValue }
+ * @param {object} context - Context object { client, caseData, user, mail }
+ * @returns {object} - { path: string, levelsNeedingChronological: array }
  */
 export function buildPathFromSchema(schema, pathSelections = {}, context = {}) {
   if (!schema || !schema.levels || !Array.isArray(schema.levels)) {
     console.warn('[PathBuilder] Invalid schema');
     return null;
   }
-  
+
   const parts = [];
-  
+  const levelsNeedingChronological = [];
+
   // Add root path
   if (schema.root_path) {
     parts.push(schema.root_path.replace(/^\/+|\/+$/g, ''));
   }
-  
+
   // Sort levels by order
   const sortedLevels = [...schema.levels].sort((a, b) => (a.order || 0) - (b.order || 0));
-  
-  for (const level of sortedLevels) {
-    let folderName = null;
-    
+
+  for (let i = 0; i < sortedLevels.length; i++) {
+    const level = sortedLevels[i];
+    const numbering = level.numbering || { type: 'none' };
+    const separator = level.separator || ' - ';
+    let baseName = null;
+    let entityNumber = null;
+
     switch (level.type) {
-      case 'dynamic':
-        folderName = resolveDynamicLevel(level, context);
+      case 'dynamic': {
+        const resolved = resolveDynamicLevel(level, context);
+        baseName = resolved.name;
+        entityNumber = resolved.number;
         break;
-        
+      }
+
       case 'static':
+      case 'list':
       case 'pool':
-        folderName = resolveStaticOrPoolLevel(level, pathSelections);
+        baseName = resolveStaticOrPoolLevel(level, pathSelections);
         break;
-        
+
       default:
         console.warn(`[PathBuilder] Unknown level type: ${level.type}`);
     }
-    
-    if (folderName) {
-      parts.push(sanitizeName(folderName));
+
+    if (baseName) {
+      // Handle numbering
+      if (numbering.type === 'entity_field' && entityNumber) {
+        // Use entity field number directly
+        const folderName = formatFolderNameWithNumber(baseName, entityNumber, numbering, separator);
+        parts.push(sanitizeName(folderName));
+      } else if (numbering.type === 'chronological') {
+        // Mark this level as needing chronological number resolution
+        levelsNeedingChronological.push({
+          levelIndex: i,
+          pathIndex: parts.length,
+          baseName: sanitizeName(baseName),
+          numbering,
+          separator
+        });
+        // Add placeholder that will be replaced
+        parts.push(`__CHRONO_${i}__${sanitizeName(baseName)}`);
+      } else {
+        // No numbering
+        parts.push(sanitizeName(baseName));
+      }
     } else if (level.required !== false) {
-      // Required level without value - use placeholder
       console.warn(`[PathBuilder] Missing required level: ${level.key}`);
       parts.push(`_${level.key}_`);
     }
   }
-  
-  return '/' + parts.join('/');
+
+  return {
+    path: '/' + parts.join('/'),
+    parts,
+    levelsNeedingChronological
+  };
 }
 
 
@@ -191,32 +247,37 @@ export function buildPathFromSchema(schema, pathSelections = {}, context = {}) {
  */
 export function validatePathSelections(schema, pathSelections) {
   const errors = [];
-  
+  const getValue = (val) => typeof val === 'string' ? val : (val?.name || val?.code || '');
+
   if (!schema || !schema.levels) {
     return { valid: false, errors: ['Invalid schema'] };
   }
-  
+
   for (const level of schema.levels) {
     // Skip dynamic levels (they're resolved from context)
     if (level.type === 'dynamic') continue;
-    
-    // Check required pool/static levels
-    if (level.required !== false && level.type !== 'static') {
+
+    // For static with single value, no selection needed
+    if (level.type === 'static' && level.values?.length === 1) continue;
+
+    // Check required list/pool levels
+    if (level.required !== false && (level.type === 'list' || level.type === 'pool')) {
       const selection = pathSelections?.[level.key];
       if (!selection) {
         errors.push(`Missing required selection for level: ${level.label || level.key}`);
       }
     }
-    
+
     // Validate selection is in allowed values
     if (pathSelections?.[level.key] && level.values) {
-      const validCodes = level.values.map(v => v.code);
-      if (!validCodes.includes(pathSelections[level.key])) {
-        errors.push(`Invalid selection for level ${level.key}: ${pathSelections[level.key]}`);
+      const validValues = level.values.map(v => getValue(v));
+      const selection = pathSelections[level.key];
+      if (!validValues.includes(selection)) {
+        errors.push(`Invalid selection for level ${level.key}: ${selection}`);
       }
     }
   }
-  
+
   return {
     valid: errors.length === 0,
     errors
@@ -229,36 +290,58 @@ export function validatePathSelections(schema, pathSelections) {
  */
 export function generatePathPreview(schema, pathSelections = {}) {
   if (!schema || !schema.levels) return '/...';
-  
+
   const parts = [];
-  
+  const getValue = (val) => typeof val === 'string' ? val : (val?.name || val?.code || '');
+
   if (schema.root_path) {
     parts.push(schema.root_path.replace(/^\/+|\/+$/g, ''));
   }
-  
+
   const sortedLevels = [...schema.levels].sort((a, b) => (a.order || 0) - (b.order || 0));
-  
+
   for (const level of sortedLevels) {
+    const numbering = level.numbering || { type: 'none' };
+    const separator = level.separator || ' - ';
+    let folderName = '';
+
     switch (level.type) {
       case 'dynamic':
-        parts.push(`[${level.label || level.key}]`);
+        folderName = `[${level.label || level.key}]`;
         break;
-        
+
       case 'static':
         if (level.values?.length === 1) {
-          parts.push(level.values[0].code);
+          folderName = getValue(level.values[0]);
         } else {
           const selected = pathSelections[level.key];
-          parts.push(selected || `<${level.label || level.key}>`);
+          folderName = selected || `<${level.label || level.key}>`;
         }
         break;
-        
-      case 'pool':
+
+      case 'list':
+      case 'pool': {
         const selected = pathSelections[level.key];
-        parts.push(selected || `<${level.label || level.key}>`);
+        folderName = selected || `<${level.label || level.key}>`;
         break;
+      }
     }
+
+    // Add numbering indicator for preview
+    if (numbering.type !== 'none') {
+      const numIndicator = numbering.type === 'chronological' ? '###' : '#';
+      if (numbering.position === 'suffix') {
+        folderName = `${folderName}${separator}${numIndicator}`;
+      } else {
+        folderName = `${numIndicator}${separator}${folderName}`;
+      }
+    }
+
+    parts.push(folderName);
   }
-  
+
   return '/' + parts.join('/');
 }
+
+// Export formatFolderNameWithNumber for use in uploadToDropbox
+export { formatFolderNameWithNumber };

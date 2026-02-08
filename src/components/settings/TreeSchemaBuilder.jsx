@@ -30,7 +30,7 @@ const LEVEL_TYPES = {
     labelEn: 'Dynamic',
     icon: Lock,
     color: 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200',
-    description: 'נגזר אוטומטית מהקונטקסט (לקוח, תיק, תאריך)'
+    description: 'נגזר אוטומטית מהקונטקסט (לקוח, תיק)'
   },
   static: {
     label: 'קבוע',
@@ -39,41 +39,45 @@ const LEVEL_TYPES = {
     color: 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200',
     description: 'ערך קבוע בכל הנתיבים'
   },
-  pool: {
-    label: 'בחירה',
-    labelEn: 'Pool',
+  list: {
+    label: 'רשימה',
+    labelEn: 'List',
     icon: List,
     color: 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200',
     description: 'בחירה מרשימת ערכים מוגדרת'
   }
 };
 
+// Numbering types
+const NUMBERING_TYPES = {
+  none: { label: 'ללא מספור', labelEn: 'None' },
+  chronological: { label: 'כרונולוגי', labelEn: 'Chronological' },
+  entity_field: { label: 'משדה ישות', labelEn: 'From Entity Field' }
+};
+
 const DYNAMIC_SOURCES = [
-  { value: 'client', label: 'לקוח', icon: User },
-  { value: 'case', label: 'תיק', icon: Briefcase },
-  { value: 'user', label: 'משתמש', icon: User },
-  { value: 'date', label: 'תאריך', icon: Calendar },
+  { value: 'client', label: 'לקוח', icon: User, fields: ['name', 'client_number'] },
+  { value: 'case', label: 'תיק', icon: Briefcase, fields: ['title', 'case_number', 'case_type'] },
 ];
 
-const FORMAT_TEMPLATES = {
+// Entity fields for numbering (when using entity_field numbering type)
+const ENTITY_NUMBER_FIELDS = {
   client: [
-    { value: '{client_number} - {client_name}', label: 'מספר - שם' },
-    { value: '{client_name}', label: 'שם בלבד' },
-    { value: '{client_number}', label: 'מספר בלבד' },
+    { value: 'client_number', label: 'מספר לקוח' },
   ],
   case: [
-    { value: '{case_number}', label: 'מספר תיק' },
-    { value: '{case_number} - {case_title}', label: 'מספר - כותרת' },
-    { value: '{case_type}/{case_number}', label: 'סוג/מספר' },
+    { value: 'case_number', label: 'מספר תיק' },
   ],
-  user: [
-    { value: '{user_name}', label: 'שם משתמש' },
-    { value: '{department}', label: 'מחלקה' },
+};
+
+// Entity fields for display name
+const ENTITY_NAME_FIELDS = {
+  client: [
+    { value: 'name', label: 'שם לקוח' },
   ],
-  date: [
-    { value: '{year}', label: 'שנה (2025)' },
-    { value: '{year_month}', label: 'שנה-חודש (2025-01)' },
-    { value: '{year}/{month}', label: 'שנה/חודש' },
+  case: [
+    { value: 'title', label: 'שם תיק' },
+    { value: 'case_type', label: 'סוג תיק' },
   ],
 };
 
@@ -93,12 +97,19 @@ const DEFAULT_LEVEL = {
   order: 0,
   key: '',
   label: '',
-  label_en: '',
   type: 'static',
-  source: '',
-  format: '',
-  values: [],
-  depends_on: '',
+  // For dynamic type
+  source: '',           // 'client' | 'case'
+  source_field: '',     // which field to use for display name
+  // For static/list type
+  values: [],           // array of strings (no more code/name objects)
+  // Numbering configuration
+  numbering: {
+    type: 'none',       // 'none' | 'chronological' | 'entity_field'
+    field: '',          // for entity_field: 'client_number', 'case_number'
+    position: 'prefix'  // 'prefix' | 'suffix'
+  },
+  separator: ' - ',
   required: true
 };
 
@@ -139,17 +150,24 @@ export default function TreeSchemaBuilder({ initialSchema, onSave, onCancel, isS
 
   // Level operations
   const addLevel = (type = 'static') => {
+    const labelMap = { dynamic: 'רמה דינמית', list: 'רמת בחירה', static: 'תיקייה' };
     const newLevel = {
       ...DEFAULT_LEVEL,
       type,
       order: schema.levels.length,
       key: `level_${schema.levels.length + 1}`,
-      label: type === 'dynamic' ? 'רמה דינמית' : type === 'pool' ? 'רמת בחירה' : 'תיקייה',
+      label: labelMap[type] || 'תיקייה',
       source: type === 'dynamic' ? 'client' : '',
-      format: type === 'dynamic' ? '{client_number} - {client_name}' : '',
-      values: type !== 'dynamic' ? [{ code: '', name: '', name_en: '' }] : []
+      source_field: type === 'dynamic' ? 'name' : '',
+      values: type !== 'dynamic' ? [''] : [],
+      numbering: {
+        type: type === 'dynamic' ? 'entity_field' : 'none',
+        field: type === 'dynamic' ? 'client_number' : '',
+        position: 'prefix'
+      },
+      separator: ' - '
     };
-    
+
     setSchema(prev => ({
       ...prev,
       levels: [...prev.levels, newLevel]
@@ -160,20 +178,48 @@ export default function TreeSchemaBuilder({ initialSchema, onSave, onCancel, isS
     setSchema(prev => {
       const newLevels = [...prev.levels];
       newLevels[index] = { ...newLevels[index], [field]: value };
-      
+
       // Auto-generate key from label
       if (field === 'label' && !newLevels[index].key.startsWith('level_')) {
         newLevels[index].key = generateKey(value);
       }
-      
-      // Update format when source changes
+
+      // When source changes, update defaults
       if (field === 'source' && newLevels[index].type === 'dynamic') {
-        const templates = FORMAT_TEMPLATES[value];
-        if (templates?.length) {
-          newLevels[index].format = templates[0].value;
+        const nameFields = ENTITY_NAME_FIELDS[value];
+        const numFields = ENTITY_NUMBER_FIELDS[value];
+        if (nameFields?.length) {
+          newLevels[index].source_field = nameFields[0].value;
+        }
+        if (numFields?.length && newLevels[index].numbering?.type === 'entity_field') {
+          newLevels[index].numbering = {
+            ...newLevels[index].numbering,
+            field: numFields[0].value
+          };
         }
       }
-      
+
+      return { ...prev, levels: newLevels };
+    });
+  };
+
+  // Update nested numbering field
+  const updateLevelNumbering = (index, field, value) => {
+    setSchema(prev => {
+      const newLevels = [...prev.levels];
+      newLevels[index] = {
+        ...newLevels[index],
+        numbering: { ...newLevels[index].numbering, [field]: value }
+      };
+
+      // When changing to entity_field, set default field
+      if (field === 'type' && value === 'entity_field' && newLevels[index].source) {
+        const numFields = ENTITY_NUMBER_FIELDS[newLevels[index].source];
+        if (numFields?.length) {
+          newLevels[index].numbering.field = numFields[0].value;
+        }
+      }
+
       return { ...prev, levels: newLevels };
     });
   };
@@ -199,29 +245,20 @@ export default function TreeSchemaBuilder({ initialSchema, onSave, onCancel, isS
     });
   };
 
-  // Value operations for static/pool levels
+  // Value operations for static/list levels (values are now simple strings)
   const addValue = (levelIndex) => {
     setSchema(prev => {
       const newLevels = [...prev.levels];
-      newLevels[levelIndex].values = [
-        ...(newLevels[levelIndex].values || []),
-        { code: '', name: '', name_en: '' }
-      ];
+      newLevels[levelIndex].values = [...(newLevels[levelIndex].values || []), ''];
       return { ...prev, levels: newLevels };
     });
   };
 
-  const updateValue = (levelIndex, valueIndex, field, value) => {
+  const updateValue = (levelIndex, valueIndex, value) => {
     setSchema(prev => {
       const newLevels = [...prev.levels];
       const newValues = [...(newLevels[levelIndex].values || [])];
-      newValues[valueIndex] = { ...newValues[valueIndex], [field]: value };
-      
-      // Auto-generate code from name
-      if (field === 'name' && !newValues[valueIndex].code) {
-        newValues[valueIndex].code = value.replace(/\s+/g, '_').toUpperCase().slice(0, 20);
-      }
-      
+      newValues[valueIndex] = value;
       newLevels[levelIndex].values = newValues;
       return { ...prev, levels: newLevels };
     });
@@ -238,11 +275,11 @@ export default function TreeSchemaBuilder({ initialSchema, onSave, onCancel, isS
   // Validation
   const validate = () => {
     const newErrors = {};
-    
+
     if (!schema.name?.trim()) {
       newErrors.name = 'שם הסכמה הוא שדה חובה';
     }
-    
+
     if (!schema.levels?.length) {
       newErrors.levels = 'יש להגדיר לפחות רמה אחת';
     } else {
@@ -250,12 +287,20 @@ export default function TreeSchemaBuilder({ initialSchema, onSave, onCancel, isS
         if (!level.label?.trim()) {
           newErrors[`level_${index}_label`] = 'יש להגדיר תווית לרמה';
         }
-        if (level.type !== 'dynamic' && (!level.values?.length || !level.values.some(v => v.code?.trim()))) {
-          newErrors[`level_${index}_values`] = 'יש להגדיר לפחות ערך אחד';
+        // For static with single value or list - need at least one non-empty value
+        if (level.type !== 'dynamic') {
+          const hasValues = level.values?.some(v => typeof v === 'string' ? v.trim() : v?.name?.trim());
+          if (!hasValues) {
+            newErrors[`level_${index}_values`] = 'יש להגדיר לפחות ערך אחד';
+          }
+        }
+        // For dynamic - need source
+        if (level.type === 'dynamic' && !level.source) {
+          newErrors[`level_${index}_source`] = 'יש לבחור מקור';
         }
       });
     }
-    
+
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
@@ -265,47 +310,75 @@ export default function TreeSchemaBuilder({ initialSchema, onSave, onCancel, isS
     if (!validate()) {
       return;
     }
-    
-    // Clean up empty values
+
+    // Clean up and normalize schema
     const cleanedSchema = {
       ...schema,
-      levels: schema.levels.map(level => ({
-        ...level,
-        values: level.type === 'dynamic' ? [] : (level.values || []).filter(v => v.code?.trim())
-      }))
+      levels: schema.levels.map(level => {
+        const cleanLevel = { ...level };
+        // Clean values - filter empty, handle both old and new format
+        if (level.type === 'dynamic') {
+          cleanLevel.values = [];
+        } else {
+          cleanLevel.values = (level.values || [])
+            .map(v => typeof v === 'string' ? v : v?.name || v?.code || '')
+            .filter(v => v.trim());
+        }
+        // Ensure numbering exists
+        if (!cleanLevel.numbering) {
+          cleanLevel.numbering = { type: 'none', field: '', position: 'prefix' };
+        }
+        return cleanLevel;
+      })
     };
-    
+
     onSave(cleanedSchema);
   };
 
   // Generate preview path
   const generatePreviewPath = () => {
     const parts = [];
-    
+
     if (schema.root_path) {
       parts.push(schema.root_path.replace(/^\/+|\/+$/g, ''));
     }
-    
+
     const sortedLevels = [...(schema.levels || [])].sort((a, b) => (a.order || 0) - (b.order || 0));
-    
+
     for (const level of sortedLevels) {
-      switch (level.type) {
-        case 'dynamic':
-          parts.push(`[${level.label || level.source || 'דינמי'}]`);
-          break;
-        case 'static':
-          if (level.values?.length === 1 && level.values[0].code) {
-            parts.push(level.values[0].code);
-          } else {
-            parts.push(`<${level.label || 'קבוע'}>`);
-          }
-          break;
-        case 'pool':
-          parts.push(`<${level.label || 'בחירה'}>`);
-          break;
+      let folderName = '';
+      const sep = level.separator || ' - ';
+      const numType = level.numbering?.type || 'none';
+      const numPos = level.numbering?.position || 'prefix';
+
+      // Build the base name part
+      if (level.type === 'dynamic') {
+        folderName = `[${level.label || level.source || 'דינמי'}]`;
+      } else if (level.type === 'static') {
+        const val = level.values?.[0];
+        const firstValue = typeof val === 'string' ? val : val?.name || val?.code;
+        if (level.values?.length === 1 && firstValue) {
+          folderName = firstValue;
+        } else {
+          folderName = `<${level.label || 'קבוע'}>`;
+        }
+      } else if (level.type === 'list' || level.type === 'pool') {
+        folderName = `<${level.label || 'רשימה'}>`;
       }
+
+      // Add numbering indicator
+      if (numType !== 'none') {
+        const numIndicator = numType === 'chronological' ? '###' : '[מס\']';
+        if (numPos === 'prefix') {
+          folderName = `${numIndicator}${sep}${folderName}`;
+        } else {
+          folderName = `${folderName}${sep}${numIndicator}`;
+        }
+      }
+
+      parts.push(folderName);
     }
-    
+
     return '/' + parts.join('/');
   };
 
@@ -391,8 +464,8 @@ export default function TreeSchemaBuilder({ initialSchema, onSave, onCancel, isS
             <Button variant="outline" size="sm" onClick={() => addLevel('static')} className="gap-1">
               <FolderTree className="w-3 h-3" /> קבוע
             </Button>
-            <Button variant="outline" size="sm" onClick={() => addLevel('pool')} className="gap-1">
-              <List className="w-3 h-3" /> בחירה
+            <Button variant="outline" size="sm" onClick={() => addLevel('list')} className="gap-1">
+              <List className="w-3 h-3" /> רשימה
             </Button>
           </div>
         </div>
@@ -471,9 +544,9 @@ export default function TreeSchemaBuilder({ initialSchema, onSave, onCancel, isS
                       {level.type === 'dynamic' && (
                         <div className="grid grid-cols-2 gap-3">
                           <div>
-                            <Label className="text-xs text-slate-500">מקור</Label>
-                            <Select 
-                              value={level.source || 'client'} 
+                            <Label className="text-xs text-slate-500">ישות</Label>
+                            <Select
+                              value={level.source || 'client'}
                               onValueChange={(v) => updateLevel(index, 'source', v)}
                             >
                               <SelectTrigger className="h-8 text-sm dark:bg-slate-800">
@@ -492,19 +565,17 @@ export default function TreeSchemaBuilder({ initialSchema, onSave, onCancel, isS
                             </Select>
                           </div>
                           <div>
-                            <Label className="text-xs text-slate-500">פורמט</Label>
-                            <Select 
-                              value={level.format || ''} 
-                              onValueChange={(v) => updateLevel(index, 'format', v)}
+                            <Label className="text-xs text-slate-500">שדה לתצוגה</Label>
+                            <Select
+                              value={level.source_field || ''}
+                              onValueChange={(v) => updateLevel(index, 'source_field', v)}
                             >
                               <SelectTrigger className="h-8 text-sm dark:bg-slate-800">
-                                <SelectValue placeholder="בחר פורמט" />
+                                <SelectValue placeholder="בחר שדה" />
                               </SelectTrigger>
                               <SelectContent className="dark:bg-slate-800">
-                                {(FORMAT_TEMPLATES[level.source] || []).map(fmt => (
-                                  <SelectItem key={fmt.value} value={fmt.value}>
-                                    {fmt.label}
-                                  </SelectItem>
+                                {(ENTITY_NAME_FIELDS[level.source] || []).map(f => (
+                                  <SelectItem key={f.value} value={f.value}>{f.label}</SelectItem>
                                 ))}
                               </SelectContent>
                             </Select>
@@ -512,7 +583,7 @@ export default function TreeSchemaBuilder({ initialSchema, onSave, onCancel, isS
                         </div>
                       )}
 
-                      {/* Static/Pool Level Values */}
+                      {/* Static/List Level Values */}
                       {level.type !== 'dynamic' && (
                         <div className="space-y-2">
                           <Label className="text-xs text-slate-500">
@@ -522,32 +593,29 @@ export default function TreeSchemaBuilder({ initialSchema, onSave, onCancel, isS
                             <p className="text-xs text-red-500">{errors[`level_${index}_values`]}</p>
                           )}
                           <div className="space-y-1">
-                            {(level.values || []).map((val, valIndex) => (
-                              <div key={valIndex} className="flex items-center gap-2">
-                                <Input
-                                  value={val.name}
-                                  onChange={(e) => updateValue(index, valIndex, 'name', e.target.value)}
-                                  placeholder="שם"
-                                  className="h-7 text-xs flex-1 dark:bg-slate-800"
-                                />
-                                <Input
-                                  value={val.code}
-                                  onChange={(e) => updateValue(index, valIndex, 'code', e.target.value)}
-                                  placeholder="קוד"
-                                  className="h-7 text-xs w-24 font-mono dark:bg-slate-800"
-                                />
-                                <button
-                                  onClick={() => removeValue(index, valIndex)}
-                                  className="p-1 hover:bg-red-100 dark:hover:bg-red-900/30 rounded"
-                                >
-                                  <Trash2 className="w-3 h-3 text-red-500" />
-                                </button>
-                              </div>
-                            ))}
+                            {(level.values || []).map((val, valIndex) => {
+                              const valStr = typeof val === 'string' ? val : val?.name || val?.code || '';
+                              return (
+                                <div key={valIndex} className="flex items-center gap-2">
+                                  <Input
+                                    value={valStr}
+                                    onChange={(e) => updateValue(index, valIndex, e.target.value)}
+                                    placeholder="שם התיקייה"
+                                    className="h-7 text-xs flex-1 dark:bg-slate-800"
+                                  />
+                                  <button
+                                    onClick={() => removeValue(index, valIndex)}
+                                    className="p-1 hover:bg-red-100 dark:hover:bg-red-900/30 rounded"
+                                  >
+                                    <Trash2 className="w-3 h-3 text-red-500" />
+                                  </button>
+                                </div>
+                              );
+                            })}
                           </div>
-                          <Button 
-                            variant="ghost" 
-                            size="sm" 
+                          <Button
+                            variant="ghost"
+                            size="sm"
                             onClick={() => addValue(index)}
                             className="h-7 text-xs"
                           >
@@ -555,6 +623,59 @@ export default function TreeSchemaBuilder({ initialSchema, onSave, onCancel, isS
                           </Button>
                         </div>
                       )}
+
+                      {/* Numbering Configuration */}
+                      <div className="pt-2 border-t dark:border-slate-700">
+                        <Label className="text-xs text-slate-500 mb-2 block">מספור</Label>
+                        <div className="grid grid-cols-3 gap-2">
+                          <Select
+                            value={level.numbering?.type || 'none'}
+                            onValueChange={(v) => updateLevelNumbering(index, 'type', v)}
+                          >
+                            <SelectTrigger className="h-8 text-sm dark:bg-slate-800">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent className="dark:bg-slate-800">
+                              <SelectItem value="none">ללא</SelectItem>
+                              <SelectItem value="chronological">כרונולוגי (001, 002...)</SelectItem>
+                              {level.type === 'dynamic' && (
+                                <SelectItem value="entity_field">משדה ישות</SelectItem>
+                              )}
+                            </SelectContent>
+                          </Select>
+
+                          {level.numbering?.type === 'entity_field' && level.source && (
+                            <Select
+                              value={level.numbering?.field || ''}
+                              onValueChange={(v) => updateLevelNumbering(index, 'field', v)}
+                            >
+                              <SelectTrigger className="h-8 text-sm dark:bg-slate-800">
+                                <SelectValue placeholder="שדה" />
+                              </SelectTrigger>
+                              <SelectContent className="dark:bg-slate-800">
+                                {(ENTITY_NUMBER_FIELDS[level.source] || []).map(f => (
+                                  <SelectItem key={f.value} value={f.value}>{f.label}</SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          )}
+
+                          {level.numbering?.type !== 'none' && (
+                            <Select
+                              value={level.numbering?.position || 'prefix'}
+                              onValueChange={(v) => updateLevelNumbering(index, 'position', v)}
+                            >
+                              <SelectTrigger className="h-8 text-sm dark:bg-slate-800">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent className="dark:bg-slate-800">
+                                <SelectItem value="prefix">מספר בהתחלה</SelectItem>
+                                <SelectItem value="suffix">מספר בסוף</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          )}
+                        </div>
+                      </div>
                     </div>
 
                     {/* Delete Level */}
@@ -586,16 +707,37 @@ export default function TreeSchemaBuilder({ initialSchema, onSave, onCancel, isS
               </>
             )}
             {schema.levels.map((level, index) => {
-              const typeConfig = LEVEL_TYPES[level.type];
+              const typeConfig = LEVEL_TYPES[level.type] || LEVEL_TYPES.static;
+              const numType = level.numbering?.type || 'none';
+              const numPos = level.numbering?.position || 'prefix';
+              const sep = level.separator || ' - ';
+
+              // Build display name
+              let displayName = '';
+              if (level.type === 'dynamic') {
+                displayName = `[${level.label || level.source}]`;
+              } else {
+                const val = level.values?.[0];
+                const firstVal = typeof val === 'string' ? val : val?.name || val?.code;
+                if (level.type === 'static' && level.values?.length === 1 && firstVal) {
+                  displayName = firstVal;
+                } else {
+                  displayName = `<${level.label}>`;
+                }
+              }
+
+              // Add numbering indicator
+              if (numType !== 'none') {
+                const numInd = numType === 'chronological' ? '###' : '#';
+                displayName = numPos === 'prefix'
+                  ? `${numInd}${sep}${displayName}`
+                  : `${displayName}${sep}${numInd}`;
+              }
+
               return (
                 <React.Fragment key={index}>
                   <Badge className={`${typeConfig.color} text-xs`}>
-                    {level.type === 'dynamic' 
-                      ? `[${level.label || level.source}]`
-                      : level.type === 'static' && level.values?.length === 1 && level.values[0].code
-                        ? level.values[0].code
-                        : `<${level.label}>`
-                    }
+                    {displayName}
                   </Badge>
                   {index < schema.levels.length - 1 && (
                     <ChevronRight className="w-4 h-4 text-slate-400" />

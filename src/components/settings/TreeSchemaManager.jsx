@@ -154,32 +154,44 @@ export default function TreeSchemaManager() {
   // Generate preview path from levels
   const generatePreviewPath = (schema) => {
     if (!schema?.levels?.length) return '/...';
-    
+
     const parts = [];
     if (schema.root_path) {
       parts.push(schema.root_path.replace(/^\/+|\/+$/g, ''));
     }
-    
+
     const sortedLevels = [...schema.levels].sort((a, b) => (a.order || 0) - (b.order || 0));
-    
+
     for (const level of sortedLevels) {
-      switch (level.type) {
-        case 'dynamic':
-          parts.push(`[${level.label || level.key}]`);
-          break;
-        case 'static':
-          if (level.values?.length === 1) {
-            parts.push(level.values[0].code);
-          } else {
-            parts.push(`<${level.label || level.key}>`);
-          }
-          break;
-        case 'pool':
-          parts.push(`<${level.label || level.key}>`);
-          break;
+      let folderName = '';
+      const numType = level.numbering?.type || 'none';
+      const numPos = level.numbering?.position || 'prefix';
+      const sep = level.separator || ' - ';
+
+      // Build base name
+      if (level.type === 'dynamic') {
+        folderName = `[${level.label || level.key}]`;
+      } else if (level.type === 'static') {
+        const val = level.values?.[0];
+        const firstVal = typeof val === 'string' ? val : val?.name || val?.code;
+        if (level.values?.length === 1 && firstVal) {
+          folderName = firstVal;
+        } else {
+          folderName = `<${level.label || level.key}>`;
+        }
+      } else if (level.type === 'list' || level.type === 'pool') {
+        folderName = `<${level.label || level.key}>`;
       }
+
+      // Add numbering
+      if (numType !== 'none') {
+        const numInd = numType === 'chronological' ? '###' : '#';
+        folderName = numPos === 'prefix' ? `${numInd}${sep}${folderName}` : `${folderName}${sep}${numInd}`;
+      }
+
+      parts.push(folderName);
     }
-    
+
     return '/' + parts.join('/');
   };
 
