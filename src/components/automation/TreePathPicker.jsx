@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from 'react';
-import { useTranslation } from 'react-i18next';
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -11,7 +10,6 @@ import {
   FolderTree,
   FolderOpen,
   Folder,
-  List,
   Loader2,
   AlertCircle
 } from 'lucide-react';
@@ -22,7 +20,6 @@ const SOURCE_LABELS = {
 };
 
 export default function TreePathPicker({ schemaId, pathSelections, onSchemaChange, onPathSelectionsChange }) {
-  const { t } = useTranslation();
   const [previewPath, setPreviewPath] = useState('/...');
 
   const { data: schemas = [], isLoading: schemasLoading } = useQuery({
