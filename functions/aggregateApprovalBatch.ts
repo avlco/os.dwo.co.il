@@ -544,22 +544,28 @@ Deno.serve(async (req) => {
         const rejectUrl = `${appUrl}/ApproveBatch?token=${rejectToken}`;
         const editUrl = `${appUrl}/ApprovalBatchEdit?batchId=${batch.id}`;
 
-        let caseName = null;
-if (batch.case_id) {
-  try {
-    const c = await base44.entities.Case.get(batch.case_id);
-    caseName = c?.case_number;
-  } catch (e) {}
-}
+        let caseNumber = null;
+        let caseTitle = null;
+        if (batch.case_id) {
+          try {
+            const c = await base44.entities.Case.get(batch.case_id);
+            caseNumber = c?.case_number || null;
+            caseTitle = c?.title || null;
+          } catch (e) {}
+        }
 
-// Determine client communication language
-let clientCommunicationLanguage = clientLanguage || 'he';
-if (!clientLanguage && batch.client_id) {
-  try {
-    const client = await base44.entities.Client.get(batch.client_id);
-    if (client?.communication_language) clientCommunicationLanguage = client.communication_language;
-  } catch (e) {}
-}
+        // Determine client communication language and name
+        let clientCommunicationLanguage = clientLanguage || 'he';
+        let clientName = null;
+        if (batch.client_id) {
+          try {
+            const client = await base44.entities.Client.get(batch.client_id);
+            clientName = client?.name || null;
+            if (!clientLanguage && client?.communication_language) {
+              clientCommunicationLanguage = client.communication_language;
+            }
+          } catch (e) {}
+        }
         
         console.log(`[AggregateApprovalBatch] Client communication language: ${clientCommunicationLanguage}`);
         console.log(`[AggregateApprovalBatch] Actions count: ${batch.actions_current?.length || 0}`);
