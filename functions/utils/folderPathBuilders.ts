@@ -139,8 +139,8 @@ function resolveStaticOrPoolLevel(level, pathSelections) {
  */
 export function buildPathFromSchema(schema, pathSelections = {}, context = {}) {
   if (!schema || !schema.levels || !Array.isArray(schema.levels)) {
-    console.warn('[PathBuilder] Invalid schema, falling back to default path');
-    return buildLegacyDefaultPath(context);
+    console.warn('[PathBuilder] Invalid schema');
+    return null;
   }
   
   const parts = [];
@@ -179,45 +179,9 @@ export function buildPathFromSchema(schema, pathSelections = {}, context = {}) {
     }
   }
   
-  // Add optional subfolder from context (for backward compatibility)
-  if (context.subfolder) {
-    parts.push(sanitizeName(context.subfolder));
-  }
-  
   return '/' + parts.join('/');
 }
 
-/**
- * Legacy default path builder for backward compatibility
- * Matches the canonical path structure: /DWO/לקוחות - משרד/{client_number} - {client_name}/{case_number}
- */
-export function buildLegacyDefaultPath(context) {
-  const parts = ['DWO', 'לקוחות - משרד'];
-  
-  if (context.client) {
-    const num = sanitizeName(context.client.client_number || context.client.number || '');
-    const name = sanitizeName(context.client.name || '');
-    parts.push(`${num} - ${name}`);
-  } else {
-    parts.push('_לא_משוייך');
-  }
-  
-  if (context.caseData) {
-    parts.push(sanitizeName(context.caseData.case_number || ''));
-  } else {
-    parts.push('ממתין_לשיוך');
-  }
-  
-  if (context.documentType) {
-    parts.push(sanitizeName(context.documentType));
-  }
-  
-  if (context.subfolder) {
-    parts.push(sanitizeName(context.subfolder));
-  }
-  
-  return '/' + parts.join('/');
-}
 
 /**
  * Validates path selections against a schema

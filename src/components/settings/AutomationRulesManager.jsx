@@ -26,16 +26,7 @@ import {
 import RuleOptimizationBanner from '../mailrules/RuleOptimizationBanner';
 import TreePathPicker from '../automation/TreePathPicker';
 import FilenameTemplateInput from '../common/FilenameTemplateInput';
-
-const AVAILABLE_TOKENS = [
-  { key: '{Case_No}', label: 'מספר תיק' },
-  { key: '{Client_Name}', label: 'שם לקוח' },
-  { key: '{Client_No}', label: 'מספר לקוח' },
-  { key: '{Case_Type}', label: 'סוג תיק' },
-  { key: '{Official_No}', label: 'מספר רשמי' },
-  { key: '{Mail_Subject}', label: 'נושא המייל' },
-  { key: '{Mail_Date}', label: 'תאריך המייל' },
-];
+import { FILENAME_TOKENS as AVAILABLE_TOKENS } from '@/constants/filenameTokens';
 
 const TARGET_FIELD_OPTIONS = [
   { value: 'case_no', label: '{Case_No}', description: 'מספר תיק' },
@@ -67,14 +58,11 @@ const defaultRule = {
         subject_template_en: '',
         body_template_en: ''
     },
-    save_file: { 
-      enabled: false, 
-      schema_id: '', 
-      path_selections: {}, 
-      filename_template: '{Original_Filename}',
-      path_template: '', 
-      document_type: 'other',
-      subfolder: ''
+    save_file: {
+      enabled: false,
+      schema_id: '',
+      path_selections: {},
+      filename_template: '{Original_Filename}'
     },
         calendar_event: { 
         enabled: false, 
@@ -906,29 +894,7 @@ export default function AutomationRulesManager() {
                     </div>
                     {currentRule.action_bundle.save_file.enabled && (
                       <div className="pr-6 space-y-4">
-                        {/* Document Type */}
-                        <div>
-                          <Label className="text-sm">{t('automation_rules.document_type')}</Label>
-                          <select
-                            className="w-full mt-1 p-2 border dark:border-slate-600 dark:bg-slate-800 rounded-md text-sm"
-                            value={currentRule.action_bundle.save_file.document_type || 'other'}
-                            onChange={e => updateAction('save_file', 'document_type', e.target.value)}
-                          >
-                            <option value="office_action">{t('automation_rules.doc_type_office_action', 'Office Actions')}</option>
-                            <option value="response">{t('automation_rules.doc_type_response', 'Responses')}</option>
-                            <option value="certificate">{t('automation_rules.doc_type_certificate', 'Certificates')}</option>
-                            <option value="correspondence">{t('automation_rules.doc_type_correspondence', 'Correspondence')}</option>
-                            <option value="invoice">{t('automation_rules.doc_type_invoice', 'Invoices')}</option>
-                            <option value="application">{t('automation_rules.doc_type_application', 'Applications')}</option>
-                            <option value="assignment">{t('automation_rules.doc_type_assignment', 'Assignments')}</option>
-                            <option value="license">{t('automation_rules.doc_type_license', 'Licenses')}</option>
-                            <option value="renewal_notice">{t('automation_rules.doc_type_renewal', 'Renewal Notices')}</option>
-                            <option value="search_report">{t('automation_rules.doc_type_search', 'Search Reports')}</option>
-                            <option value="other">{t('automation_rules.other')}</option>
-                          </select>
-                        </div>
-
-                        {/* NEW: Tree Path Picker */}
+                        {/* Path Picker */}
                         <TreePathPicker
                           schemaId={currentRule.action_bundle.save_file.schema_id}
                           pathSelections={currentRule.action_bundle.save_file.path_selections || {}}
@@ -936,7 +902,7 @@ export default function AutomationRulesManager() {
                           onPathSelectionsChange={(selections) => updateAction('save_file', 'path_selections', selections)}
                         />
 
-                        {/* NEW: Filename Template */}
+                        {/* Filename Template */}
                         <div>
                           <Label className="text-sm">תבנית שם קובץ</Label>
                           <FilenameTemplateInput
@@ -946,26 +912,6 @@ export default function AutomationRulesManager() {
                             className="dark:bg-slate-800 dark:border-slate-600"
                           />
                         </div>
-
-                        {/* Legacy fields - kept for backward compatibility */}
-                        {!currentRule.action_bundle.save_file.schema_id && (
-                          <div className="p-3 bg-amber-50 dark:bg-amber-900/20 rounded border border-amber-200 dark:border-amber-800">
-                            <p className="text-xs text-amber-700 dark:text-amber-300 mb-2">
-                              ⚠️ מצב תאימות לאחור - בחר סכמה למעלה למעבר למבנה החדש
-                            </p>
-                            <div className="space-y-2">
-                              <div>
-                                <Label className="text-xs text-slate-500">{t('automation_rules.subfolder')}</Label>
-                                <Input
-                                  value={currentRule.action_bundle.save_file.subfolder || ''}
-                                  onChange={e => updateAction('save_file', 'subfolder', e.target.value)}
-                                  placeholder={t('automation_rules.subfolder_placeholder')}
-                                  className="dark:bg-slate-800 dark:border-slate-600 h-8 text-sm"
-                                />
-                              </div>
-                            </div>
-                          </div>
-                        )}
                       </div>
                     )}
                   </div>

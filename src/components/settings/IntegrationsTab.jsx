@@ -7,8 +7,6 @@ import { Loader2, XCircle, RefreshCw, Cloud } from "lucide-react";
 import { base44 } from '@/api/base44Client';
 import { useToast } from "@/components/ui/use-toast";
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import FolderStructureBuilder from './FolderStructureBuilder';
-
 export default function IntegrationsTab() {
   const { t } = useTranslation();
   const { toast } = useToast();
@@ -213,9 +211,6 @@ export default function IntegrationsTab() {
         )}
       </div>
 
-      {activeIntegrations.includes('dropbox') && (
-        <FolderStructureBuilder />
-      )}
     </div>
   );
 }

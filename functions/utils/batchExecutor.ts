@@ -500,20 +500,22 @@ async function executeAction(base44, action, batch, context = {}) {
     
     case 'save_file': {
       console.log(`[BatchExecutor] Uploading files to Dropbox`);
-      
+
       const uploadResult = await base44.functions.invoke('uploadToDropbox', {
         mailId: config.mailId || batch.mail_id,
         caseId: config.caseId || batch.case_id,
         clientId: config.clientId || batch.client_id,
         documentType: config.documentType || config.document_type || 'other',
-        subfolder: config.subfolder || ''
+        schema_id: config.schema_id || null,
+        path_selections: config.path_selections || {},
+        filename_template: config.filename_template || '{Original_Filename}'
       });
-      
+
       const resultData = uploadResult?.data || uploadResult;
       if (resultData?.error) {
         throw new Error(resultData.error);
       }
-      
+
       return { id: 'dropbox', entity: 'Dropbox', path: resultData?.dropbox_path || config.path };
     }
     

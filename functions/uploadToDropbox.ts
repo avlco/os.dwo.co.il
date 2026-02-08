@@ -1,10 +1,9 @@
 // @ts-nocheck
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.6';
-import { 
-  sanitizeName, 
-  buildPathFromSchema, 
-  buildLegacyDefaultPath, 
-  resolveFilenameTemplate 
+import {
+  sanitizeName,
+  buildPathFromSchema,
+  resolveFilenameTemplate
 } from './utils/folderPathBuilders.js';
 
 const corsHeaders = {
@@ -206,87 +205,7 @@ async function createSharedLink(accessToken, filePath) {
 }
 
 // ========================================
-// 4. PATH BUILDING - Using imported functions from folderPathBuilders.js
-// ========================================
-
-/**
- * LEGACY: Build path from old folder_structure array (backward compatibility)
- * This handles the old metadata.folder_structure format from IntegrationConnection
- */
-function buildDropboxPathLegacy(folderStructure, context) {
-  if (!folderStructure || !Array.isArray(folderStructure) || folderStructure.length === 0) {
-    return buildLegacyDefaultPath(context);
-  }
-
-  const sorted = [...folderStructure].sort((a, b) => (a.order || 0) - (b.order || 0));
-  const parts = [];
-
-  for (const level of sorted) {
-    switch (level.type) {
-      case 'fixed':
-        if (level.value) parts.push(level.value);
-        break;
-
-      case 'client':
-        if (context.client) {
-          const format = level.format || '{number} - {name}';
-          const clientPart = format
-            .replace('{number}', sanitizeName(context.client.client_number || context.client.number || ''))
-            .replace('{name}', sanitizeName(context.client.name || ''));
-          parts.push(clientPart);
-        } else {
-          parts.push('_לא_משוייך');
-        }
-        break;
-
-      case 'case':
-        if (context.caseData) {
-          const format = level.format || '{case_number}';
-          const casePart = format
-            .replace('{case_number}', sanitizeName(context.caseData.case_number || ''))
-            .replace('{title}', sanitizeName(context.caseData.title || ''));
-          parts.push(casePart);
-        } else {
-          parts.push('ממתין_לשיוך');
-        }
-        break;
-
-      case 'document_type':
-        if (context.documentType && level.mapping) {
-          const folderName = level.mapping[context.documentType] || context.documentType;
-          parts.push(sanitizeName(folderName));
-        } else if (context.documentType) {
-          parts.push(sanitizeName(context.documentType));
-        }
-        break;
-
-      case 'year':
-        parts.push(new Date().getFullYear().toString());
-        break;
-
-      case 'month_year': {
-        const now = new Date();
-        parts.push(`${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`);
-        break;
-      }
-
-      case 'department':
-        if (context.caseData?.department) {
-          parts.push(sanitizeName(context.caseData.department));
-        }
-        break;
-    }
-  }
-
-  if (context.subfolder) {
-    parts.push(sanitizeName(context.subfolder));
-  }
-
-  return '/' + parts.join('/');
-}
-
-// ========================================
-// 5. ATTACHMENT DOWNLOAD
+// 4. ATTACHMENT DOWNLOAD
 // ========================================
 
 async function downloadAttachment(attachment, googleToken, mailGmailId) {
@@ -339,13 +258,11 @@ Deno.serve(async (req) => {
 
     const rawBody = await req.json();
     const params = rawBody.body || rawBody;
-    const { 
-      mailId, 
-      caseId, 
-      clientId, 
-      documentType, 
-      subfolder,
-      // NEW: FolderTreeSchema parameters
+    const {
+      mailId,
+      caseId,
+      clientId,
+      documentType,
       schema_id,
       path_selections,
       filename_template
@@ -389,9 +306,8 @@ Deno.serve(async (req) => {
       } catch (e) { console.warn('[UploadToDropbox] Client not found:', resolvedClientId); }
     }
 
-    // 3. Get Dropbox Token + folder_structure from metadata
-    const { accessToken: dropboxToken, metadata } = await getDropboxToken(base44);
-    const folderStructure = metadata.folder_structure || null;
+    // 3. Get Dropbox Token
+    const { accessToken: dropboxToken } = await getDropboxToken(base44);
 
     // 4. Get Google Token (for Gmail attachment download fallback)
     let googleToken = null;
@@ -401,41 +317,42 @@ Deno.serve(async (req) => {
       console.warn('[UploadToDropbox] Google token not available:', e.message);
     }
 
-    // 5. Build Path - NEW SCHEMA OR LEGACY
+    // 5. Build Path from FolderTreeSchema
     let folderPath;
-    let usingNewSchema = false;
-    
+
     if (schema_id) {
-      // NEW FLOW: Use FolderTreeSchema
-      console.log(`[UploadToDropbox] Using new FolderTreeSchema: ${schema_id}`);
+      console.log(`[UploadToDropbox] Using FolderTreeSchema: ${schema_id}`);
       try {
         const schema = await base44.asServiceRole.entities.FolderTreeSchema.get(schema_id);
         if (schema && schema.is_active !== false) {
           folderPath = buildPathFromSchema(schema, path_selections || {}, {
             client,
             caseData,
-            mail,
-            documentType: documentType || 'other',
-            subfolder
+            mail
           });
-          usingNewSchema = true;
           console.log(`[UploadToDropbox] Schema path built: ${folderPath}`);
         } else {
-          console.warn(`[UploadToDropbox] Schema ${schema_id} not found or inactive, falling back to legacy`);
+          console.warn(`[UploadToDropbox] Schema ${schema_id} not found or inactive`);
         }
       } catch (schemaError) {
         console.error(`[UploadToDropbox] Failed to load schema ${schema_id}:`, schemaError.message);
       }
     }
-    
-    // LEGACY FALLBACK: Use old folder_structure or default path
-    if (!usingNewSchema) {
-      folderPath = buildDropboxPathLegacy(folderStructure, {
-        client,
-        caseData,
-        documentType: documentType || 'other',
-        subfolder
-      });
+
+    // Fallback: default path if no schema resolved
+    if (!folderPath) {
+      const parts = ['DWO', 'לקוחות - משרד'];
+      if (client) {
+        parts.push(`${sanitizeName(client.client_number || '')} - ${sanitizeName(client.name || '')}`);
+      } else {
+        parts.push('_לא_משוייך');
+      }
+      if (caseData) {
+        parts.push(sanitizeName(caseData.case_number || ''));
+      } else {
+        parts.push('ממתין_לשיוך');
+      }
+      folderPath = '/' + parts.join('/');
     }
 
     console.log(`[UploadToDropbox] Target path: ${folderPath}`);
@@ -453,9 +370,9 @@ Deno.serve(async (req) => {
       try {
         const originalFilename = attachment.filename || attachment.name || 'unnamed';
         
-        // Resolve filename - NEW TEMPLATE or LEGACY
+        // Resolve filename from template or use original
         let filename;
-        if (filename_template && usingNewSchema) {
+        if (filename_template) {
           filename = resolveFilenameTemplate(filename_template, { client, caseData, mail, originalFilename });
           // Preserve extension
           const ext = originalFilename.includes('.') ? originalFilename.split('.').pop() : '';

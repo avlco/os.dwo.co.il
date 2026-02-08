@@ -336,7 +336,9 @@ async function executeBatchActions(base44, batch, context) {
             caseId: config.caseId || batch.case_id,
             clientId: config.clientId || batch.client_id,
             documentType: config.documentType || config.document_type || 'other',
-            subfolder: config.subfolder || ''
+            schema_id: config.schema_id || null,
+            path_selections: config.path_selections || {},
+            filename_template: config.filename_template || '{Original_Filename}'
           });
           const uploadResult = result?.data || result;
           if (uploadResult?.error) throw new Error(uploadResult.error);

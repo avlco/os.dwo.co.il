@@ -234,8 +234,6 @@ const translations = {
         action_save_file: "🗂️ שמירת קבצים ב-Dropbox",
         document_type: "סוג מסמך",
         other: "אחר",
-        subfolder: "תת-תיקייה (אופציונלי)",
-        subfolder_placeholder: "לדוגמה: נספחים",
         dropbox_hint: "💡 הנתיב נבנה אוטומטית לפי הגדרות מבנה התיקיות ב-Dropbox"
 
       },
@@ -763,8 +761,6 @@ const translations = {
         email_content_template: "שלום {Client_Name},\n\nהתקבלה הודעה בתיק...",
         document_type: "סוג מסמך",
         other: "אחר",
-        subfolder_optional: "תת-תיקייה (אופציונלי)",
-        subfolder_example: "לדוגמה: נספחים",
         dropbox_path_hint: "💡 הנתיב נבנה אוטומטית לפי הגדרות מבנה התיקיות ב-Dropbox",
         back_to_mailroom: "חזרה לחדר דואר"
       },
@@ -1347,8 +1343,6 @@ const translations = {
         action_save_file: "🗂️ Save Files to Dropbox",
         document_type: "Document Type",
         other: "Other",
-        subfolder: "Subfolder (optional)",
-        subfolder_placeholder: "e.g., Attachments",
         dropbox_hint: "💡 The path is built automatically according to the folder structure settings in Dropbox"
       },
       document_types: {
@@ -1875,8 +1869,6 @@ const translations = {
         email_content_template: "Hello {Client_Name},\n\nA message was received in case...",
         document_type: "Document Type",
         other: "Other",
-        subfolder_optional: "Subfolder (optional)",
-        subfolder_example: "e.g., Attachments",
         dropbox_path_hint: "💡 The path is built automatically according to the folder structure settings in Dropbox",
         back_to_mailroom: "Back to Mail Room"
       },

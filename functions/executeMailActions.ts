@@ -388,10 +388,6 @@ Deno.serve(async (req) => {
                   uploadParams.path_selections = action.path_selections || {};
                   uploadParams.filename_template = action.filename_template || '{Original_Filename}';
                 }
-                // LEGACY FLOW: Use subfolder if provided
-                else if (action.dropbox_folder_path || action.subfolder) {
-                  uploadParams.subfolder = action.subfolder || action.dropbox_folder_path || '';
-                }
                 
                 const uploadResult = await base44.functions.invoke('uploadToDropbox', uploadParams);
                 const resultData = uploadResult?.data || uploadResult;
