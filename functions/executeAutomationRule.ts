@@ -77,6 +77,89 @@ function generateEmailLayout(contentHtml, title) {
 </html>`.trim();
 }
 
+// =====================================================================
+// EXECUTION SUMMARY EMAIL (for direct execution path - no approval)
+// Recipient: handling lawyer (userEmail)
+// =====================================================================
+
+const ACTION_TYPE_LABELS = {
+  send_email: { he: 'שליחת מייל' },
+  create_task: { he: 'יצירת משימה' },
+  billing: { he: 'חיוב שעות' },
+  calendar_event: { he: 'אירוע ביומן' },
+  save_file: { he: 'שמירת קובץ' },
+  create_alert: { he: 'התרעה/דוקטינג' },
+};
+
+function renderExecutionSummaryEmail(data) {
+  const {
+    ruleName, mailSubject, mailFrom,
+    caseNumber, caseTitle, clientName,
+    results, executionTimeMs
+  } = data;
+
+  const successResults = results.filter(r => r.status === 'success');
+  const failedResults = results.filter(r => r.status === 'failed');
+  const skippedResults = results.filter(r => r.status === 'skipped');
+
+  const allSuccess = failedResults.length === 0 && successResults.length > 0;
+  const allFailed = successResults.length === 0 && failedResults.length > 0;
+  const statusColor = allSuccess ? '#10b981' : allFailed ? '#ef4444' : '#f59e0b';
+  const statusIcon = allSuccess ? '✅' : allFailed ? '❌' : '⚠️';
+  const statusText = allSuccess ? 'בוצע בהצלחה' : allFailed ? 'נכשל' : 'בוצע עם שגיאות';
+
+  const renderActionRow = (r, icon) => {
+    const label = ACTION_TYPE_LABELS[r.action]?.he || ACTION_TYPE_LABELS[r.action_type]?.he || r.action || r.action_type || 'פעולה';
+    const detail = r.error ? `<span style="color:#ef4444;font-size:13px;"> - ${r.error}</span>` :
+                   r.reason ? `<span style="color:#6b7280;font-size:13px;"> (${r.reason})</span>` : '';
+    return `<tr><td style="padding:6px 10px;border-bottom:1px solid #f0f0f0;font-size:14px;">${icon} ${label}${detail}</td></tr>`;
+  };
+
+  let actionsHtml = '';
+  if (successResults.length > 0) {
+    actionsHtml += `<div style="margin-top:16px;"><p style="font-weight:600;color:#10b981;margin:0 0 6px;">פעולות שבוצעו בהצלחה (${successResults.length})</p><table role="presentation" width="100%" style="border:1px solid #e5e7eb;border-radius:6px;overflow:hidden;">`;
+    actionsHtml += successResults.map(r => renderActionRow(r, '✅')).join('');
+    actionsHtml += `</table></div>`;
+  }
+  if (failedResults.length > 0) {
+    actionsHtml += `<div style="margin-top:16px;"><p style="font-weight:600;color:#ef4444;margin:0 0 6px;">פעולות שנכשלו (${failedResults.length})</p><table role="presentation" width="100%" style="border:1px solid #fecaca;border-radius:6px;overflow:hidden;background:#fef2f2;">`;
+    actionsHtml += failedResults.map(r => renderActionRow(r, '❌')).join('');
+    actionsHtml += `</table></div>`;
+  }
+  if (skippedResults.length > 0) {
+    actionsHtml += `<div style="margin-top:16px;"><p style="font-weight:600;color:#6b7280;margin:0 0 6px;">פעולות שדולגו (${skippedResults.length})</p><table role="presentation" width="100%" style="border:1px solid #e5e7eb;border-radius:6px;overflow:hidden;background:#f9fafb;">`;
+    actionsHtml += skippedResults.map(r => renderActionRow(r, '⏭️')).join('');
+    actionsHtml += `</table></div>`;
+  }
+
+  const metaRows = [
+    { label: 'כלל אוטומציה', value: ruleName },
+    mailSubject ? { label: 'מייל מקור', value: `${mailSubject}${mailFrom ? ` (מאת: ${mailFrom})` : ''}` } : null,
+    caseNumber ? { label: 'תיק', value: `${caseNumber}${caseTitle ? ` - ${caseTitle}` : ''}` } : null,
+    clientName ? { label: 'לקוח', value: clientName } : null,
+  ].filter(Boolean);
+
+  const metaHtml = metaRows.map(r =>
+    `<tr><td style="padding:4px 10px;font-weight:600;color:#374151;font-size:14px;white-space:nowrap;">${r.label}:</td><td style="padding:4px 10px;color:#6b7280;font-size:14px;">${r.value}</td></tr>`
+  ).join('');
+
+  const executionSec = executionTimeMs ? (executionTimeMs / 1000).toFixed(1) : null;
+  const footerMeta = executionSec ? `<p style="margin-top:16px;font-size:12px;color:#9ca3af;">זמן ביצוע: ${executionSec} שניות</p>` : '';
+
+  const contentHtml = `
+    <div style="text-align:center;margin-bottom:20px;">
+      <div style="display:inline-block;width:48px;height:48px;border-radius:50%;background:${statusColor}15;text-align:center;line-height:48px;font-size:24px;">${statusIcon}</div>
+      <h2 style="margin:10px 0 4px;color:#1f2937;font-size:20px;">סיכום ביצוע אוטומציה</h2>
+      <p style="margin:0;color:${statusColor};font-weight:600;font-size:16px;">${statusText}</p>
+    </div>
+    <table role="presentation" width="100%" style="background:#f9fafb;border-radius:8px;padding:2px;margin-bottom:8px;">${metaHtml}</table>
+    ${actionsHtml}
+    ${footerMeta}
+  `;
+
+  return generateEmailLayout(contentHtml, `סיכום ביצוע: ${ruleName}`);
+}
+
 // ========================================
 // HELPER FUNCTIONS
 // ========================================
@@ -414,17 +497,18 @@ Deno.serve(async (req) => {
     const actions = rule.action_bundle || {};
 
     // Helper: Check approval or execute
+    // Each action runs independently - failure in one does NOT stop others
     const handleAction = async (actionType, config, executeFn) => {
       if (testMode) {
         results.push({ action: actionType, status: 'test_skipped', data: config });
         return;
       }
-      
+
       // BATCHING LOGIC:
       if (rule.require_approval) {
-        results.push({ 
-          action: actionType, 
-          status: 'pending_batch', 
+        results.push({
+          action: actionType,
+          status: 'pending_batch',
           config: config,
           approver_email: rule.approver_email,
           rule_id: rule.id,
@@ -432,8 +516,17 @@ Deno.serve(async (req) => {
         });
         console.log(`[AutoRule] ⏸️ Action ${actionType} pending batch approval`);
       } else {
-        // Direct execution (No Approval Needed)
-        await executeFn();
+        // Direct execution (No Approval Needed) - wrapped in try/catch for independence
+        try {
+          await executeFn();
+        } catch (error) {
+          console.error(`[AutoRule] ❌ Action ${actionType} failed independently: ${error.message}`);
+          // Only push failed if executeFn didn't already push a result for this action
+          const alreadyRecorded = results.some(r => r.action === actionType);
+          if (!alreadyRecorded) {
+            results.push({ action: actionType, status: 'failed', error: error.message });
+          }
+        }
       }
     };
 
@@ -736,28 +829,79 @@ Deno.serve(async (req) => {
         console.error('[AutoRule] Failed to update mail status:', e);
       }
       
+      // Determine execution status from actual results
+      const executedActions = results.filter(r => r.status !== 'test_skipped' && r.status !== 'pending_batch');
+      const failedActions = executedActions.filter(r => r.status === 'failed');
+      let executionStatus = 'completed';
+      if (failedActions.length > 0 && failedActions.length === executedActions.length) {
+        executionStatus = 'failed';
+      } else if (failedActions.length > 0) {
+        executionStatus = 'completed_with_errors';
+      }
+
       await logAutomationExecution(base44, {
         rule_id: ruleId,
         rule_name: rule.name,
         mail_id: mailId,
         mail_subject: mail.subject,
-        execution_status: 'completed',
+        execution_status: executionStatus,
         actions_summary: results,
         execution_time_ms: executionTime,
         user_email: userEmail,
         metadata: { case_id: caseId, client_id: clientId, extracted: extractedInfo }
       });
-      await updateRuleStats(base44, ruleId, true);
+      const ruleSuccess = executionStatus !== 'failed';
+      await updateRuleStats(base44, ruleId, ruleSuccess);
+
+      // שליחת מייל סיכום ביצוע - רק במסלול ישיר (ללא אישור)
+      // אם דורש אישור, הסיכום נשלח בשלב האישור (handleApprovalBatch / approveAutomationBatchPublic)
+      if (!rule.require_approval && executedActions.length > 0) {
+        try {
+          let summaryCase = null;
+          let summaryClient = null;
+          if (caseId) {
+            try { summaryCase = await base44.entities.Case.get(caseId); } catch (e) {}
+          }
+          if (clientId) {
+            try { summaryClient = await base44.entities.Client.get(clientId); } catch (e) {}
+          }
+
+          // במסלול ישיר (ללא אישור) - שליחה לעו"ד המטפל
+          const recipientEmail = userEmail;
+
+          if (recipientEmail) {
+            const summaryHtml = renderExecutionSummaryEmail({
+              ruleName: rule.name,
+              mailSubject: mail.subject,
+              mailFrom: mail.sender_email,
+              caseNumber: summaryCase?.case_number || null,
+              caseTitle: summaryCase?.title || null,
+              clientName: summaryClient?.name || null,
+              results: results,
+              executionTimeMs: executionTime,
+              executionPath: 'direct'
+            });
+            await base44.functions.invoke('sendEmail', {
+              to: recipientEmail,
+              subject: `סיכום ביצוע: ${rule.name}`,
+              body: summaryHtml
+            });
+            console.log(`[AutoRule] ✅ Execution summary sent to ${recipientEmail}`);
+          }
+        } catch (summaryErr) {
+          console.warn(`[AutoRule] Failed to send execution summary: ${summaryErr.message}`);
+        }
+      }
     }
 
-    return new Response(JSON.stringify({ 
-      success: true, 
-      results, 
+    return new Response(JSON.stringify({
+      success: true,
+      results,
       extracted_info: extractedInfo,
       case_id: caseId,
       client_id: clientId,
       client_language: clientLanguage,
-      execution_time_ms: executionTime 
+      execution_time_ms: executionTime
     }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
 
   } catch (error) {

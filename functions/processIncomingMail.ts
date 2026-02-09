@@ -275,12 +275,13 @@ async function runAutomation(base44, mails, userId) {
 
       if (matchingRules.length === 0) continue;
 
-      // עדכון סטטוס המייל - זוהה לאוטומציה
+      // עדכון סטטוס המייל - זוהה לאוטומציה (כל החוקים שתאמו)
+      const matchedRuleNames = matchingRules.map(r => r.name).join(', ');
       try {
-        await base44.entities.Mail.update(mail.id, { 
+        await base44.entities.Mail.update(mail.id, {
           processing_status: 'matched_for_automation',
           matched_rule_id: matchingRules[0].id,
-          matched_rule_name: matchingRules[0].name
+          matched_rule_name: matchedRuleNames
         });
       } catch (e) {
         console.error(`[Automation] Failed to update mail status:`, e);
@@ -288,64 +289,83 @@ async function runAutomation(base44, mails, userId) {
 
       const actionsBuffer = [];
       const extractedBuffer = {};
+      let hasDirectSuccess = false;
+      let hasDirectFailure = false;
 
+      // Each rule runs independently - failure in one does NOT stop others
       for (const rule of matchingRules) {
-        // IMPORTANT: Pass userId to executeAutomationRule
-        const res = await base44.functions.invoke('executeAutomationRule', {
-          mailId: mail.id,
-          ruleId: rule.id,
-          userId: userId // <--- PASSING USER ID
-        });
+        try {
+          const res = await base44.functions.invoke('executeAutomationRule', {
+            mailId: mail.id,
+            ruleId: rule.id,
+            userId: userId
+          });
 
-        if (res.error) {
-            console.error(`[Automation] Rule ${rule.id} error:`, res.error);
+          if (res.error) {
+            console.error(`[Automation] Rule ${rule.id} (${rule.name}) error:`, res.error);
+            hasDirectFailure = true;
             continue;
-        }
+          }
 
-        const data = res.data || {};
-        
-        if (data.extracted_info) Object.assign(extractedBuffer, data.extracted_info);
-        if (data.case_id) extractedBuffer.case_id = data.case_id;
-        if (data.client_id) extractedBuffer.client_id = data.client_id;
-        if (data.client_language) extractedBuffer.client_language = data.client_language;
+          const data = res.data || {};
 
-        if (data.results) {
+          if (data.extracted_info) Object.assign(extractedBuffer, data.extracted_info);
+          if (data.case_id) extractedBuffer.case_id = data.case_id;
+          if (data.client_id) extractedBuffer.client_id = data.client_id;
+          if (data.client_language) extractedBuffer.client_language = data.client_language;
+
+          if (data.results) {
             const pending = data.results.filter(r => r.status === 'pending_batch');
             actionsBuffer.push(...pending);
+            // Track direct execution results
+            const directResults = data.results.filter(r => r.status !== 'pending_batch' && r.status !== 'test_skipped');
+            if (directResults.some(r => r.status === 'success')) hasDirectSuccess = true;
+            if (directResults.some(r => r.status === 'failed')) hasDirectFailure = true;
+          }
+        } catch (ruleError) {
+          console.error(`[Automation] Rule ${rule.id} (${rule.name}) threw exception:`, ruleError.message);
+          hasDirectFailure = true;
+          // Continue to next rule - do NOT stop
         }
       }
 
-      if (actionsBuffer.length > 0) {
-        console.log(`[Automation] 📦 Creating approval batch with ${actionsBuffer.length} actions...`);
-        // עדכון סטטוס - ממתין לאישור
-        try {
+      // Single coherent mail status update after all rules have run
+      try {
+        if (actionsBuffer.length > 0) {
+          console.log(`[Automation] 📦 Creating approval batch with ${actionsBuffer.length} actions...`);
           const batchRes = await base44.functions.invoke('aggregateApprovalBatch', {
-              mailId: mail.id,
-              actionsToApprove: actionsBuffer,
-              extractedInfo: extractedBuffer,
-              userId: userId,
-              clientLanguage: extractedBuffer.client_language || 'he'
+            mailId: mail.id,
+            actionsToApprove: actionsBuffer,
+            extractedInfo: extractedBuffer,
+            userId: userId,
+            clientLanguage: extractedBuffer.client_language || 'he'
           });
-          
-          // עדכון המייל עם מזהה האצווה וסטטוס ממתין לאישור
+
           if (batchRes.data?.batches?.length > 0) {
-            await base44.entities.Mail.update(mail.id, { 
+            await base44.entities.Mail.update(mail.id, {
               processing_status: 'awaiting_approval',
               automation_batch_id: batchRes.data.batches[0].batch_id
             });
           }
-        } catch (e) {
-          console.error(`[Automation] Failed to create batch:`, e);
-        }
-      } else {
-        // אם אין פעולות ממתינות לאישור, סמן כהושלם
-        try {
-          await base44.entities.Mail.update(mail.id, { 
+        } else if (hasDirectSuccess && !hasDirectFailure) {
+          await base44.entities.Mail.update(mail.id, {
             processing_status: 'automation_complete'
           });
-        } catch (e) {
-          console.error(`[Automation] Failed to update mail status:`, e);
+        } else if (hasDirectSuccess && hasDirectFailure) {
+          await base44.entities.Mail.update(mail.id, {
+            processing_status: 'automation_complete'
+          });
+        } else if (hasDirectFailure && !hasDirectSuccess) {
+          await base44.entities.Mail.update(mail.id, {
+            processing_status: 'automation_failed'
+          });
+        } else {
+          await base44.entities.Mail.update(mail.id, {
+            processing_status: 'automation_complete'
+          });
         }
+      } catch (e) {
+        console.error(`[Automation] Failed to update final mail status:`, e);
       }
 
     } catch (e) {

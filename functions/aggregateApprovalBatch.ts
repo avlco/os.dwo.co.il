@@ -477,12 +477,20 @@ Deno.serve(async (req) => {
     if (!mail) throw new Error(`Mail not found: ${mailId}`);
 
     const actionsByApprover = {};
+    const orphanedActions = []; // Actions without approver_email
     for (const action of normalizedActions) {
-      const approverEmail = (action.approver_email || '').toLowerCase();
+      const approverEmail = (action.approver_email || '').trim().toLowerCase();
       if (approverEmail) {
         if (!actionsByApprover[approverEmail]) actionsByApprover[approverEmail] = [];
         actionsByApprover[approverEmail].push(action);
+      } else {
+        orphanedActions.push(action);
+        console.error(`[AggregateApprovalBatch] ⚠️ Action ${action.action_type} from rule "${action.rule_name}" has no approver_email - action will not be processed! Rule must have an approver configured.`);
       }
+    }
+
+    if (orphanedActions.length > 0) {
+      console.error(`[AggregateApprovalBatch] ❌ ${orphanedActions.length} action(s) dropped due to missing approver_email. Rules: ${[...new Set(orphanedActions.map(a => a.rule_name))].join(', ')}`);
     }
 
     const createdBatches = [];

@@ -329,6 +329,21 @@ export default function AutomationRulesManager() {
     // Clear previous errors
     setFieldErrors({});
 
+    // Validate approver is set when approval is required
+    if (data.require_approval && !data.approver_email) {
+      setFieldErrors({ approver: t('automation_rules.approver_required', 'חובה להגדיר גורם מאשר כאשר נדרש אישור') });
+      toast.error(t('automation_rules.approver_required', 'חובה להגדיר גורם מאשר כאשר נדרש אישור'));
+      return;
+    }
+
+    // Validate at least one action is enabled
+    const enabledActions = Object.values(data.action_bundle || {}).filter(a => a?.enabled);
+    if (enabledActions.length === 0) {
+      setFieldErrors({ actions: t('automation_rules.at_least_one_action', 'חובה להפעיל לפחות פעולה אחת') });
+      toast.error(t('automation_rules.at_least_one_action', 'חובה להפעיל לפחות פעולה אחת'));
+      return;
+    }
+
     // Validate for duplicate catch_config before saving
     setIsSaving(true);
     try {
@@ -554,15 +569,16 @@ export default function AutomationRulesManager() {
           </div>
           {currentRule.require_approval && (
             <div className="mb-4">
-              <Label className="dark:text-slate-300">{t('automation_rules.approver')}</Label>
-              <Select value={currentRule.approver_email} onValueChange={v => setCurrentRule({...currentRule, approver_email: v})}>
-                <SelectTrigger className="dark:bg-slate-900 dark:border-slate-600 dark:text-slate-200"><SelectValue placeholder={t('automation_rules.select_approver')} /></SelectTrigger>
+              <Label className="dark:text-slate-300">{t('automation_rules.approver')} <span className="text-red-500">*</span></Label>
+              <Select value={currentRule.approver_email} onValueChange={v => { setCurrentRule({...currentRule, approver_email: v}); setFieldErrors(prev => ({...prev, approver: null})); }}>
+                <SelectTrigger className={`dark:bg-slate-900 dark:border-slate-600 dark:text-slate-200 ${fieldErrors.approver ? 'border-red-500 dark:border-red-500' : ''}`}><SelectValue placeholder={t('automation_rules.select_approver')} /></SelectTrigger>
                 <SelectContent className="dark:bg-slate-800 dark:border-slate-700">
                   {users.map(user => (
                     <SelectItem key={user.id} value={user.email} className="dark:text-slate-200">{user.full_name} ({user.email})</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
+              {fieldErrors.approver && <p className="text-sm text-red-500 mt-1">{fieldErrors.approver}</p>}
             </div>
           )}
 
