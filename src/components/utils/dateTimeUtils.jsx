@@ -12,6 +12,30 @@ import { parseISO } from 'date-fns';
 import { he, enUS } from 'date-fns/locale';
 import { format as formatTz } from 'date-fns-tz';
 
+/**
+ * מוודא שמחרוזת תאריך מפורשת כ-UTC.
+ * אם המחרוזת לא מכילה סימון אזור זמן מפורש (Z או קיזוז ±HH:MM),
+ * מוסיפה 'Z' כדי לוודא ש-parseISO תפרש אותה כ-UTC ולא כזמן מקומי.
+ */
+function ensureUTC(dateString) {
+  if (!dateString || typeof dateString !== 'string') return dateString;
+  // אם כבר יש סימון UTC או קיזוז - אין צורך בשינוי
+  if (dateString.endsWith('Z') || /[+-]\d{2}:\d{2}$/.test(dateString) || /[+-]\d{4}$/.test(dateString)) {
+    return dateString;
+  }
+  return dateString + 'Z';
+}
+
+/**
+ * ניתוח מחרוזת תאריך לאובייקט Date, תוך וידוא פרשנות UTC
+ */
+function parseDateSafe(date) {
+  if (typeof date === 'string') {
+    return parseISO(ensureUTC(date));
+  }
+  return new Date(date);
+}
+
 // ברירות מחדל גלובליות
 export const DEFAULT_SETTINGS = {
   timezone: 'Asia/Jerusalem',
