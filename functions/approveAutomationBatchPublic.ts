@@ -1,6 +1,11 @@
 // @ts-nocheck
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.6';
 
+/** Returns today's date as YYYY-MM-DD in Israel timezone */
+function getTodayIsrael() {
+  return new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Jerusalem' });
+}
+
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
@@ -206,7 +211,7 @@ async function executeBatchActions(base44, batch, context) {
             description: config.description || 'Automated billing',
             hours: config.hours || 0.25,
             rate: config.rate || config.hourly_rate || 0,
-            date_worked: config.date_worked || new Date().toISOString().split('T')[0],
+            date_worked: config.date_worked || getTodayIsrael(),
             is_billable: true,
             billed: false,
             user_email: config.user_email || null

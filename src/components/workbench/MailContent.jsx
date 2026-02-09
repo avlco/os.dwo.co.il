@@ -1,12 +1,13 @@
 import React from 'react';
 import { useTranslation } from 'react-i18next';
-import { format } from 'date-fns';
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Mail, Paperclip, User, Calendar } from 'lucide-react';
+import { useDateTimeSettings } from '../DateTimeSettingsProvider';
 
 export default function MailContent({ mail }) {
   const { t, i18n } = useTranslation();
   const isRTL = i18n.language === 'he';
+  const { formatDateTime } = useDateTimeSettings();
 
   if (!mail) {
     return (
@@ -41,7 +42,7 @@ export default function MailContent({ mail }) {
             <div className="flex items-center gap-2 mt-1">
               <Calendar className="w-3 h-3 text-slate-400" />
               <span className="text-xs text-slate-500 dark:text-slate-500">
-                {mail.received_at ? format(new Date(mail.received_at), 'dd/MM/yyyy HH:mm') : ''}
+                {mail.received_at ? formatDateTime(mail.received_at) : ''}
               </span>
             </div>
             {mail.recipients?.length > 0 && (

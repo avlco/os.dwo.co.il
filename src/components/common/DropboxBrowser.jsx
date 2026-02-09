@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from 'sonner';
+import { useDateTimeSettings } from '../DateTimeSettingsProvider';
 
 const getFileIcon = (filename) => {
   const ext = filename.split('.').pop().toLowerCase();
@@ -27,6 +28,7 @@ const formatSize = (bytes) => {
 
 export default function DropboxBrowser({ caseId, clientName, clientNumber }) {
   const [relativePath, setRelativePath] = useState('');
+  const { formatDate } = useDateTimeSettings();
   const queryClient = useQueryClient();
 
   const { data, isLoading, error, refetch } = useQuery({
@@ -202,7 +204,7 @@ export default function DropboxBrowser({ caseId, clientName, clientNumber }) {
                         </p>
                         <p className="text-xs text-slate-500">
                           {isFolder ? 'תיקייה' : formatSize(entry.size)}
-                          {entry.server_modified && ` • ${new Date(entry.server_modified).toLocaleDateString('he-IL')}`}
+                          {entry.server_modified && ` • ${formatDate(entry.server_modified)}`}
                         </p>
                       </div>
                     </div>

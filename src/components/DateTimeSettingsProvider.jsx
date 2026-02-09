@@ -122,6 +122,14 @@ export function DateTimeSettingsProvider({ children }) {
     return formatCalendar(date, formatStr, settings);
   }, [settings]);
 
+  const wrappedFormatForDateInput = useCallback((date) => {
+    return formatForDateInput(date, settings);
+  }, [settings]);
+
+  const wrappedFormatForDateTimeInput = useCallback((date) => {
+    return formatForDateTimeInput(date, settings);
+  }, [settings]);
+
   const value = {
     settings,
     user,
@@ -131,8 +139,8 @@ export function DateTimeSettingsProvider({ children }) {
     formatTime: wrappedFormatTime,
     formatDateTime: wrappedFormatDateTime,
     formatCalendar: wrappedFormatCalendar,
-    formatForDateInput,
-    formatForDateTimeInput,
+    formatForDateInput: wrappedFormatForDateInput,
+    formatForDateTimeInput: wrappedFormatForDateTimeInput,
     FORMAT_OPTIONS,
     DEFAULT_SETTINGS,
     getLocale: () => getLocale(settings.language)

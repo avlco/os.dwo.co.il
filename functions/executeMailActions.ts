@@ -1,5 +1,10 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.6';
 
+/** Returns today's date as YYYY-MM-DD in Israel timezone */
+function getTodayIsrael() {
+  return new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Jerusalem' });
+}
+
 // ========================================
 // 1. DWO EMAIL DESIGN SYSTEM (EMBEDDED)
 // ========================================
@@ -254,7 +259,7 @@ async function downloadFile(url) {
 
 function formatDateIsraeli(date) {
   const d = new Date(date);
-  return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`;
+  return d.toLocaleDateString('en-GB', { timeZone: 'Asia/Jerusalem', day: '2-digit', month: '2-digit', year: 'numeric' }).replace(/\//g, '/');
 }
 
 async function createCalendarEvent(accessToken, eventData) {
@@ -329,7 +334,7 @@ Deno.serve(async (req) => {
                 hours: action.hours,
                 rate: hourlyRate,
                 is_billable: true,
-                date_worked: new Date().toISOString().split('T')[0],
+                date_worked: getTodayIsrael(),
                 billed: false
               });
               executedActions.push({ type: 'log_time', id: timeEntry.id, hours: action.hours, rate: hourlyRate });
@@ -435,15 +440,25 @@ Deno.serve(async (req) => {
                   .replace('{{case_number}}', currentCase?.case_number || 'N/A')
                   .replace('{{mail_subject}}', mail?.subject || 'N/A');
                 
-                const startDate = new Date(action.event_date || Date.now() + 86400000);
-                if (!action.event_date) startDate.setHours(10, 0, 0, 0);
-                const endDate = new Date(startDate.getTime() + 3600000); // 1 hour
+                let startDateISO, endDateISO;
+                if (action.event_date) {
+                  const startDate = new Date(action.event_date);
+                  const endDate = new Date(startDate.getTime() + 3600000);
+                  startDateISO = startDate.toISOString();
+                  endDateISO = endDate.toISOString();
+                } else {
+                  // Default: tomorrow at 10:00 Israel time (let Google Calendar handle timezone)
+                  const tomorrow = new Date(Date.now() + 86400000);
+                  const tomorrowStr = tomorrow.toLocaleDateString('en-CA', { timeZone: 'Asia/Jerusalem' });
+                  startDateISO = `${tomorrowStr}T10:00:00`;
+                  endDateISO = `${tomorrowStr}T11:00:00`;
+                }
                 
                 const eventData = {
                   summary: eventTitle,
                   description: `${eventDescription}\n\nנוצר אוטומטית ע"י Office OS`,
-                  start: { dateTime: startDate.toISOString(), timeZone: 'Asia/Jerusalem' },
-                  end: { dateTime: endDate.toISOString(), timeZone: 'Asia/Jerusalem' },
+                  start: { dateTime: startDateISO, timeZone: 'Asia/Jerusalem' },
+                  end: { dateTime: endDateISO, timeZone: 'Asia/Jerusalem' },
                   conferenceData: {
                     createRequest: { requestId: `officeos-${Date.now()}`, conferenceSolutionKey: { type: 'hangoutsMeet' } },
                   },

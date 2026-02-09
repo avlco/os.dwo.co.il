@@ -15,6 +15,11 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.6';
 // UNIFIED BATCH EXECUTOR (v2 - aligned across all execution paths)
 // Handles ALL 6 action types. Uses asServiceRole for entity operations.
 // =====================================================================
+
+/** Returns today's date as YYYY-MM-DD in Israel timezone */
+function getTodayIsrael() {
+  return new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Jerusalem' });
+}
 const EMAIL_BRAND = {
   colors: {
     primary: '#b62f12',
@@ -102,7 +107,7 @@ async function executeBatchActions(base44, batch, context) {
             description: config.description || 'Automated billing',
             hours: config.hours || 0.25,
             rate: config.rate || config.hourly_rate || 0,
-            date_worked: config.date_worked || new Date().toISOString().split('T')[0],
+            date_worked: config.date_worked || getTodayIsrael(),
             is_billable: true,
             billed: false,
             user_email: config.user_email || null
@@ -136,7 +141,7 @@ async function executeBatchActions(base44, batch, context) {
               case_id: config.case_id || batch.case_id,
               deadline_type: 'hearing',
               description: config.title || config.description || 'אירוע מאוטומציה',
-              due_date: config.start_date ? config.start_date.split('T')[0] : new Date().toISOString().split('T')[0],
+              due_date: config.start_date ? config.start_date.split('T')[0] : getTodayIsrael(),
               status: 'pending',
               is_critical: false,
               metadata: {
@@ -172,7 +177,7 @@ async function executeBatchActions(base44, batch, context) {
             case_id: config.case_id || batch.case_id,
             deadline_type: config.alert_type || config.deadline_type || 'reminder',
             description: config.description || config.message || 'התרעה מאוטומציה',
-            due_date: config.due_date || new Date().toISOString().split('T')[0],
+            due_date: config.due_date || getTodayIsrael(),
             status: 'pending',
             is_critical: config.is_critical || config.alert_type === 'urgent' || config.alert_type === 'deadline',
             assigned_to_email: config.recipients?.[0] || null,

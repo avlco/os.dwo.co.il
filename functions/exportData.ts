@@ -1,5 +1,10 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.6';
 
+/** Returns today's date as YYYY-MM-DD in Israel timezone */
+function getTodayIsrael() {
+  return new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Jerusalem' });
+}
+
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
@@ -44,12 +49,12 @@ Deno.serve(async (req) => {
       });
       content = JSON.stringify(exportData, null, 2);
       mimeType = 'application/json';
-      filename = `${entityType}_export_${new Date().toISOString().split('T')[0]}.json`;
+      filename = `${entityType}_export_${getTodayIsrael()}.json`;
     } else {
       // Export as CSV for clients and cases
       content = convertToCSV(data, entityType);
       mimeType = 'text/csv';
-      filename = `${entityType}_export_${new Date().toISOString().split('T')[0]}.csv`;
+      filename = `${entityType}_export_${getTodayIsrael()}.csv`;
     }
 
     return Response.json({

@@ -2,8 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { base44 } from '@/api/base44Client';
 import { useTranslation } from 'react-i18next';
-import { format } from 'date-fns';
-import { he, enUS } from 'date-fns/locale';
+import { useDateTimeSettings } from '../DateTimeSettingsProvider';
 import {
   FileText,
   ExternalLink,
@@ -55,7 +54,7 @@ function formatFileSize(bytes) {
 // Preview Modal Component
 function DocumentPreviewModal({ document, isOpen, onClose }) {
   const { t, i18n } = useTranslation();
-  const dateLocale = i18n.language === 'he' ? he : enUS;
+  const { formatDateTime } = useDateTimeSettings();
   const [isLoading, setIsLoading] = useState(false);
   const [previewUrl, setPreviewUrl] = useState(null);
   const [error, setError] = useState(null);
@@ -145,7 +144,7 @@ function DocumentPreviewModal({ document, isOpen, onClose }) {
         <div className="flex-shrink-0 flex justify-between items-center pt-4 border-t dark:border-slate-700">
           <div className="text-sm text-slate-500 dark:text-slate-400">
             {document?.file_size && <span>{formatFileSize(document.file_size)} • </span>}
-            {document?.created_date && format(new Date(document.created_date), 'dd/MM/yyyy HH:mm', { locale: dateLocale })}
+            {document?.created_date && formatDateTime(document.created_date)}
           </div>
           <div className="flex gap-2">
             <Button variant="outline" onClick={onClose} className="dark:border-slate-600">
@@ -165,7 +164,7 @@ function DocumentPreviewModal({ document, isOpen, onClose }) {
 }
 
 // Document Row Component
-function DocumentRow({ doc, dateLocale, documentTypeLabels, onView, onOpenInDropbox }) {
+function DocumentRow({ doc, formatDate, documentTypeLabels, onView, onOpenInDropbox }) {
   return (
     <div
       className="flex items-center gap-3 p-3 bg-slate-50 dark:bg-slate-900 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors group"
@@ -185,7 +184,7 @@ function DocumentRow({ doc, dateLocale, documentTypeLabels, onView, onOpenInDrop
             </Badge>
           )}
           {doc.created_date && (
-            <span>{format(new Date(doc.created_date), 'dd/MM/yyyy', { locale: dateLocale })}</span>
+            <span>{formatDate(doc.created_date)}</span>
           )}
           {doc.file_size && (
             <span>• {formatFileSize(doc.file_size)}</span>
@@ -218,7 +217,7 @@ function DocumentRow({ doc, dateLocale, documentTypeLabels, onView, onOpenInDrop
 // Main Component: Document List for Case or Client
 export default function DocumentViewer({ caseId, clientId, showTitle = true }) {
   const { t, i18n } = useTranslation();
-  const dateLocale = i18n.language === 'he' ? he : enUS;
+  const { formatDate } = useDateTimeSettings();
   const [selectedDocument, setSelectedDocument] = useState(null);
   const [previewOpen, setPreviewOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
@@ -436,7 +435,7 @@ export default function DocumentViewer({ caseId, clientId, showTitle = true }) {
                           <DocumentRow
                             key={doc.id}
                             doc={doc}
-                            dateLocale={dateLocale}
+                            formatDate={formatDate}
                             documentTypeLabels={documentTypeLabels}
                             onView={handleViewDocument}
                             onOpenInDropbox={handleOpenInDropbox}
@@ -455,7 +454,7 @@ export default function DocumentViewer({ caseId, clientId, showTitle = true }) {
                 <DocumentRow
                   key={doc.id}
                   doc={doc}
-                  dateLocale={dateLocale}
+                  formatDate={formatDate}
                   documentTypeLabels={documentTypeLabels}
                   onView={handleViewDocument}
                   onOpenInDropbox={handleOpenInDropbox}

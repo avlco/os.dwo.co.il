@@ -2,8 +2,7 @@ import React from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { base44 } from '@/api/base44Client';
 import { useTranslation } from 'react-i18next';
-import { format } from 'date-fns';
-import { he } from 'date-fns/locale';
+import { useDateTimeSettings } from '../DateTimeSettingsProvider';
 import {
   FileText,
   ExternalLink,
@@ -31,6 +30,7 @@ const DOC_TYPE_LABELS = {
 export function CaseDocuments({ caseId }) {
   const { i18n } = useTranslation();
   const isRTL = i18n.language === 'he';
+  const { formatDateTime } = useDateTimeSettings();
 
   const { data: documents = [], isLoading } = useQuery({
     queryKey: ['case-documents', caseId],
@@ -88,7 +88,7 @@ export function CaseDocuments({ caseId }) {
                     {doc.name || (isRTL ? 'מסמך' : 'Document')}
                   </p>
                   <p className="text-xs text-slate-500 dark:text-slate-400">
-                    {doc.created_date && format(new Date(doc.created_date), 'dd/MM/yyyy HH:mm', { locale: isRTL ? he : undefined })}
+                    {doc.created_date && formatDateTime(doc.created_date)}
                     {doc.dropbox_path && <span className="mr-2 opacity-60"> · {doc.dropbox_path.split('/').pop()}</span>}
                   </p>
                 </div>

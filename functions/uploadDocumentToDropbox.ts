@@ -1,5 +1,10 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.6';
 
+/** Returns today's date as YYYY-MM-DD in Israel timezone */
+function getTodayIsrael() {
+  return new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Jerusalem' });
+}
+
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
@@ -228,7 +233,7 @@ Deno.serve(async (req) => {
       }
     } else {
       // Fallback to Manual_Review folder
-      dropboxPath = `/DWO/Manual_Review/${new Date().toISOString().split('T')[0]}`;
+      dropboxPath = `/DWO/Manual_Review/${getTodayIsrael()}`;
     }
 
     // 4. Get Dropbox token and upload
