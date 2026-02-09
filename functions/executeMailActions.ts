@@ -66,8 +66,8 @@ function generateEmailLayout(contentHtml, title) {
 // ========================================
 
 async function getCryptoKey() {
-  const envKey = Deno.env.get("ENCRYPTION_SECRET_KEY");
-  if (!envKey) throw new Error("ENCRYPTION_SECRET_KEY is missing");
+  const envKey = Deno.env.get("SECRET_KEY_ENCRYPTION");
+  if (!envKey) throw new Error("SECRET_KEY_ENCRYPTION is missing");
   const encoder = new TextEncoder();
   const keyString = envKey.padEnd(32, '0').slice(0, 32);
   const keyBuffer = encoder.encode(keyString);

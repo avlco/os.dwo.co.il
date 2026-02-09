@@ -6,12 +6,12 @@ const REDIRECT_URI = `${APP_BASE_URL}/Settings`;
 
 // ✅ Encryption key validation
 function validateEncryptionKey() {
-  const key = Deno.env.get("ENCRYPTION_SECRET_KEY");
+  const key = Deno.env.get("SECRET_KEY_ENCRYPTION");
   if (!key) {
-    throw new Error("⚠️ CRITICAL: ENCRYPTION_SECRET_KEY environment variable is not set!");
+    throw new Error("⚠️ CRITICAL: SECRET_KEY_ENCRYPTION environment variable is not set!");
   }
   if (key.length < 32) {
-    throw new Error(`⚠️ CRITICAL: ENCRYPTION_SECRET_KEY must be at least 32 characters.`);
+    throw new Error(`⚠️ CRITICAL: SECRET_KEY_ENCRYPTION must be at least 32 characters.`);
   }
 }
 
@@ -35,8 +35,8 @@ function getProviderConfig(providerRaw) {
 }
 
 async function getCryptoKey() {
-  const envKey = Deno.env.get("ENCRYPTION_SECRET_KEY");
-  if (!envKey) throw new Error("ENCRYPTION_SECRET_KEY is missing");
+  const envKey = Deno.env.get("SECRET_KEY_ENCRYPTION");
+  if (!envKey) throw new Error("SECRET_KEY_ENCRYPTION is missing");
   const encoder = new TextEncoder();
   const keyString = envKey.padEnd(32, '0').slice(0, 32);
   const keyBuffer = encoder.encode(keyString);

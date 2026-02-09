@@ -2,10 +2,10 @@
  * Encryption Utility for IntegrationConnection tokens
  * Uses AES-256-GCM for secure encryption at rest
  * 
- * IMPORTANT: Set ENCRYPTION_SECRET_KEY in environment variables (32 characters)
+ * IMPORTANT: Set SECRET_KEY_ENCRYPTION in environment variables (32 characters)
  */
 
-const ENCRYPTION_SECRET_KEY = Deno.env.get("ENCRYPTION_SECRET_KEY");
+const SECRET_KEY_ENCRYPTION = Deno.env.get("SECRET_KEY_ENCRYPTION");
 
 /**
  * Convert string to ArrayBuffer
@@ -49,11 +49,11 @@ function base64ToArrayBuffer(base64) {
  * Get the encryption key as CryptoKey
  */
 async function getKey() {
-  if (!ENCRYPTION_SECRET_KEY || ENCRYPTION_SECRET_KEY.length < 32) {
-    throw new Error('ENCRYPTION_SECRET_KEY must be set and at least 32 characters');
+  if (!SECRET_KEY_ENCRYPTION || SECRET_KEY_ENCRYPTION.length < 32) {
+    throw new Error('SECRET_KEY_ENCRYPTION must be set and at least 32 characters');
   }
   
-  const keyMaterial = stringToArrayBuffer(ENCRYPTION_SECRET_KEY.slice(0, 32));
+  const keyMaterial = stringToArrayBuffer(SECRET_KEY_ENCRYPTION.slice(0, 32));
   
   return await crypto.subtle.importKey(
     'raw',
