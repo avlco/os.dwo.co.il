@@ -504,9 +504,17 @@ Deno.serve(async (req) => {
 
     // Helper: Check approval or execute
     // Each action runs independently - failure in one does NOT stop others
-    const handleAction = async (actionType, config, executeFn) => {
+    // All actions (including skips) go through this function for consistent routing
+    const handleAction = async (actionType, config, executeFn, skipReason = null) => {
       if (testMode) {
         results.push({ action: actionType, status: 'test_skipped', data: config });
+        return;
+      }
+
+      // Skipped actions: report consistently regardless of approval mode
+      if (skipReason) {
+        results.push({ action: actionType, status: 'skipped', reason: skipReason, config: config || {} });
+        console.log(`[AutoRule] ⏭️ Action ${actionType} skipped: ${skipReason}`);
         return;
       }
 
@@ -572,13 +580,13 @@ Deno.serve(async (req) => {
             subject: emailConfig.subject,
             body: finalHtml
           });
-          
+
           if (emailResult.error) throw new Error(`sendEmail failed: ${emailResult.error}`);
           results.push({ action: 'send_email', status: 'success', sent_to: to });
           console.log('[AutoRule] ✅ Branded email sent directly');
         });
       } else {
-        results.push({ action: 'send_email', status: 'skipped', reason: 'no_recipients' });
+        await handleAction('send_email', {}, null, 'no_recipients');
       }
     }
 
@@ -628,6 +636,9 @@ Deno.serve(async (req) => {
       };
       
       await handleAction('billing', billingData, async () => {
+        if (!caseId) {
+          throw new Error('Billing requires case_id - no case associated with this email');
+        }
         const timeEntry = await base44.entities.TimeEntry.create(billingData);
         try {
           await base44.functions.invoke('syncBillingToSheets', { timeEntryId: timeEntry.id });
@@ -639,7 +650,7 @@ Deno.serve(async (req) => {
         // Action 4: Save File (via uploadToDropbox)
     if (actions.save_file?.enabled) {
       if (!mail.attachments || mail.attachments.length === 0) {
-        results.push({ action: 'save_file', status: 'skipped', reason: 'no_attachments' });
+        await handleAction('save_file', {}, null, 'no_attachments');
       } else {
         const uploadConfig = {
           mailId: mailId,
