@@ -438,32 +438,44 @@ Deno.serve(async (req) => {
     let extractedInfo = {};
 
     if (rule.map_config && Array.isArray(rule.map_config)) {
+      console.log(`[AutoRule][Extract] map_config has ${rule.map_config.length} rules`);
       for (const mapRule of rule.map_config) {
+        console.log(`[AutoRule][Extract] Processing: target=${mapRule.target_field}, source=${mapRule.source}, anchor_text="${mapRule.anchor_text || ''}", regex="${mapRule.regex || ''}"`);
         const extracted = extractFromMail(mail, mapRule);
+        console.log(`[AutoRule][Extract] Result: "${extracted}" (from subject: "${mail.subject}")`);
         if (extracted) {
           extractedInfo[mapRule.target_field] = extracted;
-          
+
           if (mapRule.target_field === 'case_no') {
             try {
               const cases = await base44.entities.Case.filter({ case_number: extracted });
+              console.log(`[AutoRule][Extract] Case lookup for "${extracted}": found ${cases?.length || 0} results`);
               if (cases && cases.length > 0) {
                 caseId = cases[0].id;
                 clientId = cases[0].client_id;
+                console.log(`[AutoRule][Extract] ✅ Matched case_id=${caseId}, client_id=${clientId}`);
               }
-            } catch (e) {}
+            } catch (e) {
+              console.error(`[AutoRule][Extract] ❌ Case lookup failed: ${e.message}`);
+            }
           }
-          
+
           if (mapRule.target_field === 'official_no' && !caseId) {
             try {
               const cases = await base44.entities.Case.filter({ application_number: extracted });
+              console.log(`[AutoRule][Extract] Official# lookup for "${extracted}": found ${cases?.length || 0} results`);
               if (cases && cases.length > 0) {
                 caseId = cases[0].id;
                 clientId = cases[0].client_id;
               }
-            } catch (e) {}
+            } catch (e) {
+              console.error(`[AutoRule][Extract] ❌ Official# lookup failed: ${e.message}`);
+            }
           }
         }
       }
+    } else {
+      console.warn(`[AutoRule][Extract] ⚠️ map_config is missing or not an array. Type: ${typeof rule.map_config}, value: ${JSON.stringify(rule.map_config)}`);
     }
 
     // --- לוגיקת שפה: נקבעת לאחר סיום חילוץ הנתונים והלקוח ---
