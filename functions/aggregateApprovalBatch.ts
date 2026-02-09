@@ -202,6 +202,7 @@ function renderApprovalEmail({
   caseTitle,
   clientName,
   clientCommunicationLanguage = 'he',
+  skippedActions = [],
 }) {
   const isHebrew = language === 'he';
   const align = isHebrew ? 'right' : 'left';
@@ -405,6 +406,31 @@ function renderApprovalEmail({
     })
     .join('');
 
+  // Render skipped actions info section
+  const SKIP_REASON_LABELS = {
+    no_recipients: isHebrew ? 'לא נמצאו נמענים (תלוי בזיהוי תיק/לקוח)' : 'No recipients found (depends on case/client identification)',
+    no_attachments: isHebrew ? 'אין קבצים מצורפים למייל' : 'No attachments in email',
+  };
+  const ACTION_NAME_LABELS = {
+    send_email: isHebrew ? '📧 שליחת מייל' : '📧 Send email',
+    create_task: isHebrew ? '✅ יצירת משימה' : '✅ Create task',
+    billing: isHebrew ? '💰 חיוב שעות' : '💰 Billable hours',
+    save_file: isHebrew ? '💾 שמירת קבצים' : '💾 Save files',
+    calendar_event: isHebrew ? '📅 אירוע ביומן' : '📅 Calendar event',
+    create_alert: isHebrew ? '🚨 התרעה/דוקטינג' : '🚨 Alert/Docketing',
+  };
+
+  const skippedSection = skippedActions.length > 0 ? `
+      <h3 style="color: #6b7280; margin-top: 25px;">⏭️ ${isHebrew ? 'פעולות שדולגו:' : 'Skipped actions:'}</h3>
+      ${skippedActions.map(sa => {
+        const actionName = ACTION_NAME_LABELS[sa.action] || sa.action;
+        const reasonText = SKIP_REASON_LABELS[sa.reason] || sa.reason || '';
+        return `<div style="background: #f3f4f6; padding: 10px; margin-bottom: 8px; border-radius: 6px; border-${align}: 4px solid #9ca3af; text-align: ${align}; color: #6b7280;">
+          <span style="font-weight: bold;">${actionName}</span> — ${escapeHtml(reasonText)}
+        </div>`;
+      }).join('')}
+  ` : '';
+
   const btnBase =
     'display: inline-block; padding: 12px 24px; color: #ffffff !important; text-decoration: none; border-radius: 6px; font-weight: bold; margin: 5px; font-size: 14px;';
 
@@ -437,6 +463,8 @@ function renderApprovalEmail({
       <h3>פעולות ממתינות לאישור:</h3>
       ${actionsList}
 
+      ${skippedSection}
+
       <div style="text-align: center; margin-top: 35px;">
         <a href="${approveUrl}" style="${btnBase} background-color: ${BRAND.colors.success};">✅ אישור</a>
         <a href="${editUrl}" style="${btnBase} background-color: #3b82f6;">✏️ עריכה</a>
@@ -458,7 +486,7 @@ Deno.serve(async (req) => {
 
   try {
     const base44 = createClientFromRequest(req);
-    const { mailId, actionsToApprove, extractedInfo, userId, clientLanguage } = await req.json();
+    const { mailId, actionsToApprove, skippedActions, extractedInfo, userId, clientLanguage } = await req.json();
 
     if (!mailId || !actionsToApprove?.length) {
       return new Response(JSON.stringify({ success: true, message: 'No actions' }), {
@@ -588,6 +616,7 @@ Deno.serve(async (req) => {
   caseTitle,
   clientName,
   clientCommunicationLanguage, // This indicates whether the CLIENT will receive English versions
+  skippedActions: skippedActions || [],
 });
 
 

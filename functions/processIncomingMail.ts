@@ -288,6 +288,7 @@ async function runAutomation(base44, mails, userId) {
       }
 
       const actionsBuffer = [];
+      const skippedBuffer = [];
       const extractedBuffer = {};
       let hasDirectSuccess = false;
       let hasDirectFailure = false;
@@ -317,6 +318,9 @@ async function runAutomation(base44, mails, userId) {
           if (data.results) {
             const pending = data.results.filter(r => r.status === 'pending_batch');
             actionsBuffer.push(...pending);
+            // Collect skipped actions for informational display in approval email
+            const skipped = data.results.filter(r => r.status === 'skipped');
+            skippedBuffer.push(...skipped);
             // Track direct execution results
             const directResults = data.results.filter(r => r.status !== 'pending_batch' && r.status !== 'test_skipped');
             if (directResults.some(r => r.status === 'success')) hasDirectSuccess = true;
@@ -336,6 +340,7 @@ async function runAutomation(base44, mails, userId) {
           const batchRes = await base44.functions.invoke('aggregateApprovalBatch', {
             mailId: mail.id,
             actionsToApprove: actionsBuffer,
+            skippedActions: skippedBuffer.length > 0 ? skippedBuffer : undefined,
             extractedInfo: extractedBuffer,
             userId: userId,
             clientLanguage: extractedBuffer.client_language || 'he'
