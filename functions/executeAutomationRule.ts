@@ -1,6 +1,6 @@
 // @ts-nocheck
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.6';
-import { formatInTimeZone, toZonedTime } from 'npm:date-fns-tz@2.0.0';
+import { toZonedTime } from 'npm:date-fns-tz@3.2.0';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
