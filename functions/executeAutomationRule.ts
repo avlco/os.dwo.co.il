@@ -1,5 +1,6 @@
 // @ts-nocheck
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.6';
+import { formatInTimeZone, toZonedTime } from 'npm:date-fns-tz@2.0.0';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -223,19 +224,24 @@ async function replaceTokens(template, context, base44) {
   return result.replace(/{[^}]+}/g, '');
 }
 
+/**
+ * Calculate due date using UTC methods to avoid timezone shifts
+ * Always returns YYYY-MM-DD in UTC
+ */
 function calculateDueDate(offset, unit = 'days', direction = 'after', baseDate = new Date()) {
   const date = new Date(baseDate);
   const multiplier = direction === 'before' ? -1 : 1;
   const val = (offset || 0) * multiplier;
 
+  // Use UTC methods for consistent date manipulation
   if (unit === 'days') {
-    date.setDate(date.getDate() + val);
+    date.setUTCDate(date.getUTCDate() + val);
   } else if (unit === 'weeks') {
-    date.setDate(date.getDate() + (val * 7));
+    date.setUTCDate(date.getUTCDate() + (val * 7));
   } else if (unit === 'months') {
-    date.setMonth(date.getMonth() + val);
+    date.setUTCMonth(date.getUTCMonth() + val);
   } else if (unit === 'years') {
-    date.setFullYear(date.getFullYear() + val);
+    date.setUTCFullYear(date.getUTCFullYear() + val);
   }
 
   return date.toISOString().split('T')[0];
@@ -402,7 +408,7 @@ Deno.serve(async (req) => {
     
     const rawBody = await req.json();
     const params = rawBody.body || rawBody;
-    const { mailId, ruleId, testMode = false, userId } = params; // <--- ACCEPT userId
+    const { mailId, ruleId, testMode = false, userId } = params;
 
     if (!mailId || !ruleId) throw new Error('mailId and ruleId are required');
 
@@ -617,7 +623,7 @@ Deno.serve(async (req) => {
         date_worked: new Date().toISOString(),
         is_billable: true,
         billed: false,
-        user_email: userEmail, // <--- Correctly attributed to the lawyer
+        user_email: userEmail,
         task_id: null
       };
       
@@ -665,6 +671,7 @@ Deno.serve(async (req) => {
 
         // Action 5: Calendar Event
     if (actions.calendar_event?.enabled) {
+      const timeZone = 'Asia/Jerusalem';
       let calculationBase = new Date(mail.received_at || Date.now());
 
       if (actions.calendar_event.timing_base === 'docket_date' && caseId) {
@@ -686,7 +693,13 @@ Deno.serve(async (req) => {
         calculationBase
       );
       const timeOfDay = actions.calendar_event.time_of_day || '09:00';
-      const startDateTime = `${calculatedDay}T${timeOfDay}:00`;
+      
+      // Create a proper DateTime in Asia/Jerusalem timezone
+      const [hours, minutes] = timeOfDay.split(':').map(Number);
+      const localDate = new Date(calculatedDay + 'T00:00:00.000Z');
+      const zonedDate = toZonedTime(localDate, timeZone);
+      zonedDate.setHours(hours, minutes, 0, 0);
+      const startDateTime = zonedDate.toISOString();
 
             // בחירת התבנית הנכונה לפי שפת הלקוח
       const titleTemplate = getTemplate(actions.calendar_event, 'title_template', 'title_template_en');
@@ -696,6 +709,7 @@ Deno.serve(async (req) => {
         title: await replaceTokens(titleTemplate || 'תזכורת', { mail, caseId, clientId }, base44),
         description: await replaceTokens(descTemplate || '', { mail, caseId, clientId }, base44),
         start_date: startDateTime,
+        event_timezone: timeZone,
         duration_minutes: actions.calendar_event.duration_minutes || 60,
         case_id: caseId,
         client_id: clientId,
@@ -724,7 +738,7 @@ Deno.serve(async (req) => {
                 case_id: caseId,
                 deadline_type: 'hearing',
                 description: eventData.title || eventData.description || 'אירוע מאוטומציה',
-                due_date: (eventData.start_date || new Date().toISOString()).split('T')[0],
+                due_date: calculatedDay,
                 status: 'pending',
                 is_critical: false,
                 metadata: {
