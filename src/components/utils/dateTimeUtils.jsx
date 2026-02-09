@@ -191,11 +191,10 @@ export function formatCalendar(date, formatStr, settings = null) {
   const locale = getLocale(effectiveSettings.language);
   const timezone = effectiveSettings.timezone || DEFAULT_SETTINGS.timezone;
   
-  const dateObj = typeof date === 'string' ? parseISO(date) : new Date(date);
+  const dateObj = parseDateSafe(date);
   
   if (isNaN(dateObj.getTime())) return '-';
   
-  // המרה מ-UTC לאזור הזמן של המשתמש באמצעות formatTz
   return formatTz(dateObj, formatStr, { timeZone: timezone, locale });
 }
 
