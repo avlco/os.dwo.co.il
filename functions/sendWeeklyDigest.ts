@@ -125,7 +125,7 @@ Deno.serve(async (req) => {
       innerContent = `
         <h1 style="color: ${BRAND.colors.primary}; font-size: 24px; margin-top: 0; margin-bottom: 5px; text-align: center;">📊 סיכום שבועי - IPMS</h1>
         <p style="text-align: center; color: ${BRAND.colors.textLight}; margin-bottom: 30px; margin-top: 0; font-size: 14px;">
-          ${weekAgo.toLocaleDateString('he-IL')} - ${now.toLocaleDateString('he-IL')}
+          ${weekAgo.toLocaleDateString('he-IL', { timeZone: 'Asia/Jerusalem' })} - ${now.toLocaleDateString('he-IL', { timeZone: 'Asia/Jerusalem' })}
         </p>
 
         <table class="stats-table" role="presentation">
@@ -163,7 +163,7 @@ Deno.serve(async (req) => {
     }
 
     // Generate Full HTML using Design System
-    const emailHtml = generateEmailLayout(innerContent, `סיכום שבועי - ${now.toLocaleDateString('he-IL')}`);
+    const emailHtml = generateEmailLayout(innerContent, `סיכום שבועי - ${now.toLocaleDateString('he-IL', { timeZone: 'Asia/Jerusalem' })}`);
 
     // Send to all admins
     const sentTo = [];
@@ -172,7 +172,7 @@ Deno.serve(async (req) => {
         try {
           await base44.integrations.Core.SendEmail({
             to: admin.email,
-            subject: `סיכום שבועי - IPMS (${now.toLocaleDateString('he-IL')})`,
+            subject: `סיכום שבועי - IPMS (${now.toLocaleDateString('he-IL', { timeZone: 'Asia/Jerusalem' })})`,
             body: emailHtml
           });
           sentTo.push(admin.email);

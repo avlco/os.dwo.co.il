@@ -104,7 +104,7 @@ Deno.serve(async (req) => {
     try {
       if (timeEntry.date_worked) {
         formattedDate = new Date(timeEntry.date_worked).toLocaleString('he-IL', {
-          timeZone: 'Asia/Tel_Aviv',
+          timeZone: 'Asia/Jerusalem',
           day: '2-digit', month: '2-digit', year: 'numeric',
           hour: '2-digit', minute: '2-digit', hour12: false
         }).replace(',', '');

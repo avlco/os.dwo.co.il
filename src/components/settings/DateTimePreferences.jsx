@@ -8,6 +8,7 @@
 import React, { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useDateTimeSettings } from '../DateTimeSettingsProvider';
+import { formatDate as fmtDate, formatTime as fmtTime } from '../utils/dateTimeUtils';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
@@ -192,8 +193,8 @@ export default function DateTimePreferences() {
             {t('settings.preview', 'תצוגה מקדימה')}:
           </p>
           <div className="space-y-1 text-sm dark:text-slate-200">
-            <p><span className="text-slate-500">{t('settings.date', 'תאריך')}:</span> {previewDate.toLocaleDateString('he-IL', { day: '2-digit', month: '2-digit', year: 'numeric' }).replace(/\./g, localSettings.dateFormat.includes('/') ? '/' : localSettings.dateFormat.includes('.') ? '.' : '-')}</p>
-            <p><span className="text-slate-500">{t('settings.time', 'שעה')}:</span> {previewDate.toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit', hour12: localSettings.timeFormat.includes('a') })}</p>
+            <p><span className="text-slate-500">{t('settings.date', 'תאריך')}:</span> {fmtDate(previewDate, { ...localSettings, language: i18n.language })}</p>
+            <p><span className="text-slate-500">{t('settings.time', 'שעה')}:</span> {fmtTime(previewDate, { ...localSettings, language: i18n.language })}</p>
           </div>
         </div>
 

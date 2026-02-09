@@ -1,6 +1,6 @@
 // @ts-nocheck
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.6';
-import { toZonedTime } from 'npm:date-fns-tz@3.2.0';
+import { fromZonedTime } from 'npm:date-fns-tz@3.2.0';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -717,10 +717,10 @@ Deno.serve(async (req) => {
       );
       const timeOfDay = actions.calendar_event.time_of_day || '09:00';
       
-      // Convert local time to UTC ISO format for unambiguous interpretation
+      // Convert local Israel time to UTC ISO format for unambiguous interpretation
       const targetDateTimeString = `${calculatedDay}T${timeOfDay}:00`;
-      const zonedDateTime = toZonedTime(targetDateTimeString, timeZone);
-      const startDateTimeUTC = zonedDateTime.toISOString();
+      const utcDate = fromZonedTime(targetDateTimeString, timeZone);
+      const startDateTimeUTC = utcDate.toISOString();
 
             // בחירת התבנית הנכונה לפי שפת הלקוח
       const titleTemplate = getTemplate(actions.calendar_event, 'title_template', 'title_template_en');

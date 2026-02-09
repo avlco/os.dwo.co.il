@@ -1,8 +1,6 @@
 // functions/createCalendarEvent.ts
 // @ts-nocheck
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.6';
-import { toZonedTime, formatInTimeZone } from 'npm:date-fns-tz@2.0.0';
-
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
