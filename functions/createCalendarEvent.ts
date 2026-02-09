@@ -1,6 +1,7 @@
 // functions/createCalendarEvent.ts
 // @ts-nocheck
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.6';
+import { toZonedTime, formatInTimeZone } from 'npm:date-fns-tz@2.0.0';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -44,7 +45,8 @@ Deno.serve(async (req) => {
     const { 
       title, 
       description, 
-      start_date, 
+      start_date, // Receives UTC ISO string: YYYY-MM-DDTHH:mm:ss.sssZ
+      event_timezone = 'Asia/Jerusalem',
       duration_minutes = 60,
       case_id, 
       client_id,
@@ -54,6 +56,8 @@ Deno.serve(async (req) => {
     } = body;
 
     console.log('[Calendar] Creating event:', title);
+    console.log('[Calendar] Start date (UTC ISO):', start_date);
+    console.log('[Calendar] Event timezone:', event_timezone);
     console.log('[Calendar] Attendees:', attendees);
     console.log('[Calendar] Create Meet:', create_meet_link);
 
@@ -106,21 +110,21 @@ Deno.serve(async (req) => {
       }
     }
 
-    // Calculate end_date
+    // start_date is UTC ISO string - parse and calculate end time
     const start = new Date(start_date);
     const end = new Date(start.getTime() + duration_minutes * 60 * 1000);
 
-    // Build event
+    // Build event - dateTime is UTC ISO, timeZone indicates display timezone
     const event = {
       summary: title,
       description: description || '',
       start: {
         dateTime: start.toISOString(),
-        timeZone: 'Asia/Tel_Aviv'
+        timeZone: event_timezone
       },
       end: {
         dateTime: end.toISOString(),
-        timeZone: 'Asia/Tel_Aviv'
+        timeZone: event_timezone
       },
       reminders: {
         useDefault: false,
