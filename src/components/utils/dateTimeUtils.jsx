@@ -229,11 +229,10 @@ export function formatForDateTimeInput(date, settings = null) {
   const effectiveSettings = settings || getDateTimeSettings();
   const timezone = effectiveSettings.timezone || DEFAULT_SETTINGS.timezone;
   
-  const dateObj = typeof date === 'string' ? parseISO(date) : new Date(date);
+  const dateObj = parseDateSafe(date);
   
   if (isNaN(dateObj.getTime())) return '';
   
-  // המרה לאזור הזמן המוגדר
   return formatTz(dateObj, "yyyy-MM-dd'T'HH:mm", { timeZone: timezone });
 }
 
