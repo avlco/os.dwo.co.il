@@ -705,9 +705,10 @@ Deno.serve(async (req) => {
       );
       const timeOfDay = actions.calendar_event.time_of_day || '09:00';
       
-      // Build local date-time string for Asia/Jerusalem (without 'Z' suffix)
-      // This ensures Google Calendar interprets the time correctly in the specified timezone
-      const startDateTimeLocal = `${calculatedDay}T${timeOfDay}:00`;
+      // Convert local time to UTC ISO format for unambiguous interpretation
+      const targetDateTimeString = `${calculatedDay}T${timeOfDay}:00`;
+      const zonedDateTime = toZonedTime(targetDateTimeString, timeZone);
+      const startDateTimeUTC = zonedDateTime.toISOString();
 
             // בחירת התבנית הנכונה לפי שפת הלקוח
       const titleTemplate = getTemplate(actions.calendar_event, 'title_template', 'title_template_en');
@@ -716,7 +717,7 @@ Deno.serve(async (req) => {
       const eventData = {
         title: await replaceTokens(titleTemplate || 'תזכורת', { mail, caseId, clientId }, base44),
         description: await replaceTokens(descTemplate || '', { mail, caseId, clientId }, base44),
-        start_date: startDateTimeLocal,
+        start_date: startDateTimeUTC,
         event_timezone: timeZone,
         duration_minutes: actions.calendar_event.duration_minutes || 60,
         case_id: caseId,

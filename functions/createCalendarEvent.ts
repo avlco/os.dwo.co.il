@@ -45,7 +45,7 @@ Deno.serve(async (req) => {
     const { 
       title, 
       description, 
-      start_date, // Now receives local time string: YYYY-MM-DDTHH:mm:ss (without 'Z')
+      start_date, // Receives UTC ISO string: YYYY-MM-DDTHH:mm:ss.sssZ
       event_timezone = 'Asia/Jerusalem',
       duration_minutes = 60,
       case_id, 
@@ -56,7 +56,7 @@ Deno.serve(async (req) => {
     } = body;
 
     console.log('[Calendar] Creating event:', title);
-    console.log('[Calendar] Start date (Local time):', start_date);
+    console.log('[Calendar] Start date (UTC ISO):', start_date);
     console.log('[Calendar] Event timezone:', event_timezone);
     console.log('[Calendar] Attendees:', attendees);
     console.log('[Calendar] Create Meet:', create_meet_link);
@@ -110,24 +110,20 @@ Deno.serve(async (req) => {
       }
     }
 
-    // start_date is now a local time string (YYYY-MM-DDTHH:mm:ss) without 'Z'
-    // Parse it as a date in the specified timezone to calculate the end time correctly
-    const zonedStart = toZonedTime(start_date, event_timezone);
-    const zonedEnd = new Date(zonedStart.getTime() + duration_minutes * 60 * 1000);
-    
-    // Format both start and end as local ISO strings (without 'Z')
-    const end_date_local = formatInTimeZone(zonedEnd, event_timezone, 'yyyy-MM-dd\'T\'HH:mm:ss');
+    // start_date is UTC ISO string - parse and calculate end time
+    const start = new Date(start_date);
+    const end = new Date(start.getTime() + duration_minutes * 60 * 1000);
 
-    // Build event - dateTime is local time string, timeZone indicates interpretation
+    // Build event - dateTime is UTC ISO, timeZone indicates display timezone
     const event = {
       summary: title,
       description: description || '',
       start: {
-        dateTime: start_date, // Local time string: YYYY-MM-DDTHH:mm:ss
+        dateTime: start.toISOString(),
         timeZone: event_timezone
       },
       end: {
-        dateTime: end_date_local, // Local time string: YYYY-MM-DDTHH:mm:ss
+        dateTime: end.toISOString(),
         timeZone: event_timezone
       },
       reminders: {
