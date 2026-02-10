@@ -310,18 +310,32 @@ const reorder = (list, startIndex, endIndex) => {
 };
 
 export default function PathBuilder({ segments = [], onChange, rootPath = '', onRootPathChange }) {
-  const [localSegments, setLocalSegments] = useState([]);
-  const hasInitialized = React.useRef(false);
-  const userHasInteracted = React.useRef(false);
+  const [localSegments, setLocalSegments] = useState(() => {
+    // Initialize with segments from props or default
+    if (segments && segments.length > 0) {
+      return segments.map((seg, idx) => ({
+        ...seg,
+        id: seg.id || `seg_init_${idx}_${Math.random().toString(36).substr(2, 9)}`,
+      }));
+    }
+    return [createDefaultSegment('fixed')];
+  });
 
-  // Initialize segments from props - only once
+  const userHasInteracted = React.useRef(false);
+  const lastPropsSignature = React.useRef(JSON.stringify(segments));
+
+  // Sync with props when they change externally (e.g., rule switch)
   useEffect(() => {
-    if (!hasInitialized.current) {
-      hasInitialized.current = true;
+    const newSignature = JSON.stringify(segments);
+    if (newSignature !== lastPropsSignature.current) {
+      // Props changed externally - reset and reinitialize
+      lastPropsSignature.current = newSignature;
+      userHasInteracted.current = false;
+
       if (segments && segments.length > 0) {
         const withIds = segments.map((seg, idx) => ({
           ...seg,
-          id: seg.id || `seg_init_${idx}_${Math.random().toString(36).substr(2, 9)}`,
+          id: seg.id || `seg_sync_${idx}_${Math.random().toString(36).substr(2, 9)}`,
         }));
         setLocalSegments(withIds);
       } else {
@@ -335,8 +349,10 @@ export default function PathBuilder({ segments = [], onChange, rootPath = '', on
     if (userHasInteracted.current && localSegments.length > 0) {
       const cleanSegments = localSegments.map(({ id, ...rest }) => rest);
       onChange(cleanSegments);
+      // Update the signature to match what we just sent
+      lastPropsSignature.current = JSON.stringify(cleanSegments);
     }
-  }, [localSegments]);
+  }, [localSegments, onChange]);
 
   // Wrapper to mark user interaction
   const updateSegmentsWithInteraction = (newSegments) => {
