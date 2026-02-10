@@ -52,7 +52,7 @@ export default function ApprovalQueue() {
   const { user: currentUser } = useAuth();
   const queryClient = useQueryClient();
   const { formatDateTime } = useDateTimeSettings();
-  const [filterStatus, setFilterStatus] = useState('pending');
+  const [filterStatus, setFilterStatus] = useState('all');
   const [selectedApproval, setSelectedApproval] = useState(null);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [rejectionReason, setRejectionReason] = useState('');
