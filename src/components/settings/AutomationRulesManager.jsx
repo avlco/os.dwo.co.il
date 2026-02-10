@@ -232,6 +232,41 @@ function TimingSelector({ base, docketType, direction, offset, unit, onBaseChang
   );
 }
 
+// ActionSection component - defined outside to prevent recreation on each render
+function ActionSection({ actionKey, label, enabled, onToggleEnabled, isCollapsed, onToggleCollapse, children }) {
+  return (
+    <div className="border dark:border-slate-700 rounded-lg overflow-hidden">
+      <div
+        className={`flex items-center justify-between p-3 cursor-pointer select-none ${
+          enabled ? 'bg-blue-50 dark:bg-blue-950/30' : 'bg-slate-50 dark:bg-slate-900'
+        }`}
+        onClick={() => enabled && onToggleCollapse(actionKey)}
+      >
+        <div className="flex items-center gap-2">
+          <Checkbox
+            checked={enabled}
+            onCheckedChange={onToggleEnabled}
+            onClick={(e) => e.stopPropagation()}
+          />
+          <Label className={`font-medium text-sm cursor-pointer ${enabled ? 'text-blue-700 dark:text-blue-300' : ''}`}>
+            {label}
+          </Label>
+        </div>
+        {enabled && (
+          <button type="button" className="p-1 hover:bg-slate-200 dark:hover:bg-slate-700 rounded">
+            {isCollapsed ? <ChevronDown className="w-4 h-4" /> : <ChevronUp className="w-4 h-4" />}
+          </button>
+        )}
+      </div>
+      {enabled && !isCollapsed && (
+        <div className="p-3 pt-0 space-y-3">
+          {children}
+        </div>
+      )}
+    </div>
+  );
+}
+
 
 export default function AutomationRulesManager() {
   const { t } = useTranslation();
@@ -465,42 +500,6 @@ export default function AutomationRulesManager() {
     }));
   };
 
-  // Reusable ActionSection component for collapsible action blocks
-  const ActionSection = ({ actionKey, label, enabled, onToggleEnabled, children }) => {
-    const isCollapsed = collapsedActions[actionKey];
-    return (
-      <div className="border dark:border-slate-700 rounded-lg overflow-hidden">
-        <div
-          className={`flex items-center justify-between p-3 cursor-pointer select-none ${
-            enabled ? 'bg-blue-50 dark:bg-blue-950/30' : 'bg-slate-50 dark:bg-slate-900'
-          }`}
-          onClick={() => enabled && toggleActionCollapsed(actionKey)}
-        >
-          <div className="flex items-center gap-2">
-            <Checkbox
-              checked={enabled}
-              onCheckedChange={onToggleEnabled}
-              onClick={(e) => e.stopPropagation()}
-            />
-            <Label className={`font-medium text-sm cursor-pointer ${enabled ? 'text-blue-700 dark:text-blue-300' : ''}`}>
-              {label}
-            </Label>
-          </div>
-          {enabled && (
-            <button className="p-1 hover:bg-slate-200 dark:hover:bg-slate-700 rounded">
-              {isCollapsed ? <ChevronDown className="w-4 h-4" /> : <ChevronUp className="w-4 h-4" />}
-            </button>
-          )}
-        </div>
-        {enabled && !isCollapsed && (
-          <div className="p-3 pt-0 space-y-3">
-            {children}
-          </div>
-        )}
-      </div>
-    );
-  };
-
   if (isLoading) return <Card className="p-6 text-center dark:bg-slate-800">{t('common.loading')}</Card>;
 
   return (
@@ -697,6 +696,8 @@ export default function AutomationRulesManager() {
                     label={t('automation_rules.action_billing')}
                     enabled={currentRule.action_bundle.billing.enabled}
                     onToggleEnabled={c => updateAction('billing', 'enabled', c)}
+                    isCollapsed={collapsedActions.billing}
+                    onToggleCollapse={toggleActionCollapsed}
                   >
                     <div className="grid grid-cols-2 gap-3 pt-3">
                       <div>
@@ -720,6 +721,8 @@ export default function AutomationRulesManager() {
                     label={t('automation_rules.action_alert')}
                     enabled={currentRule.action_bundle.create_alert.enabled}
                     onToggleEnabled={c => updateAction('create_alert', 'enabled', c)}
+                    isCollapsed={collapsedActions.create_alert}
+                    onToggleCollapse={toggleActionCollapsed}
                   >
                     <div className="space-y-3 pt-3">
                       <div className="grid grid-cols-2 gap-3">
@@ -800,6 +803,8 @@ export default function AutomationRulesManager() {
                     label={t('automation_rules.action_calendar')}
                     enabled={currentRule.action_bundle.calendar_event.enabled}
                     onToggleEnabled={c => updateAction('calendar_event', 'enabled', c)}
+                    isCollapsed={collapsedActions.calendar_event}
+                    onToggleCollapse={toggleActionCollapsed}
                   >
                     <div className="space-y-3 pt-3">
                       <div className="space-y-1.5">
@@ -880,6 +885,8 @@ export default function AutomationRulesManager() {
                     label={t('automation_rules.action_email')}
                     enabled={currentRule.action_bundle.send_email.enabled}
                     onToggleEnabled={c => updateAction('send_email', 'enabled', c)}
+                    isCollapsed={collapsedActions.send_email}
+                    onToggleCollapse={toggleActionCollapsed}
                   >
                     <div className="space-y-3 pt-3">
                       <div>
@@ -927,10 +934,13 @@ export default function AutomationRulesManager() {
                     label={t('automation_rules.action_save_file')}
                     enabled={currentRule.action_bundle.save_file.enabled}
                     onToggleEnabled={c => updateAction('save_file', 'enabled', c)}
+                    isCollapsed={collapsedActions.save_file}
+                    onToggleCollapse={toggleActionCollapsed}
                   >
                     <div className="space-y-4 pt-3">
-                      {/* Path Builder */}
+                      {/* Path Builder - key forces remount when rule changes */}
                       <PathBuilder
+                        key={currentRule.id || 'new'}
                         segments={currentRule.action_bundle.save_file.path_segments || []}
                         rootPath={currentRule.action_bundle.save_file.root_path || ''}
                         onChange={(segments) => updateAction('save_file', 'path_segments', segments)}
