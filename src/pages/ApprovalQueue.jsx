@@ -1,38 +1,23 @@
 import React, { useState, useMemo } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { base44 } from '@/api/base44Client';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../lib/AuthContext';
 import { createPageUrl } from '../utils';
-import PageHeader from '../components/ui/PageHeader';
 import { useDateTimeSettings } from '../components/DateTimeSettingsProvider';
-import DataTable from '../components/ui/DataTable';
 import EmptyState from '../components/ui/EmptyState';
 import {
   CheckCircle,
   XCircle,
   Clock,
   Mail,
-  Briefcase,
   User,
-  AlertCircle,
-  MessageSquare,
   ArrowRight,
   Edit,
-  Play,
-  Package,
-  AlertTriangle
 } from 'lucide-react';
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
-} from "@/components/ui/dialog";
 import {
   Select,
   SelectContent,
@@ -40,25 +25,16 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent } from "@/components/ui/card";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 export default function ApprovalQueue() {
   const { t, i18n } = useTranslation();
-  const isRTL = i18n.language === 'he';
   const navigate = useNavigate();
   const { user: currentUser } = useAuth();
-  const queryClient = useQueryClient();
   const { formatDateTime } = useDateTimeSettings();
   const [filterStatus, setFilterStatus] = useState('all');
-  const [selectedApproval, setSelectedApproval] = useState(null);
-  const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const [rejectionReason, setRejectionReason] = useState('');
-  const [activeTab, setActiveTab] = useState('batches');
 
-  // Fetch ApprovalBatches (new system) - כל האצוות, ללא סינון ראשוני
+  // Fetch ApprovalBatches - כל האצוות, ללא סינון ראשוני
   const { data: allBatches = [], isLoading: batchesLoading } = useQuery({
     queryKey: ['approval-batches'],
     queryFn: async () => {
@@ -74,300 +50,12 @@ export default function ApprovalQueue() {
       cancelled: ['cancelled', 'failed'],
       all: null
     };
-    
+
     const allowedStatuses = statusMap[filterStatus];
     if (!allowedStatuses) return allBatches;
-    
+
     return allBatches.filter(b => allowedStatuses.includes(b.status));
   }, [allBatches, filterStatus]);
-
-  // Fetch legacy approval activities AND automation logs (for full visibility)
-  const { data: legacyApprovals = [], isLoading: legacyLoading } = useQuery({
-    queryKey: ['legacy-approvals', filterStatus],
-    queryFn: async () => {
-      const activities = await base44.entities.Activity.list('-created_date', 500);
-      
-      // Filter for approval activities AND automation logs
-      return activities.filter(a => 
-        (a.activity_type === 'approval_request' || a.activity_type === 'automation_log') &&
-        (filterStatus === 'all' || a.status === filterStatus)
-      );
-    },
-  });
-
-  const isLoading = batchesLoading || legacyLoading;
-
-  // Fetch related data (only for legacy approvals)
-  const { data: cases = [] } = useQuery({
-    queryKey: ['cases'],
-    queryFn: () => base44.entities.Case.list('-created_date', 500),
-    enabled: legacyApprovals.length > 0
-  });
-
-  const { data: clients = [] } = useQuery({
-    queryKey: ['clients'],
-    queryFn: () => base44.entities.Client.list('-created_date', 500),
-    enabled: legacyApprovals.length > 0
-  });
-
-  const { data: mails = [] } = useQuery({
-    queryKey: ['mails'],
-    queryFn: () => base44.entities.Mail.list('-created_date', 500),
-    enabled: legacyApprovals.length > 0
-  });
-
-  // Approve mutation
-  const approveMutation = useMutation({
-    mutationFn: async (activityId) => {
-      const response = await fetch(`${base44.config.functionsUrl}/handleApprovalWorkflow`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${base44.config.token}`,
-        },
-        body: JSON.stringify({
-          action: 'approve',
-          activityId,
-        }),
-      });
-
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || 'Failed to approve');
-      }
-
-      return response.json();
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries(['approvals']);
-      setIsDialogOpen(false);
-      setSelectedApproval(null);
-    },
-  });
-
-  // Reject mutation
-  const rejectMutation = useMutation({
-    mutationFn: async ({ activityId, reason }) => {
-      const response = await fetch(`${base44.config.functionsUrl}/handleApprovalWorkflow`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${base44.config.token}`,
-        },
-        body: JSON.stringify({
-          action: 'reject',
-          activityId,
-          reason,
-        }),
-      });
-
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || 'Failed to reject');
-      }
-
-      return response.json();
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries(['approvals']);
-      setIsDialogOpen(false);
-      setSelectedApproval(null);
-      setRejectionReason('');
-    },
-  });
-
-  const handleApprove = (approval) => {
-    if (confirm('האם אתה בטוח שברצונך לאשר פעולה זו?')) {
-      approveMutation.mutate(approval.id);
-    }
-  };
-
-  const handleReject = (approval) => {
-    setSelectedApproval(approval);
-    setIsDialogOpen(true);
-  };
-
-  const submitRejection = () => {
-    if (!rejectionReason.trim()) {
-      alert('נא להזין סיבת דחייה');
-      return;
-    }
-    rejectMutation.mutate({
-      activityId: selectedApproval.id,
-      reason: rejectionReason,
-    });
-  };
-
-  const openDetailsDialog = (approval) => {
-    setSelectedApproval(approval);
-    setIsDialogOpen(true);
-  };
-
-  const getCaseName = (caseId) => {
-    const caseItem = cases.find(c => c.id === caseId);
-    return caseItem?.case_number || '-';
-  };
-
-  const getClientName = (clientId) => {
-    const client = clients.find(c => c.id === clientId);
-    return client?.name || '-';
-  };
-
-  const getMailSubject = (mailId) => {
-    const mail = mails.find(m => m.id === mailId);
-    return mail?.subject || '-';
-  };
-
-  const getActionTypeLabel = (type) => {
-    if (!type) return '-';
-    const labels = {
-      send_email: 'שליחת מייל',
-      create_task: 'יצירת משימה',
-      create_deadline: 'יצירת מועד',
-      billing: 'חיוב שעות',
-      calendar_event: 'אירוע ביומן',
-    };
-    return labels[type] || type;
-  };
-
-  const getStatusBadge = (status) => {
-    const variants = {
-      pending: { color: 'bg-yellow-50 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-300', label: 'ממתין' },
-      completed: { color: 'bg-green-50 text-green-700 dark:bg-green-900/30 dark:text-green-300', label: 'אושר' },
-      cancelled: { color: 'bg-red-50 text-red-700 dark:bg-red-900/30 dark:text-red-300', label: 'נדחה' },
-    };
-    const variant = variants[status] || variants.pending;
-    return <Badge className={variant.color}>{variant.label}</Badge>;
-  };
-
-  const isExpired = (approval) => {
-    const expiresAt = approval.metadata?.expires_at;
-    if (!expiresAt) return false;
-    return new Date(expiresAt) < new Date();
-  };
-
-  const columns = [
-    {
-      header: t('approval_queue.status_col'),
-      render: (row) => (
-        <div className="flex items-center gap-2">
-          {getStatusBadge(row.status)}
-          {isExpired(row) && row.status === 'pending' && (
-            <Badge className="bg-gray-100 text-gray-600">
-              <Clock className="w-3 h-3 mr-1" />
-              {t('approval_queue.expired')}
-            </Badge>
-          )}
-        </div>
-      ),
-    },
-    {
-      header: t('approval_queue.action_type_col'),
-      render: (row) => {
-        const label = row.activity_type === 'automation_log'
-          ? (row.metadata?.rule_name || row.title || t('approval_queue.automation_log_tab'))
-          : getActionTypeLabel(row.metadata?.action_type);
-        return (
-          <div className="flex items-center gap-2">
-            <AlertCircle className="w-4 h-4 text-blue-600" />
-            <span className="font-medium dark:text-slate-200">
-              {label}
-            </span>
-          </div>
-        );
-      },
-    },
-    {
-      header: t('approval_queue.case_col'),
-      render: (row) => (
-        <div className="flex items-center gap-2 text-sm">
-          <Briefcase className="w-4 h-4 text-slate-500" />
-          <span className="dark:text-slate-300">{getCaseName(row.case_id)}</span>
-        </div>
-      ),
-    },
-    {
-      header: t('approval_queue.client_col'),
-      render: (row) => (
-        <span className="text-sm dark:text-slate-300">
-          {getClientName(row.client_id || row.metadata?.client_id)}
-        </span>
-      ),
-    },
-    {
-      header: t('approval_queue.original_mail_col'),
-      render: (row) => (
-        <div className="flex items-center gap-2 text-sm">
-          <Mail className="w-4 h-4 text-slate-500" />
-          <span className="dark:text-slate-400 truncate max-w-xs">
-            {row.metadata?.mail_subject || getMailSubject(row.metadata?.mail_id)}
-          </span>
-        </div>
-      ),
-    },
-    {
-      header: t('approval_queue.requested_by_col'),
-      render: (row) => (
-        <div className="flex items-center gap-2 text-sm">
-          <User className="w-4 h-4 text-slate-500" />
-          <span className="dark:text-slate-400">
-            {row.metadata?.requested_by?.split('@')[0] || row.metadata?.approver_email?.split('@')[0] || row.created_by?.split('@')[0] || t('approval_queue.system_label', 'System')}
-          </span>
-        </div>
-      ),
-    },
-    {
-      header: t('approval_queue.date_col'),
-      render: (row) => {
-        const dateToShow = row.activity_type === 'automation_log' && row.metadata?.logged_at
-          ? row.metadata.logged_at
-          : row.created_date;
-        return (
-          <span className="text-sm dark:text-slate-400">
-            {formatDateTime(dateToShow)}
-          </span>
-        );
-      },
-    },
-    {
-      header: t('approval_queue.actions_col'),
-      render: (row) => (
-        <div className="flex items-center gap-2">
-          {row.status === 'pending' && !isExpired(row) && (
-            <>
-              <Button
-                size="sm"
-                variant="ghost"
-                className="text-green-600 hover:text-green-700 hover:bg-green-50"
-                onClick={() => handleApprove(row)}
-                disabled={approveMutation.isPending}
-              >
-                <CheckCircle className="w-4 h-4 mr-1" />
-                {t('common.approve', 'Approve')}
-              </Button>
-              <Button
-                size="sm"
-                variant="ghost"
-                className="text-red-600 hover:text-red-700 hover:bg-red-50"
-                onClick={() => handleReject(row)}
-                disabled={rejectMutation.isPending}
-              >
-                <XCircle className="w-4 h-4 mr-1" />
-                {t('common.reject', 'Reject')}
-              </Button>
-            </>
-          )}
-          <Button
-            size="sm"
-            variant="ghost"
-            onClick={() => openDetailsDialog(row)}
-          >
-            {t('common.details', 'Details')}
-          </Button>
-        </div>
-      ),
-    },
-  ];
 
   // Batch status badge
   const getBatchStatusBadge = (status) => {
@@ -384,11 +72,10 @@ export default function ApprovalQueue() {
     return <Badge className={v.color}>{v.label}</Badge>;
   };
 
-  // Count stats
-  const pendingBatches = batches.filter(b => ['pending', 'editing'].includes(b.status)).length;
-  const executedBatches = batches.filter(b => b.status === 'executed').length;
-  const failedBatches = batches.filter(b => ['cancelled', 'failed'].includes(b.status)).length;
-  const pendingLegacy = legacyApprovals.filter(a => a.status === 'pending').length;
+  // Count stats - always from allBatches (unfiltered)
+  const pendingBatches = allBatches.filter(b => ['pending', 'editing'].includes(b.status)).length;
+  const executedBatches = allBatches.filter(b => b.status === 'executed').length;
+  const failedBatches = allBatches.filter(b => ['cancelled', 'failed'].includes(b.status)).length;
 
   return (
     <div className="space-y-6">
@@ -396,7 +83,7 @@ export default function ApprovalQueue() {
         <div>
           <h1 className="text-2xl font-bold text-slate-800 dark:text-slate-200">{t('approval_queue.title')}</h1>
           <p className="text-slate-500 dark:text-slate-400 mt-1">
-            {t('approval_queue.pending_requests', { count: pendingBatches + pendingLegacy })}
+            {t('approval_queue.pending_requests', { count: pendingBatches })}
           </p>
         </div>
         <Button
@@ -416,329 +103,160 @@ export default function ApprovalQueue() {
             <SelectValue />
           </SelectTrigger>
           <SelectContent className="dark:bg-slate-800 dark:border-slate-700">
+            <SelectItem value="all" className="dark:text-slate-200">{t('common.all')}</SelectItem>
             <SelectItem value="pending" className="dark:text-slate-200">{t('approval_queue.pending_tab')}</SelectItem>
             <SelectItem value="completed" className="dark:text-slate-200">{t('approval_queue.executed_tab')}</SelectItem>
             <SelectItem value="cancelled" className="dark:text-slate-200">{t('approval_queue.failed_tab')}</SelectItem>
-            <SelectItem value="all" className="dark:text-slate-200">{t('common.all')}</SelectItem>
           </SelectContent>
         </Select>
       </div>
 
       {/* Stats Cards */}
       <div className="grid grid-cols-3 gap-4">
-        <Card>
+        <Card
+          className={`cursor-pointer transition-all ${filterStatus === 'pending' ? 'ring-2 ring-yellow-500 shadow-md' : 'hover:shadow-sm'}`}
+          onClick={() => setFilterStatus(filterStatus === 'pending' ? 'all' : 'pending')}
+        >
           <CardContent className="pt-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-slate-600 dark:text-slate-400">{t('approval_queue.pending_count')}</p>
-                <p className="text-2xl font-bold dark:text-slate-200">
+                <p className={`text-sm ${filterStatus === 'pending' ? 'text-yellow-700 dark:text-yellow-300 font-medium' : 'text-slate-600 dark:text-slate-400'}`}>
+                  {t('approval_queue.pending_count')}
+                </p>
+                <p className={`text-2xl font-bold ${filterStatus === 'pending' ? 'text-yellow-700 dark:text-yellow-300' : 'dark:text-slate-200'}`}>
                   {pendingBatches}
-                  {pendingLegacy > 0 && <span className="text-sm text-slate-400 mr-1">(+{pendingLegacy} {t('approval_queue.old_requests')})</span>}
                 </p>
               </div>
-              <Clock className="w-8 h-8 text-yellow-600" />
+              <Clock className={`w-8 h-8 ${filterStatus === 'pending' ? 'text-yellow-600' : 'text-yellow-600/50'}`} />
             </div>
           </CardContent>
         </Card>
-        <Card>
+        <Card
+          className={`cursor-pointer transition-all ${filterStatus === 'completed' ? 'ring-2 ring-green-500 shadow-md' : 'hover:shadow-sm'}`}
+          onClick={() => setFilterStatus(filterStatus === 'completed' ? 'all' : 'completed')}
+        >
           <CardContent className="pt-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-slate-600 dark:text-slate-400">{t('approval_queue.executed_count')}</p>
-                <p className="text-2xl font-bold text-green-600">
+                <p className={`text-sm ${filterStatus === 'completed' ? 'text-green-700 dark:text-green-300 font-medium' : 'text-slate-600 dark:text-slate-400'}`}>
+                  {t('approval_queue.executed_count')}
+                </p>
+                <p className={`text-2xl font-bold ${filterStatus === 'completed' ? 'text-green-700 dark:text-green-300' : 'text-green-600'}`}>
                   {executedBatches}
                 </p>
               </div>
-              <CheckCircle className="w-8 h-8 text-green-600" />
+              <CheckCircle className={`w-8 h-8 ${filterStatus === 'completed' ? 'text-green-600' : 'text-green-600/50'}`} />
             </div>
           </CardContent>
         </Card>
-        <Card>
+        <Card
+          className={`cursor-pointer transition-all ${filterStatus === 'cancelled' ? 'ring-2 ring-red-500 shadow-md' : 'hover:shadow-sm'}`}
+          onClick={() => setFilterStatus(filterStatus === 'cancelled' ? 'all' : 'cancelled')}
+        >
           <CardContent className="pt-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-slate-600 dark:text-slate-400">{t('approval_queue.failed_count')}</p>
-                <p className="text-2xl font-bold text-red-600">
+                <p className={`text-sm ${filterStatus === 'cancelled' ? 'text-red-700 dark:text-red-300 font-medium' : 'text-slate-600 dark:text-slate-400'}`}>
+                  {t('approval_queue.failed_count')}
+                </p>
+                <p className={`text-2xl font-bold ${filterStatus === 'cancelled' ? 'text-red-700 dark:text-red-300' : 'text-red-600'}`}>
                   {failedBatches}
                 </p>
               </div>
-              <XCircle className="w-8 h-8 text-red-600" />
+              <XCircle className={`w-8 h-8 ${filterStatus === 'cancelled' ? 'text-red-600' : 'text-red-600/50'}`} />
             </div>
           </CardContent>
         </Card>
       </div>
 
-      {/* Tabs: Batches vs Legacy */}
-      <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList>
-          <TabsTrigger value="batches" className="gap-2">
-            <Package className="w-4 h-4" />
-            {t('approval_queue.batches_tab')} ({batches.length})
-          </TabsTrigger>
-          {legacyApprovals.length > 0 && (
-            <TabsTrigger value="legacy" className="gap-2">
-              <AlertTriangle className="w-4 h-4" />
-              {t('approval_queue.automation_log_tab')} ({legacyApprovals.length})
-            </TabsTrigger>
-          )}
-        </TabsList>
+      {/* Batches List */}
+      {batches.length === 0 && !batchesLoading ? (
+        <EmptyState
+          icon={CheckCircle}
+          title={t('approval_queue.no_batches')}
+          description={t('approval_queue.all_processed')}
+        />
+      ) : (
+        <div className="space-y-3">
+          {batches.map(batch => {
+            const isExpired = batch.expires_at && new Date(batch.expires_at) < new Date();
+            const enabledActions = (batch.actions_current || []).filter(a => a.enabled).length;
+            const totalActions = (batch.actions_current || []).length;
 
-        {/* Batches Tab */}
-        <TabsContent value="batches" className="mt-4">
-          {batches.length === 0 && !batchesLoading ? (
-            <EmptyState
-              icon={CheckCircle}
-              title={t('approval_queue.no_batches')}
-              description={t('approval_queue.all_processed')}
-            />
-          ) : (
-            <div className="space-y-3">
-              {batches.map(batch => {
-                const isExpired = batch.expires_at && new Date(batch.expires_at) < new Date();
-                const enabledActions = (batch.actions_current || []).filter(a => a.enabled).length;
-                const totalActions = (batch.actions_current || []).length;
-                
-                return (
-                  <Card key={batch.id} className="hover:shadow-md transition-shadow dark:bg-slate-800 dark:border-slate-700">
-                    <CardContent className="pt-4">
-                      <div className="flex items-start justify-between">
-                        <div className="flex-1 space-y-2">
-                          <div className="flex items-center gap-2">
-                            {getBatchStatusBadge(batch.status)}
-                            {isExpired && ['pending', 'editing'].includes(batch.status) && (
-                              <Badge className="bg-orange-100 text-orange-700">
-                                <Clock className="w-3 h-3 mr-1" />
-                                {t('approval_queue.expired')}
-                              </Badge>
-                            )}
-                            <span className="text-sm text-slate-500">
-                              {enabledActions}/{totalActions} {t('approval_queue.actions_count')}
-                            </span>
-                          </div>
-                          
-                          <h3 className="font-medium text-slate-800 dark:text-slate-200 truncate">
-                            {batch.automation_rule_name || '-'}
-                          </h3>
-                          
-                          <div className="flex items-center gap-4 text-sm text-slate-600 dark:text-slate-400">
-                            <span className="flex items-center gap-1 truncate">
-                              <Mail className="w-4 h-4 flex-shrink-0" />
-                              <span className="truncate">{batch.mail_subject?.substring(0, 50) || '-'}</span>
-                            </span>
-                            <span className="flex items-center gap-1">
-                              <User className="w-4 h-4" />
-                              {batch.mail_from?.split('@')[0] || '-'}
-                            </span>
-                          </div>
-                          
-                          <p className="text-xs text-slate-500">
-                            {t('approval_queue.created_at')} {formatDateTime(batch.created_date)}
-                            {batch.approved_at && ` | ${t('common.approved', 'Approved')}: ${formatDateTime(batch.approved_at)}`}
-                          </p>
-                        </div>
-                        
-                        <div className="flex gap-2">
-                                                    {['pending', 'editing'].includes(batch.status) &&
-                           (currentUser?.role === 'admin' || currentUser?.email?.toLowerCase() === batch.approver_email?.toLowerCase()) && (
-                             (currentUser?.email && batch.approver_email && currentUser.email.toLowerCase() === batch.approver_email.toLowerCase()) ||
-                             (currentUser?.id && batch.user_id && String(currentUser.id) === String(batch.user_id))
-                            ) && (
-                            <>
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() => navigate(createPageUrl('ApprovalBatchEdit') + `?batchId=${batch.id}`)}
-                                className="gap-1"
-                              >
-                                <Edit className="w-4 h-4" />
-                                {t('approval_queue.edit')}
-                              </Button>
-                            </>
-                          )}
-                          {['executed', 'failed', 'cancelled'].includes(batch.status) && (
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              onClick={() => navigate(createPageUrl('ApprovalBatchEdit') + `?batchId=${batch.id}`)}
-                            >
-                              {t('common.details', 'Details')}
-                            </Button>
-                          )}
-                        </div>
+            return (
+              <Card key={batch.id} className="hover:shadow-md transition-shadow dark:bg-slate-800 dark:border-slate-700">
+                <CardContent className="pt-4">
+                  <div className="flex items-start justify-between">
+                    <div className="flex-1 space-y-2">
+                      <div className="flex items-center gap-2">
+                        {getBatchStatusBadge(batch.status)}
+                        {isExpired && ['pending', 'editing'].includes(batch.status) && (
+                          <Badge className="bg-orange-100 text-orange-700">
+                            <Clock className="w-3 h-3 mr-1" />
+                            {t('approval_queue.expired')}
+                          </Badge>
+                        )}
+                        <span className="text-sm text-slate-500">
+                          {enabledActions}/{totalActions} {t('approval_queue.actions_count')}
+                        </span>
                       </div>
-                    </CardContent>
-                  </Card>
-                );
-              })}
-            </div>
-          )}
-        </TabsContent>
 
-        {/* Legacy Tab */}
-        <TabsContent value="legacy" className="mt-4">
-          {legacyApprovals.length === 0 ? (
-            <EmptyState
-              icon={CheckCircle}
-              title={t('approval_queue.no_automation_activity')}
-              description={t('approval_queue.no_logs')}
-            />
-          ) : (
-            <>
-              <DataTable
-                columns={columns}
-                data={legacyApprovals}
-                isLoading={legacyLoading}
-                emptyMessage={t('common.no_results', 'No results')}
-              />
-            </>
-          )}
-        </TabsContent>
-      </Tabs>
+                      <h3 className="font-medium text-slate-800 dark:text-slate-200 truncate">
+                        {batch.automation_rule_name || '-'}
+                      </h3>
 
-      {/* Details/Rejection Dialog (for legacy approvals) */}
-      <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-        <DialogContent className="max-w-2xl">
-          <DialogHeader>
-            <DialogTitle className="dark:text-slate-200">
-              {selectedApproval?.status === 'pending' ? 'דחיית בקשה (מערכת ישנה)' : 'פרטי בקשת אישור'}
-            </DialogTitle>
-          </DialogHeader>
-          
-          {selectedApproval && (
-            <div className="space-y-4 mt-4">
-              <div className="bg-amber-50 dark:bg-amber-900/20 p-3 rounded-lg flex items-center gap-2 mb-4">
-                <AlertTriangle className="w-5 h-5 text-amber-600" />
-                <span className="text-amber-700 dark:text-amber-400 text-sm">
-                  זוהי בקשה מהמערכת הישנה. בקשות חדשות מנוהלות כחבילות אישור.
-                </span>
-              </div>
+                      <div className="flex items-center gap-4 text-sm text-slate-600 dark:text-slate-400">
+                        <span className="flex items-center gap-1 truncate">
+                          <Mail className="w-4 h-4 flex-shrink-0" />
+                          <span className="truncate">{batch.mail_subject?.substring(0, 50) || '-'}</span>
+                        </span>
+                        <span className="flex items-center gap-1">
+                          <User className="w-4 h-4" />
+                          {batch.mail_from?.split('@')[0] || '-'}
+                        </span>
+                      </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <Label className="text-sm text-slate-600 dark:text-slate-400">סוג פעולה</Label>
-                  <p className="font-medium dark:text-slate-200">
-                    {selectedApproval.activity_type === 'automation_log'
-                      ? (selectedApproval.metadata?.rule_name || selectedApproval.title || 'לוג אוטומציה')
-                      : getActionTypeLabel(selectedApproval.metadata?.action_type)}
-                  </p>
-                </div>
-                <div>
-                  <Label className="text-sm text-slate-600 dark:text-slate-400">סטטוס</Label>
-                  <div className="mt-1">{getStatusBadge(selectedApproval.status)}</div>
-                </div>
-                <div>
-                  <Label className="text-sm text-slate-600 dark:text-slate-400">תיק</Label>
-                  <p className="dark:text-slate-200">{getCaseName(selectedApproval.case_id)}</p>
-                </div>
-                <div>
-                  <Label className="text-sm text-slate-600 dark:text-slate-400">לקוח</Label>
-                  <p className="dark:text-slate-200">
-                    {getClientName(selectedApproval.client_id || selectedApproval.metadata?.client_id)}
-                  </p>
-                </div>
-              </div>
+                      <p className="text-xs text-slate-500">
+                        {t('approval_queue.created_at')} {formatDateTime(batch.created_date)}
+                        {batch.approved_at && ` | ${t('common.approved', 'Approved')}: ${formatDateTime(batch.approved_at)}`}
+                      </p>
+                    </div>
 
-              {selectedApproval.activity_type !== 'automation_log' ? (
-                <div>
-                  <Label className="text-sm text-slate-600 dark:text-slate-400">מייל מקורי</Label>
-                  <p className="dark:text-slate-200">{selectedApproval.metadata?.mail_subject || '-'}</p>
-                  <p className="text-sm text-slate-500">
-                    מאת: {selectedApproval.metadata?.mail_from || '-'}
-                  </p>
-                </div>
-              ) : (
-                <div>
-                  <Label className="text-sm text-slate-600 dark:text-slate-400">סוג</Label>
-                  <p className="dark:text-slate-200">פעילות אוטומציה</p>
-                </div>
-              )}
-
-              <div>
-                <Label className="text-sm text-slate-600 dark:text-slate-400">תאריך</Label>
-                <p className="dark:text-slate-200">
-                  {formatDateTime(
-                    selectedApproval.activity_type === 'automation_log' && selectedApproval.metadata?.logged_at
-                      ? selectedApproval.metadata.logged_at
-                      : selectedApproval.created_date
-                  )}
-                </p>
-              </div>
-
-              {selectedApproval.metadata?.action_config && (
-                <div>
-                  <Label className="text-sm text-slate-600 dark:text-slate-400">פרטי הפעולה</Label>
-                  <pre className="mt-2 p-3 bg-slate-50 dark:bg-slate-800 rounded text-xs overflow-auto max-h-40 dark:text-slate-300">
-                    {JSON.stringify(selectedApproval.metadata.action_config, null, 2)}
-                  </pre>
-                </div>
-              )}
-
-              {selectedApproval.status === 'pending' && (
-                <div>
-                  <Label className="dark:text-slate-300">סיבת דחייה</Label>
-                  <Textarea
-                    value={rejectionReason}
-                    onChange={(e) => setRejectionReason(e.target.value)}
-                    rows={3}
-                    placeholder="הזן סיבת דחייה..."
-                    className="mt-2 dark:bg-slate-900 dark:border-slate-600"
-                  />
-                </div>
-              )}
-
-              {selectedApproval.status === 'cancelled' && (
-                <div>
-                  <Label className="text-sm text-slate-600 dark:text-slate-400">סיבת דחייה</Label>
-                  <p className="dark:text-slate-200">
-                    {selectedApproval.metadata?.rejection_reason || 'לא צוין'}
-                  </p>
-                </div>
-              )}
-
-              {selectedApproval.status !== 'pending' && (
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <Label className="text-sm text-slate-600 dark:text-slate-400">
-                      {selectedApproval.status === 'completed' ? 'אושר על ידי' : 'נדחה על ידי'}
-                    </Label>
-                    <p className="dark:text-slate-200">
-                      {selectedApproval.metadata?.approved_by || '-'}
-                    </p>
+                    <div className="flex gap-2">
+                      {['pending', 'editing'].includes(batch.status) &&
+                        (currentUser?.role === 'admin' || currentUser?.email?.toLowerCase() === batch.approver_email?.toLowerCase()) && (
+                          (currentUser?.email && batch.approver_email && currentUser.email.toLowerCase() === batch.approver_email.toLowerCase()) ||
+                          (currentUser?.id && batch.user_id && String(currentUser.id) === String(batch.user_id))
+                        ) && (
+                        <>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => navigate(createPageUrl('ApprovalBatchEdit') + `?batchId=${batch.id}`)}
+                            className="gap-1"
+                          >
+                            <Edit className="w-4 h-4" />
+                            {t('approval_queue.edit')}
+                          </Button>
+                        </>
+                      )}
+                      {['executed', 'failed', 'cancelled'].includes(batch.status) && (
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => navigate(createPageUrl('ApprovalBatchEdit') + `?batchId=${batch.id}`)}
+                        >
+                          {t('common.details', 'Details')}
+                        </Button>
+                      )}
+                    </div>
                   </div>
-                  <div>
-                    <Label className="text-sm text-slate-600 dark:text-slate-400">תאריך</Label>
-                    <p className="dark:text-slate-200">
-                      {formatDateTime(selectedApproval.metadata?.approved_at)}
-                    </p>
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-
-          {selectedApproval?.status === 'pending' && (
-            <DialogFooter className="gap-2">
-              <Button
-                variant="outline"
-                onClick={() => {
-                  setIsDialogOpen(false);
-                  setRejectionReason('');
-                }}
-              >
-                ביטול
-              </Button>
-              <Button
-                variant="destructive"
-                onClick={submitRejection}
-                disabled={rejectMutation.isPending || !rejectionReason.trim()}
-              >
-                <XCircle className="w-4 h-4 mr-2" />
-                דחה בקשה
-              </Button>
-            </DialogFooter>
-          )}
-        </DialogContent>
-      </Dialog>
+                </CardContent>
+              </Card>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
