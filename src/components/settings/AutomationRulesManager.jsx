@@ -14,7 +14,7 @@ import { Badge } from "@/components/ui/badge";
 import { base44 } from '@/api/base44Client';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from "sonner";
-import { Plus, Edit, Trash2, X, Braces, ShieldCheck, Copy, Upload } from 'lucide-react';
+import { Plus, Edit, Trash2, X, Braces, ShieldCheck, Copy, Upload, ChevronDown, ChevronUp } from 'lucide-react';
 import ImportExportDialog from '../import-export/ImportExportDialog';
 import {
   DropdownMenu,
@@ -61,7 +61,7 @@ const defaultRule = {
     save_file: {
       enabled: false,
       path_segments: [],
-      root_path: '/DWO',
+      root_path: '',
       filename_template: '{Original_Filename}'
     },
         calendar_event: { 
@@ -245,6 +245,7 @@ export default function AutomationRulesManager() {
   const [currentRule, setCurrentRule] = useState(defaultRule);
   const [activeTab, setActiveTab] = useState("catch");
   const [sendersInput, setSendersInput] = useState('');
+  const [collapsedActions, setCollapsedActions] = useState({});
 
   const { data: rules = [], isLoading } = useQuery({
     queryKey: ['automationRules'],
@@ -457,6 +458,49 @@ export default function AutomationRulesManager() {
     }));
   };
 
+  const toggleActionCollapsed = (actionKey) => {
+    setCollapsedActions(prev => ({
+      ...prev,
+      [actionKey]: !prev[actionKey]
+    }));
+  };
+
+  // Reusable ActionSection component for collapsible action blocks
+  const ActionSection = ({ actionKey, label, enabled, onToggleEnabled, children }) => {
+    const isCollapsed = collapsedActions[actionKey];
+    return (
+      <div className="border dark:border-slate-700 rounded-lg overflow-hidden">
+        <div
+          className={`flex items-center justify-between p-3 cursor-pointer select-none ${
+            enabled ? 'bg-blue-50 dark:bg-blue-950/30' : 'bg-slate-50 dark:bg-slate-900'
+          }`}
+          onClick={() => enabled && toggleActionCollapsed(actionKey)}
+        >
+          <div className="flex items-center gap-2">
+            <Checkbox
+              checked={enabled}
+              onCheckedChange={onToggleEnabled}
+              onClick={(e) => e.stopPropagation()}
+            />
+            <Label className={`font-medium text-sm cursor-pointer ${enabled ? 'text-blue-700 dark:text-blue-300' : ''}`}>
+              {label}
+            </Label>
+          </div>
+          {enabled && (
+            <button className="p-1 hover:bg-slate-200 dark:hover:bg-slate-700 rounded">
+              {isCollapsed ? <ChevronDown className="w-4 h-4" /> : <ChevronUp className="w-4 h-4" />}
+            </button>
+          )}
+        </div>
+        {enabled && !isCollapsed && (
+          <div className="p-3 pt-0 space-y-3">
+            {children}
+          </div>
+        )}
+      </div>
+    );
+  };
+
   if (isLoading) return <Card className="p-6 text-center dark:bg-slate-800">{t('common.loading')}</Card>;
 
   return (
@@ -648,272 +692,263 @@ export default function AutomationRulesManager() {
               <Card>
                 <CardContent className="space-y-6 pt-6">
                   {/* Billing */}
-                  <div className="p-4 border dark:border-slate-700 rounded-lg space-y-4">
-                    <div className="flex items-center gap-2">
-                      <Checkbox checked={currentRule.action_bundle.billing.enabled} onCheckedChange={c => updateAction('billing', 'enabled', c)} />
-                      <Label className="font-medium">{t('automation_rules.action_billing')}</Label>
-                    </div>
-                    {currentRule.action_bundle.billing.enabled && (
-                      <div className="grid grid-cols-2 gap-3 pr-6">
-                        <div>
-                          <Label className="text-sm">{t('automation_rules.hours')}</Label>
-                          <Input type="number" step="0.25" value={currentRule.action_bundle.billing.hours} onChange={e => updateAction('billing', 'hours', parseFloat(e.target.value) || 0)} />
-                        </div>
-                        <div>
-                          <Label className="text-sm">{t('automation_rules.hourly_rate')}</Label>
-                          <Input type="number" value={currentRule.action_bundle.billing.hourly_rate} onChange={e => updateAction('billing', 'hourly_rate', parseFloat(e.target.value) || 0)} />
-                        </div>
-                        <div className="col-span-2">
-                          <Label className="text-sm">{t('common.description')}</Label>
-                          <TokenInput value={currentRule.action_bundle.billing.description_template} onChange={v => updateAction('billing', 'description_template', v)} placeholder={t('automation_rules.processing_placeholder')} />
-                        </div>
+                  <ActionSection
+                    actionKey="billing"
+                    label={t('automation_rules.action_billing')}
+                    enabled={currentRule.action_bundle.billing.enabled}
+                    onToggleEnabled={c => updateAction('billing', 'enabled', c)}
+                  >
+                    <div className="grid grid-cols-2 gap-3 pt-3">
+                      <div>
+                        <Label className="text-sm">{t('automation_rules.hours')}</Label>
+                        <Input type="number" step="0.25" value={currentRule.action_bundle.billing.hours} onChange={e => updateAction('billing', 'hours', parseFloat(e.target.value) || 0)} />
                       </div>
-                    )}
-                  </div>
+                      <div>
+                        <Label className="text-sm">{t('automation_rules.hourly_rate')}</Label>
+                        <Input type="number" value={currentRule.action_bundle.billing.hourly_rate} onChange={e => updateAction('billing', 'hourly_rate', parseFloat(e.target.value) || 0)} />
+                      </div>
+                      <div className="col-span-2">
+                        <Label className="text-sm">{t('common.description')}</Label>
+                        <TokenInput value={currentRule.action_bundle.billing.description_template} onChange={v => updateAction('billing', 'description_template', v)} placeholder={t('automation_rules.processing_placeholder')} />
+                      </div>
+                    </div>
+                  </ActionSection>
 
                   {/* Create Alert */}
-                  <div className="p-4 border dark:border-slate-700 rounded-lg space-y-4">
-                    <div className="flex items-center gap-2">
-                      <Checkbox checked={currentRule.action_bundle.create_alert.enabled} onCheckedChange={c => updateAction('create_alert', 'enabled', c)} />
-                      <Label className="font-medium">{t('automation_rules.action_alert')}</Label>
-                    </div>
-                    {currentRule.action_bundle.create_alert.enabled && (
-                      <div className="space-y-3 pr-6">
-                        <div className="grid grid-cols-2 gap-3">
-                          <div>
-                            <Label className="text-sm">{t('automation_rules.alert_type')}</Label>
-                            <Select value={currentRule.action_bundle.create_alert.alert_type} onValueChange={v => updateAction('create_alert', 'alert_type', v)}>
-                              <SelectTrigger><SelectValue /></SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="reminder">{t('automation_rules.type_reminder')}</SelectItem>
-                                <SelectItem value="deadline">{t('automation_rules.type_deadline', 'Deadline')}</SelectItem>
-                                <SelectItem value="urgent">{t('priority_labels.urgent')}</SelectItem>
-                              </SelectContent>
-                            </Select>
-                          </div>
-                        </div>
-                                                    <div>
-                          <Label className="text-sm">{t('automation_rules.timing')}</Label>
-                          <TimingSelector
-                            base={currentRule.action_bundle.create_alert.timing_base}
-                            docketType={currentRule.action_bundle.create_alert.timing_docket_type}
-                            direction={currentRule.action_bundle.create_alert.timing_direction}
-                            offset={currentRule.action_bundle.create_alert.timing_offset}
-                            unit={currentRule.action_bundle.create_alert.timing_unit}
-                            onBaseChange={v => updateAction('create_alert', 'timing_base', v)}
-                            onDocketTypeChange={v => updateAction('create_alert', 'timing_docket_type', v)}
-                            onDirectionChange={v => updateAction('create_alert', 'timing_direction', v)}
-                            onOffsetChange={v => updateAction('create_alert', 'timing_offset', v)}
-                            onUnitChange={v => updateAction('create_alert', 'timing_unit', v)}
-                          />
-                        </div>
-                              <div>
-        <Label className="text-sm">
-          {t('automation_rules.execution_time')}
-        </Label>
-        <Input
-          type="time"
-          className="w-32"
-          value={currentRule.action_bundle.create_alert.time_of_day || '09:00'}
-          onChange={e => updateAction('create_alert', 'time_of_day', e.target.value)}
-        />
-      </div>
+                  <ActionSection
+                    actionKey="create_alert"
+                    label={t('automation_rules.action_alert')}
+                    enabled={currentRule.action_bundle.create_alert.enabled}
+                    onToggleEnabled={c => updateAction('create_alert', 'enabled', c)}
+                  >
+                    <div className="space-y-3 pt-3">
+                      <div className="grid grid-cols-2 gap-3">
                         <div>
-                          <Label className="text-sm">{t('automation_rules.message')}</Label>
-                          <TokenInput value={currentRule.action_bundle.create_alert.message_template} onChange={v => updateAction('create_alert', 'message_template', v)} placeholder={t('automation_rules.message_placeholder')} />
-                        </div>
-                        
-                        {/* English Alert */}
-                        <div className="mt-4 pt-4 border-t border-slate-200 dark:border-slate-700">
-                            <div className="flex items-center gap-2 mb-3">
-                                <Switch 
-                                  checked={currentRule.action_bundle.create_alert.enable_english || false} 
-                                  onCheckedChange={c => updateAction('create_alert', 'enable_english', c)} 
-                                />
-                                <Label className="text-sm text-blue-600 dark:text-blue-400 font-medium">{t('automation_rules.add_english_version')}</Label>
-                            </div>
-                            {currentRule.action_bundle.create_alert.enable_english && (
-                                <div className="space-y-3 p-3 bg-slate-50 dark:bg-slate-900 rounded border border-slate-200 dark:border-slate-700">
-                                    <div>
-                                        <Label className="text-sm">English Message</Label>
-                                        <TokenInput 
-                                          value={currentRule.action_bundle.create_alert.message_template_en || ''} 
-                                          onChange={v => updateAction('create_alert', 'message_template_en', v)} 
-                                          placeholder="Alert for case {Case_No}" 
-                                        />
-                                    </div>
-                                </div>
-                            )}
-                        </div>
-
-                        <div>
-                          <Label className="text-sm">{t('automation_rules.recipients')}</Label>
-                          <RecipientsSelect value={currentRule.action_bundle.create_alert.recipients} onChange={v => updateAction('create_alert', 'recipients', v)} />
+                          <Label className="text-sm">{t('automation_rules.alert_type')}</Label>
+                          <Select value={currentRule.action_bundle.create_alert.alert_type} onValueChange={v => updateAction('create_alert', 'alert_type', v)}>
+                            <SelectTrigger><SelectValue /></SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="reminder">{t('automation_rules.type_reminder')}</SelectItem>
+                              <SelectItem value="deadline">{t('automation_rules.type_deadline', 'Deadline')}</SelectItem>
+                              <SelectItem value="urgent">{t('priority_labels.urgent')}</SelectItem>
+                            </SelectContent>
+                          </Select>
                         </div>
                       </div>
-                    )}
-                  </div>
+                      <div>
+                        <Label className="text-sm">{t('automation_rules.timing')}</Label>
+                        <TimingSelector
+                          base={currentRule.action_bundle.create_alert.timing_base}
+                          docketType={currentRule.action_bundle.create_alert.timing_docket_type}
+                          direction={currentRule.action_bundle.create_alert.timing_direction}
+                          offset={currentRule.action_bundle.create_alert.timing_offset}
+                          unit={currentRule.action_bundle.create_alert.timing_unit}
+                          onBaseChange={v => updateAction('create_alert', 'timing_base', v)}
+                          onDocketTypeChange={v => updateAction('create_alert', 'timing_docket_type', v)}
+                          onDirectionChange={v => updateAction('create_alert', 'timing_direction', v)}
+                          onOffsetChange={v => updateAction('create_alert', 'timing_offset', v)}
+                          onUnitChange={v => updateAction('create_alert', 'timing_unit', v)}
+                        />
+                      </div>
+                      <div>
+                        <Label className="text-sm">{t('automation_rules.execution_time')}</Label>
+                        <Input
+                          type="time"
+                          className="w-32"
+                          value={currentRule.action_bundle.create_alert.time_of_day || '09:00'}
+                          onChange={e => updateAction('create_alert', 'time_of_day', e.target.value)}
+                        />
+                      </div>
+                      <div>
+                        <Label className="text-sm">{t('automation_rules.message')}</Label>
+                        <TokenInput value={currentRule.action_bundle.create_alert.message_template} onChange={v => updateAction('create_alert', 'message_template', v)} placeholder={t('automation_rules.message_placeholder')} />
+                      </div>
+
+                      {/* English Alert */}
+                      <div className="mt-4 pt-4 border-t border-slate-200 dark:border-slate-700">
+                        <div className="flex items-center gap-2 mb-3">
+                          <Switch
+                            checked={currentRule.action_bundle.create_alert.enable_english || false}
+                            onCheckedChange={c => updateAction('create_alert', 'enable_english', c)}
+                          />
+                          <Label className="text-sm text-blue-600 dark:text-blue-400 font-medium">{t('automation_rules.add_english_version')}</Label>
+                        </div>
+                        {currentRule.action_bundle.create_alert.enable_english && (
+                          <div className="space-y-3 p-3 bg-slate-50 dark:bg-slate-900 rounded border border-slate-200 dark:border-slate-700">
+                            <div>
+                              <Label className="text-sm">English Message</Label>
+                              <TokenInput
+                                value={currentRule.action_bundle.create_alert.message_template_en || ''}
+                                onChange={v => updateAction('create_alert', 'message_template_en', v)}
+                                placeholder="Alert for case {Case_No}"
+                              />
+                            </div>
+                          </div>
+                        )}
+                      </div>
+
+                      <div>
+                        <Label className="text-sm">{t('automation_rules.recipients')}</Label>
+                        <RecipientsSelect value={currentRule.action_bundle.create_alert.recipients} onChange={v => updateAction('create_alert', 'recipients', v)} />
+                      </div>
+                    </div>
+                  </ActionSection>
 
                   {/* Calendar Event */}
-                  <div className="p-4 border dark:border-slate-700 rounded-lg space-y-4">
-                    <div className="flex items-center gap-2">
-                      <Checkbox checked={currentRule.action_bundle.calendar_event.enabled} onCheckedChange={c => updateAction('calendar_event', 'enabled', c)} />
-                      <Label className="font-medium">{t('automation_rules.action_calendar')}</Label>
-                    </div>
-                    {currentRule.action_bundle.calendar_event.enabled && (
-                      <div className="space-y-3 pr-6">
-                                                <div className="space-y-1.5">
-                          <Label className="text-sm">{t('automation_rules.event_name')}</Label>
-                          <TokenInput value={currentRule.action_bundle.calendar_event.title_template} onChange={v => updateAction('calendar_event', 'title_template', v)} placeholder={t('automation_rules.event_name_placeholder')} />
-                        </div>
-                        <div>
-                          <Label className="text-sm">{t('automation_rules.event_description_hebrew')}</Label>
-                          <TokenTextarea 
-                            value={currentRule.action_bundle.calendar_event.description_template || ''} 
-                            onChange={v => updateAction('calendar_event', 'description_template', v)} 
-                            placeholder={t('automation_rules.event_details_placeholder')} 
-                          />
-                        </div>
-                        <div>
-                          <Label className="text-sm">{t('automation_rules.timing')}</Label>
-                          <TimingSelector
-                            base={currentRule.action_bundle.calendar_event.timing_base}
-                            docketType={currentRule.action_bundle.calendar_event.timing_docket_type}
-                            direction={currentRule.action_bundle.calendar_event.timing_direction}
-                            offset={currentRule.action_bundle.calendar_event.timing_offset}
-                            unit={currentRule.action_bundle.calendar_event.timing_unit}
-                            onBaseChange={v => updateAction('calendar_event', 'timing_base', v)}
-                            onDocketTypeChange={v => updateAction('calendar_event', 'timing_docket_type', v)}
-                            onDirectionChange={v => updateAction('calendar_event', 'timing_direction', v)}
-                            onOffsetChange={v => updateAction('calendar_event', 'timing_offset', v)}
-                            onUnitChange={v => updateAction('calendar_event', 'timing_unit', v)}
-                          />
-                        </div>
-                         <div>
-                            <Label className="text-sm">
-                              {t('automation_rules.execution_time')}
-                             </Label>
-                           <Input
-                              type="time"
-                              className="w-32"
-                             value={currentRule.action_bundle.calendar_event.time_of_day || '09:00'}
-                             onChange={e => updateAction('calendar_event', 'time_of_day', e.target.value)}
-                          />
-                       </div>
-
-                        {/* English Calendar */}
-                        <div className="mt-4 pt-4 border-t border-slate-200 dark:border-slate-700">
-                          <div className="flex items-center gap-2 mb-3">
-                            <Switch 
-                              checked={currentRule.action_bundle.calendar_event.enable_english || false} 
-                              onCheckedChange={c => updateAction('calendar_event', 'enable_english', c)} 
-                            />
-                            <Label className="text-sm text-blue-600 dark:text-blue-400 font-medium">{t('automation_rules.add_english_version')}</Label>
-                          </div>
-                          
-                                                      {currentRule.action_bundle.calendar_event.enable_english && (
-                              <div className="mt-4 space-y-4 p-4 bg-slate-50 dark:bg-slate-900 rounded border border-slate-200 dark:border-slate-700">
-                                <div className="space-y-1.5">
-                                  <Label className="text-sm">English Event Title</Label>
-                                  <TokenInput value={currentRule.action_bundle.calendar_event.title_template_en || ''} onChange={v => updateAction('calendar_event', 'title_template_en', v)} placeholder="Meeting: {Case_No}" />
-                                </div>
-                                <div className="space-y-1.5">
-                                  <Label className="text-sm">English Description</Label>
-                                  <TokenTextarea value={currentRule.action_bundle.calendar_event.description_template_en || ''} onChange={v => updateAction('calendar_event', 'description_template_en', v)} placeholder="Meeting details..." />
-                                </div>
-                              </div>
-                            )}
-                        </div>
-
-                        <div>
-                          <Label className="text-sm">{t('automation_rules.participants')}</Label>
-                          <RecipientsSelect value={currentRule.action_bundle.calendar_event.attendees} onChange={v => updateAction('calendar_event', 'attendees', v)} />
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <Checkbox checked={currentRule.action_bundle.calendar_event.create_meet_link} onCheckedChange={c => updateAction('calendar_event', 'create_meet_link', c)} />
-                          <Label className="text-sm">{t('automation_rules.create_video_link')}</Label>
-                        </div>
+                  <ActionSection
+                    actionKey="calendar_event"
+                    label={t('automation_rules.action_calendar')}
+                    enabled={currentRule.action_bundle.calendar_event.enabled}
+                    onToggleEnabled={c => updateAction('calendar_event', 'enabled', c)}
+                  >
+                    <div className="space-y-3 pt-3">
+                      <div className="space-y-1.5">
+                        <Label className="text-sm">{t('automation_rules.event_name')}</Label>
+                        <TokenInput value={currentRule.action_bundle.calendar_event.title_template} onChange={v => updateAction('calendar_event', 'title_template', v)} placeholder={t('automation_rules.event_name_placeholder')} />
                       </div>
-                    )}
-                  </div>
+                      <div>
+                        <Label className="text-sm">{t('automation_rules.event_description_hebrew')}</Label>
+                        <TokenTextarea
+                          value={currentRule.action_bundle.calendar_event.description_template || ''}
+                          onChange={v => updateAction('calendar_event', 'description_template', v)}
+                          placeholder={t('automation_rules.event_details_placeholder')}
+                        />
+                      </div>
+                      <div>
+                        <Label className="text-sm">{t('automation_rules.timing')}</Label>
+                        <TimingSelector
+                          base={currentRule.action_bundle.calendar_event.timing_base}
+                          docketType={currentRule.action_bundle.calendar_event.timing_docket_type}
+                          direction={currentRule.action_bundle.calendar_event.timing_direction}
+                          offset={currentRule.action_bundle.calendar_event.timing_offset}
+                          unit={currentRule.action_bundle.calendar_event.timing_unit}
+                          onBaseChange={v => updateAction('calendar_event', 'timing_base', v)}
+                          onDocketTypeChange={v => updateAction('calendar_event', 'timing_docket_type', v)}
+                          onDirectionChange={v => updateAction('calendar_event', 'timing_direction', v)}
+                          onOffsetChange={v => updateAction('calendar_event', 'timing_offset', v)}
+                          onUnitChange={v => updateAction('calendar_event', 'timing_unit', v)}
+                        />
+                      </div>
+                      <div>
+                        <Label className="text-sm">{t('automation_rules.execution_time')}</Label>
+                        <Input
+                          type="time"
+                          className="w-32"
+                          value={currentRule.action_bundle.calendar_event.time_of_day || '09:00'}
+                          onChange={e => updateAction('calendar_event', 'time_of_day', e.target.value)}
+                        />
+                      </div>
+
+                      {/* English Calendar */}
+                      <div className="mt-4 pt-4 border-t border-slate-200 dark:border-slate-700">
+                        <div className="flex items-center gap-2 mb-3">
+                          <Switch
+                            checked={currentRule.action_bundle.calendar_event.enable_english || false}
+                            onCheckedChange={c => updateAction('calendar_event', 'enable_english', c)}
+                          />
+                          <Label className="text-sm text-blue-600 dark:text-blue-400 font-medium">{t('automation_rules.add_english_version')}</Label>
+                        </div>
+
+                        {currentRule.action_bundle.calendar_event.enable_english && (
+                          <div className="mt-4 space-y-4 p-4 bg-slate-50 dark:bg-slate-900 rounded border border-slate-200 dark:border-slate-700">
+                            <div className="space-y-1.5">
+                              <Label className="text-sm">English Event Title</Label>
+                              <TokenInput value={currentRule.action_bundle.calendar_event.title_template_en || ''} onChange={v => updateAction('calendar_event', 'title_template_en', v)} placeholder="Meeting: {Case_No}" />
+                            </div>
+                            <div className="space-y-1.5">
+                              <Label className="text-sm">English Description</Label>
+                              <TokenTextarea value={currentRule.action_bundle.calendar_event.description_template_en || ''} onChange={v => updateAction('calendar_event', 'description_template_en', v)} placeholder="Meeting details..." />
+                            </div>
+                          </div>
+                        )}
+                      </div>
+
+                      <div>
+                        <Label className="text-sm">{t('automation_rules.participants')}</Label>
+                        <RecipientsSelect value={currentRule.action_bundle.calendar_event.attendees} onChange={v => updateAction('calendar_event', 'attendees', v)} />
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Checkbox checked={currentRule.action_bundle.calendar_event.create_meet_link} onCheckedChange={c => updateAction('calendar_event', 'create_meet_link', c)} />
+                        <Label className="text-sm">{t('automation_rules.create_video_link')}</Label>
+                      </div>
+                    </div>
+                  </ActionSection>
 
                   {/* Send Email */}
-                  <div className="p-4 border dark:border-slate-700 rounded-lg space-y-4">
-                    <div className="flex items-center gap-2">
-                      <Checkbox checked={currentRule.action_bundle.send_email.enabled} onCheckedChange={c => updateAction('send_email', 'enabled', c)} />
-                      <Label className="font-medium">{t('automation_rules.action_email')}</Label>
-                    </div>
-                    {currentRule.action_bundle.send_email.enabled && (
-                      <div className="space-y-3 pr-6">
-                        <div>
-                          <Label className="text-sm">{t('automation_rules.recipients')}</Label>
-                          <RecipientsSelect value={currentRule.action_bundle.send_email.recipients} onChange={v => updateAction('send_email', 'recipients', v)} />
-                        </div>
-                                                <div className="space-y-1.5">
-                          <Label className="text-sm">{t('automation_rules.email_subject')}</Label>
-                          <TokenInput value={currentRule.action_bundle.send_email.subject_template} onChange={v => updateAction('send_email', 'subject_template', v)} placeholder={t('automation_rules.email_subject_placeholder')} />
-                        </div>
-                        <div>
-                          <Label className="text-sm">{t('automation_rules.content')}</Label>
-                          <TokenTextarea value={currentRule.action_bundle.send_email.body_template} onChange={v => updateAction('send_email', 'body_template', v)} placeholder={t('automation_rules.email_content_placeholder')} />
-                        </div>
-
-                        {/* English Email */}
-                        <div className="mt-4 pt-4 border-t border-slate-200 dark:border-slate-700">
-                          <div className="flex items-center gap-2 mb-3">
-                            <Switch 
-                              checked={currentRule.action_bundle.send_email.enable_english || false} 
-                              onCheckedChange={c => updateAction('send_email', 'enable_english', c)} 
-                            />
-                            <Label className="text-sm text-blue-600 dark:text-blue-400 font-medium">{t('automation_rules.add_english_version')}</Label>
-                          </div>
-                          
-                                                      {currentRule.action_bundle.send_email.enable_english && (
-                              <div className="mt-4 space-y-4 p-4 bg-slate-50 dark:bg-slate-900 rounded border border-slate-200 dark:border-slate-700">
-                                <div className="space-y-1.5">
-                                  <Label className="text-sm">English Subject</Label>
-                                  <TokenInput value={currentRule.action_bundle.send_email.subject_template_en || ''} onChange={v => updateAction('send_email', 'subject_template_en', v)} placeholder="Update re: Case {Case_No}" />
-                                </div>
-                                <div className="space-y-1.5">
-                                  <Label className="text-sm">English Body</Label>
-                                  <TokenTextarea value={currentRule.action_bundle.send_email.body_template_en || ''} onChange={v => updateAction('send_email', 'body_template_en', v)} placeholder="Dear {Client_Name},&#10;&#10;An update has been received..." />
-                                </div>
-                              </div>
-                            )}
-                        </div>
-
+                  <ActionSection
+                    actionKey="send_email"
+                    label={t('automation_rules.action_email')}
+                    enabled={currentRule.action_bundle.send_email.enabled}
+                    onToggleEnabled={c => updateAction('send_email', 'enabled', c)}
+                  >
+                    <div className="space-y-3 pt-3">
+                      <div>
+                        <Label className="text-sm">{t('automation_rules.recipients')}</Label>
+                        <RecipientsSelect value={currentRule.action_bundle.send_email.recipients} onChange={v => updateAction('send_email', 'recipients', v)} />
                       </div>
-                    )}
-                  </div>
+                      <div className="space-y-1.5">
+                        <Label className="text-sm">{t('automation_rules.email_subject')}</Label>
+                        <TokenInput value={currentRule.action_bundle.send_email.subject_template} onChange={v => updateAction('send_email', 'subject_template', v)} placeholder={t('automation_rules.email_subject_placeholder')} />
+                      </div>
+                      <div>
+                        <Label className="text-sm">{t('automation_rules.content')}</Label>
+                        <TokenTextarea value={currentRule.action_bundle.send_email.body_template} onChange={v => updateAction('send_email', 'body_template', v)} placeholder={t('automation_rules.email_content_placeholder')} />
+                      </div>
+
+                      {/* English Email */}
+                      <div className="mt-4 pt-4 border-t border-slate-200 dark:border-slate-700">
+                        <div className="flex items-center gap-2 mb-3">
+                          <Switch
+                            checked={currentRule.action_bundle.send_email.enable_english || false}
+                            onCheckedChange={c => updateAction('send_email', 'enable_english', c)}
+                          />
+                          <Label className="text-sm text-blue-600 dark:text-blue-400 font-medium">{t('automation_rules.add_english_version')}</Label>
+                        </div>
+
+                        {currentRule.action_bundle.send_email.enable_english && (
+                          <div className="mt-4 space-y-4 p-4 bg-slate-50 dark:bg-slate-900 rounded border border-slate-200 dark:border-slate-700">
+                            <div className="space-y-1.5">
+                              <Label className="text-sm">English Subject</Label>
+                              <TokenInput value={currentRule.action_bundle.send_email.subject_template_en || ''} onChange={v => updateAction('send_email', 'subject_template_en', v)} placeholder="Update re: Case {Case_No}" />
+                            </div>
+                            <div className="space-y-1.5">
+                              <Label className="text-sm">English Body</Label>
+                              <TokenTextarea value={currentRule.action_bundle.send_email.body_template_en || ''} onChange={v => updateAction('send_email', 'body_template_en', v)} placeholder="Dear {Client_Name},&#10;&#10;An update has been received..." />
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </ActionSection>
 
                   {/* Save File */}
-                  <div className="p-4 border dark:border-slate-700 rounded-lg space-y-4">
-                    <div className="flex items-center gap-2">
-                      <Checkbox checked={currentRule.action_bundle.save_file.enabled} onCheckedChange={c => updateAction('save_file', 'enabled', c)} />
-                      <Label className="font-medium">{t('automation_rules.action_save_file')}</Label>
-                    </div>
-                    {currentRule.action_bundle.save_file.enabled && (
-                      <div className="pr-6 space-y-4">
-                        {/* Path Builder */}
-                        <PathBuilder
-                          segments={currentRule.action_bundle.save_file.path_segments || []}
-                          rootPath={currentRule.action_bundle.save_file.root_path || '/DWO'}
-                          onChange={(segments) => updateAction('save_file', 'path_segments', segments)}
-                        />
+                  <ActionSection
+                    actionKey="save_file"
+                    label={t('automation_rules.action_save_file')}
+                    enabled={currentRule.action_bundle.save_file.enabled}
+                    onToggleEnabled={c => updateAction('save_file', 'enabled', c)}
+                  >
+                    <div className="space-y-4 pt-3">
+                      {/* Path Builder */}
+                      <PathBuilder
+                        segments={currentRule.action_bundle.save_file.path_segments || []}
+                        rootPath={currentRule.action_bundle.save_file.root_path || ''}
+                        onChange={(segments) => updateAction('save_file', 'path_segments', segments)}
+                        onRootPathChange={(path) => updateAction('save_file', 'root_path', path)}
+                      />
 
-                        {/* Filename Template */}
-                        <div>
-                          <Label className="text-sm">תבנית שם קובץ</Label>
-                          <FilenameTemplateInput
-                            value={currentRule.action_bundle.save_file.filename_template || '{Original_Filename}'}
-                            onChange={(v) => updateAction('save_file', 'filename_template', v)}
-                            placeholder="{Case_No}_{Date}"
-                            className="dark:bg-slate-800 dark:border-slate-600"
-                          />
-                        </div>
+                      {/* Filename Template */}
+                      <div>
+                        <Label className="text-sm">תבנית שם קובץ</Label>
+                        <FilenameTemplateInput
+                          value={currentRule.action_bundle.save_file.filename_template || '{Original_Filename}'}
+                          onChange={(v) => updateAction('save_file', 'filename_template', v)}
+                          placeholder="{Case_No}_{Date}"
+                          className="dark:bg-slate-800 dark:border-slate-600"
+                        />
                       </div>
-                    )}
-                  </div>
+                    </div>
+                  </ActionSection>
                 </CardContent>
               </Card>
             </TabsContent>

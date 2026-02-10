@@ -14,5 +14,5 @@ export const FILENAME_TOKENS = [
   { key: '{Date}', label: 'תאריך היום', example: '2025-01-15' },
   { key: '{Year}', label: 'שנה', example: '2025' },
   { key: '{Month}', label: 'חודש', example: '01' },
-  { key: '{Original_Filename}', label: 'שם קובץ מקורי', example: 'document.pdf' },
+  { key: '{Original_Filename}', label: 'שם קובץ מקורי (ללא סיומת)', example: 'document' },
 ];

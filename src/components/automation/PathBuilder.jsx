@@ -29,12 +29,17 @@ const AVAILABLE_FIELDS = {
     { key: 'application_number', label: 'מספר בקשה' },
     { key: 'territory', label: 'מדינת הגשה' },
   ],
+  numbering: [
+    { key: 'numbering_prefix', label: '001 - לפני' },
+    { key: 'numbering_suffix', label: 'אחרי - 001' },
+  ],
 };
 
 // Flatten for easy lookup
 const ALL_FIELDS = [
   ...AVAILABLE_FIELDS.client,
   ...AVAILABLE_FIELDS.case,
+  ...AVAILABLE_FIELDS.numbering,
 ];
 
 const SEGMENT_TYPES = [
@@ -43,10 +48,11 @@ const SEGMENT_TYPES = [
   { value: 'combined', label: 'משולב', icon: Combine },
 ];
 
+// For single field type - still need numbering dropdown
 const NUMBERING_OPTIONS = [
   { value: 'none', label: 'ללא מספור' },
-  { value: 'prefix', label: '001 - לפני השם' },
-  { value: 'suffix', label: 'לאחר השם - 001' },
+  { value: 'prefix', label: '001 - לפני' },
+  { value: 'suffix', label: 'אחרי - 001' },
 ];
 
 // Default segment when adding new
@@ -95,33 +101,33 @@ function SegmentItem({ segment, index, onUpdate, onRemove, canRemove, dragHandle
   };
 
   return (
-    <div className="flex items-start gap-2 p-3 bg-slate-50 dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-700">
+    <div className="flex items-start gap-1.5 p-2 bg-slate-50 dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-700">
       {/* Drag handle */}
       <button
         {...dragHandleProps}
-        className="p-1 mt-1 text-slate-400 hover:text-slate-600 cursor-grab active:cursor-grabbing"
+        className="p-0.5 mt-0.5 text-slate-400 hover:text-slate-600 cursor-grab active:cursor-grabbing"
       >
-        <GripVertical className="w-4 h-4" />
+        <GripVertical className="w-3.5 h-3.5" />
       </button>
 
       {/* Segment number */}
-      <div className="flex items-center justify-center w-6 h-6 mt-1 rounded-full bg-slate-200 dark:bg-slate-700 text-xs font-medium text-slate-600 dark:text-slate-300">
+      <div className="flex items-center justify-center w-5 h-5 mt-0.5 rounded-full bg-slate-200 dark:bg-slate-700 text-[10px] font-medium text-slate-600 dark:text-slate-300">
         {index + 1}
       </div>
 
       {/* Segment content */}
-      <div className="flex-1 space-y-2">
-        <div className="flex items-center gap-2 flex-wrap">
+      <div className="flex-1">
+        <div className="flex items-center gap-1.5 flex-wrap">
           {/* Type selector */}
           <Select value={segment.type} onValueChange={handleTypeChange}>
-            <SelectTrigger className="w-28 h-8 dark:bg-slate-800 dark:border-slate-600">
+            <SelectTrigger className="w-24 h-7 text-xs dark:bg-slate-800 dark:border-slate-600">
               <SelectValue />
             </SelectTrigger>
             <SelectContent className="dark:bg-slate-800">
               {SEGMENT_TYPES.map(t => (
-                <SelectItem key={t.value} value={t.value}>
-                  <div className="flex items-center gap-1.5">
-                    <t.icon className="w-3.5 h-3.5" />
+                <SelectItem key={t.value} value={t.value} className="text-xs">
+                  <div className="flex items-center gap-1">
+                    <t.icon className="w-3 h-3" />
                     {t.label}
                   </div>
                 </SelectItem>
@@ -135,23 +141,23 @@ function SegmentItem({ segment, index, onUpdate, onRemove, canRemove, dragHandle
               value={segment.value || ''}
               onChange={(e) => updateField('value', e.target.value)}
               placeholder="שם התיקיה..."
-              className="flex-1 h-8 dark:bg-slate-800 dark:border-slate-600"
+              className="flex-1 h-7 text-xs dark:bg-slate-800 dark:border-slate-600"
             />
           )}
 
           {segment.type === 'field' && (
             <Select value={segment.field || ''} onValueChange={(v) => updateField('field', v)}>
-              <SelectTrigger className="flex-1 h-8 dark:bg-slate-800 dark:border-slate-600">
+              <SelectTrigger className="flex-1 h-7 text-xs dark:bg-slate-800 dark:border-slate-600">
                 <SelectValue placeholder="בחר שדה..." />
               </SelectTrigger>
               <SelectContent className="dark:bg-slate-800">
-                <div className="px-2 py-1.5 text-xs font-semibold text-slate-500">לקוח</div>
+                <div className="px-2 py-1 text-[10px] font-semibold text-slate-500">לקוח</div>
                 {AVAILABLE_FIELDS.client.map(f => (
-                  <SelectItem key={f.key} value={f.key}>{f.label}</SelectItem>
+                  <SelectItem key={f.key} value={f.key} className="text-xs">{f.label}</SelectItem>
                 ))}
-                <div className="px-2 py-1.5 text-xs font-semibold text-slate-500 border-t dark:border-slate-700 mt-1 pt-1">תיק</div>
+                <div className="px-2 py-1 text-[10px] font-semibold text-slate-500 border-t dark:border-slate-700 mt-1 pt-1">תיק</div>
                 {AVAILABLE_FIELDS.case.map(f => (
-                  <SelectItem key={f.key} value={f.key}>{f.label}</SelectItem>
+                  <SelectItem key={f.key} value={f.key} className="text-xs">{f.label}</SelectItem>
                 ))}
               </SelectContent>
             </Select>
@@ -165,22 +171,26 @@ function SegmentItem({ segment, index, onUpdate, onRemove, canRemove, dragHandle
                     <Input
                       value={segment.separator || ' - '}
                       onChange={(e) => updateField('separator', e.target.value)}
-                      className="w-12 h-8 text-center dark:bg-slate-800 dark:border-slate-600"
+                      className="w-9 h-7 text-xs text-center px-1 dark:bg-slate-800 dark:border-slate-600"
                     />
                   )}
-                  <div className="flex items-center gap-1">
+                  <div className="flex items-center gap-0.5">
                     <Select value={fieldKey || ''} onValueChange={(v) => handleFieldsChange(fidx, v)}>
-                      <SelectTrigger className="w-32 h-8 dark:bg-slate-800 dark:border-slate-600">
+                      <SelectTrigger className="w-28 h-7 text-xs dark:bg-slate-800 dark:border-slate-600">
                         <SelectValue placeholder="שדה..." />
                       </SelectTrigger>
                       <SelectContent className="dark:bg-slate-800">
-                        <div className="px-2 py-1.5 text-xs font-semibold text-slate-500">לקוח</div>
+                        <div className="px-2 py-1 text-[10px] font-semibold text-slate-500">לקוח</div>
                         {AVAILABLE_FIELDS.client.map(f => (
-                          <SelectItem key={f.key} value={f.key}>{f.label}</SelectItem>
+                          <SelectItem key={f.key} value={f.key} className="text-xs">{f.label}</SelectItem>
                         ))}
-                        <div className="px-2 py-1.5 text-xs font-semibold text-slate-500 border-t dark:border-slate-700 mt-1 pt-1">תיק</div>
+                        <div className="px-2 py-1 text-[10px] font-semibold text-slate-500 border-t dark:border-slate-700 mt-1 pt-1">תיק</div>
                         {AVAILABLE_FIELDS.case.map(f => (
-                          <SelectItem key={f.key} value={f.key}>{f.label}</SelectItem>
+                          <SelectItem key={f.key} value={f.key} className="text-xs">{f.label}</SelectItem>
+                        ))}
+                        <div className="px-2 py-1 text-[10px] font-semibold text-slate-500 border-t dark:border-slate-700 mt-1 pt-1">מספור</div>
+                        {AVAILABLE_FIELDS.numbering.map(f => (
+                          <SelectItem key={f.key} value={f.key} className="text-xs">{f.label}</SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
@@ -189,9 +199,9 @@ function SegmentItem({ segment, index, onUpdate, onRemove, canRemove, dragHandle
                         variant="ghost"
                         size="sm"
                         onClick={() => removeCombinedField(fidx)}
-                        className="h-6 w-6 p-0 text-slate-400 hover:text-red-500"
+                        className="h-5 w-5 p-0 text-slate-400 hover:text-red-500"
                       >
-                        <Trash2 className="w-3 h-3" />
+                        <Trash2 className="w-2.5 h-2.5" />
                       </Button>
                     )}
                   </div>
@@ -202,25 +212,27 @@ function SegmentItem({ segment, index, onUpdate, onRemove, canRemove, dragHandle
                   variant="ghost"
                   size="sm"
                   onClick={addCombinedField}
-                  className="h-8 px-2"
+                  className="h-7 px-1.5"
                 >
-                  <Plus className="w-3.5 h-3.5" />
+                  <Plus className="w-3 h-3" />
                 </Button>
               )}
             </div>
           )}
 
-          {/* Numbering selector */}
-          <Select value={segment.numbering || 'none'} onValueChange={(v) => updateField('numbering', v)}>
-            <SelectTrigger className="w-36 h-8 dark:bg-slate-800 dark:border-slate-600">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent className="dark:bg-slate-800">
-              {NUMBERING_OPTIONS.map(opt => (
-                <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          {/* Numbering selector - only for fixed and field types (combined type has numbering as a field option) */}
+          {segment.type !== 'combined' && (
+            <Select value={segment.numbering || 'none'} onValueChange={(v) => updateField('numbering', v)}>
+              <SelectTrigger className="w-28 h-7 text-xs dark:bg-slate-800 dark:border-slate-600">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent className="dark:bg-slate-800">
+                {NUMBERING_OPTIONS.map(opt => (
+                  <SelectItem key={opt.value} value={opt.value} className="text-xs">{opt.label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
         </div>
       </div>
 
@@ -230,9 +242,9 @@ function SegmentItem({ segment, index, onUpdate, onRemove, canRemove, dragHandle
         size="sm"
         onClick={() => onRemove(index)}
         disabled={!canRemove}
-        className="p-1 mt-1 text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 disabled:opacity-30"
+        className="p-0.5 mt-0.5 h-5 w-5 text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 disabled:opacity-30"
       >
-        <Trash2 className="w-4 h-4" />
+        <Trash2 className="w-3 h-3" />
       </Button>
     </div>
   );
@@ -264,6 +276,10 @@ function generatePreview(segments, rootPath = '/DWO') {
         const fieldLabels = (segment.fields || [])
           .filter(f => f)
           .map(fieldKey => {
+            // Handle numbering fields specially
+            if (fieldKey === 'numbering_prefix' || fieldKey === 'numbering_suffix') {
+              return '###';
+            }
             const fieldConfig = ALL_FIELDS.find(f => f.key === fieldKey);
             return `{${fieldConfig?.label || fieldKey}}`;
           });
@@ -293,32 +309,40 @@ const reorder = (list, startIndex, endIndex) => {
   return result;
 };
 
-export default function PathBuilder({ segments = [], onChange, rootPath = '/DWO' }) {
+export default function PathBuilder({ segments = [], onChange, rootPath = '', onRootPathChange }) {
   const [localSegments, setLocalSegments] = useState([]);
+  const hasInitialized = React.useRef(false);
+  const userHasInteracted = React.useRef(false);
 
-  // Initialize segments
+  // Initialize segments from props - only once
   useEffect(() => {
-    if (segments && segments.length > 0) {
-      // Ensure each segment has an id
-      const withIds = segments.map((seg, idx) => ({
-        ...seg,
-        id: seg.id || `seg_init_${idx}_${Math.random().toString(36).substr(2, 9)}`,
-      }));
-      setLocalSegments(withIds);
-    } else {
-      // Start with one empty fixed segment
-      setLocalSegments([createDefaultSegment('fixed')]);
+    if (!hasInitialized.current) {
+      hasInitialized.current = true;
+      if (segments && segments.length > 0) {
+        const withIds = segments.map((seg, idx) => ({
+          ...seg,
+          id: seg.id || `seg_init_${idx}_${Math.random().toString(36).substr(2, 9)}`,
+        }));
+        setLocalSegments(withIds);
+      } else {
+        setLocalSegments([createDefaultSegment('fixed')]);
+      }
     }
-  }, []);
+  }, [segments]);
 
-  // Notify parent of changes
+  // Notify parent of changes - only when user interacts
   useEffect(() => {
-    if (localSegments.length > 0) {
-      // Remove internal ids before sending to parent
+    if (userHasInteracted.current && localSegments.length > 0) {
       const cleanSegments = localSegments.map(({ id, ...rest }) => rest);
       onChange(cleanSegments);
     }
   }, [localSegments]);
+
+  // Wrapper to mark user interaction
+  const updateSegmentsWithInteraction = (newSegments) => {
+    userHasInteracted.current = true;
+    setLocalSegments(newSegments);
+  };
 
   const handleDragEnd = (result) => {
     if (!result.destination) return;
@@ -329,50 +353,60 @@ export default function PathBuilder({ segments = [], onChange, rootPath = '/DWO'
       result.destination.index
     );
 
-    setLocalSegments(items);
+    updateSegmentsWithInteraction(items);
   };
 
   const addSegment = (type = 'fixed') => {
-    setLocalSegments([...localSegments, createDefaultSegment(type)]);
+    updateSegmentsWithInteraction([...localSegments, createDefaultSegment(type)]);
   };
 
   const updateSegment = (index, updated) => {
     const newSegments = [...localSegments];
     newSegments[index] = updated;
-    setLocalSegments(newSegments);
+    updateSegmentsWithInteraction(newSegments);
   };
 
   const removeSegment = (index) => {
     if (localSegments.length > 1) {
-      setLocalSegments(localSegments.filter((_, i) => i !== index));
+      updateSegmentsWithInteraction(localSegments.filter((_, i) => i !== index));
     }
   };
 
   const previewPath = generatePreview(localSegments, rootPath);
 
   return (
-    <div className="space-y-3">
-      <Label className="text-sm">נתיב שמירה</Label>
+    <div className="space-y-2">
+      <Label className="text-xs font-medium">נתיב שמירה</Label>
+
+      {/* Root Path Input */}
+      <div className="flex items-center gap-1.5">
+        <Label className="text-[10px] text-slate-500 whitespace-nowrap">שורש:</Label>
+        <Input
+          value={rootPath || ''}
+          onChange={(e) => onRootPathChange?.(e.target.value)}
+          placeholder="/"
+          className="h-6 text-xs font-mono w-28 dark:bg-slate-800 dark:border-slate-600"
+          dir="ltr"
+        />
+      </div>
 
       {/* Path Preview */}
-      <div className="rounded-lg border dark:border-slate-700 overflow-hidden">
-        <div className="flex items-center gap-2 px-3 py-2 bg-slate-100 dark:bg-slate-800 border-b dark:border-slate-700">
-          <FolderOpen className="w-4 h-4 text-amber-500" />
-          <span className="text-sm font-medium text-slate-700 dark:text-slate-200 font-mono dir-ltr">
-            {rootPath || '/'}
-          </span>
+      <div className="rounded border dark:border-slate-700 overflow-hidden">
+        <div className="flex items-center gap-1.5 px-2 py-1 bg-slate-100 dark:bg-slate-800 border-b dark:border-slate-700">
+          <FolderOpen className="w-3 h-3 text-amber-500 flex-shrink-0" />
+          <span className="text-[10px] font-medium text-slate-500 dark:text-slate-400">תצוגה מקדימה:</span>
         </div>
 
         {/* Preview with parts */}
-        <div className="px-3 py-2.5 bg-blue-50 dark:bg-blue-950/40">
-          <div className="flex items-center gap-2 flex-wrap" dir="ltr">
+        <div className="px-2 py-1.5 bg-blue-50 dark:bg-blue-950/40">
+          <div className="flex items-center gap-1.5 flex-wrap" dir="ltr">
             {previewPath.split('/').filter(Boolean).map((part, i, arr) => {
               const isDynamic = part.includes('{');
               const hasNumber = part.includes('###');
               return (
                 <React.Fragment key={i}>
                   <span
-                    className={`text-xs font-mono px-1.5 py-0.5 rounded ${
+                    className={`text-[10px] font-mono px-1 py-0.5 rounded ${
                       isDynamic
                         ? 'bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-300'
                         : hasNumber
@@ -383,7 +417,7 @@ export default function PathBuilder({ segments = [], onChange, rootPath = '/DWO'
                     {part}
                   </span>
                   {i < arr.length - 1 && (
-                    <ChevronRight className="w-3 h-3 text-slate-400 flex-shrink-0" />
+                    <ChevronRight className="w-2.5 h-2.5 text-slate-400 flex-shrink-0" />
                   )}
                 </React.Fragment>
               );
@@ -399,7 +433,7 @@ export default function PathBuilder({ segments = [], onChange, rootPath = '/DWO'
             <div
               {...provided.droppableProps}
               ref={provided.innerRef}
-              className="space-y-2"
+              className="space-y-1.5"
             >
               {localSegments.map((segment, index) => (
                 <Draggable key={segment.id} draggableId={segment.id} index={index}>
@@ -433,10 +467,11 @@ export default function PathBuilder({ segments = [], onChange, rootPath = '/DWO'
       {/* Add Segment Button */}
       <Button
         variant="outline"
+        size="sm"
         onClick={() => addSegment('fixed')}
-        className="w-full gap-2 dark:border-slate-600 dark:text-slate-200"
+        className="w-full gap-1.5 h-7 text-xs dark:border-slate-600 dark:text-slate-200"
       >
-        <Plus className="w-4 h-4" />
+        <Plus className="w-3 h-3" />
         הוסף שלב
       </Button>
     </div>
