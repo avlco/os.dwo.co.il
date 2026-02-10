@@ -433,6 +433,24 @@ export const PATH_SEGMENT_FIELDS = {
     category: 'case',
     resolver: (ctx) => ctx.caseData?.territory || ''
   },
+
+  // Numbering fields (special handling - these trigger chronological numbering)
+  numbering_prefix: {
+    label: '001 - לפני',
+    labelEn: 'Numbering (prefix)',
+    category: 'numbering',
+    isNumbering: true,
+    position: 'prefix',
+    resolver: () => '__NUMBERING_PLACEHOLDER__' // Placeholder - actual number resolved later
+  },
+  numbering_suffix: {
+    label: 'אחרי - 001',
+    labelEn: 'Numbering (suffix)',
+    category: 'numbering',
+    isNumbering: true,
+    position: 'suffix',
+    resolver: () => '__NUMBERING_PLACEHOLDER__' // Placeholder - actual number resolved later
+  },
 };
 
 /**
@@ -461,9 +479,11 @@ function resolveSegmentValue(segment, context) {
         .map(fieldKey => {
           const fieldConfig = PATH_SEGMENT_FIELDS[fieldKey];
           if (!fieldConfig) return '';
+          // Skip numbering fields - they're handled separately
+          if (fieldConfig.isNumbering) return null;
           return fieldConfig.resolver(context);
         })
-        .filter(v => v);
+        .filter(v => v !== null && v !== '');
       return values.join(separator);
     }
 
@@ -497,7 +517,20 @@ export function buildPathFromSegments(segments, context = {}, rootPath = '/DWO')
   for (let i = 0; i < segments.length; i++) {
     const segment = segments[i];
     const separator = segment.separator || ' - ';
-    const numbering = segment.numbering || 'none';
+    let numbering = segment.numbering || 'none';
+    let numberingPosition = numbering; // For simple numbering (prefix/suffix)
+
+    // Check if combined segment has numbering fields
+    if (segment.type === 'combined' && segment.fields) {
+      for (const fieldKey of segment.fields) {
+        const fieldConfig = PATH_SEGMENT_FIELDS[fieldKey];
+        if (fieldConfig?.isNumbering) {
+          numbering = fieldConfig.position; // 'prefix' or 'suffix'
+          numberingPosition = fieldConfig.position;
+          break; // Only one numbering field per segment
+        }
+      }
+    }
 
     // Resolve the base name for this segment
     let baseName = resolveSegmentValue(segment, context);
@@ -523,7 +556,7 @@ export function buildPathFromSegments(segments, context = {}, rootPath = '/DWO')
         levelIndex: i,
         pathIndex: parts.length,
         baseName,
-        numbering: { type: 'chronological', position: numbering },
+        numbering: { type: 'chronological', position: numberingPosition },
         separator
       });
       // Add placeholder
@@ -577,6 +610,10 @@ export function generateSegmentsPreview(segments, rootPath = '/DWO') {
       case 'combined': {
         const fieldLabels = (segment.fields || []).map(fieldKey => {
           const fieldConfig = PATH_SEGMENT_FIELDS[fieldKey];
+          // Handle numbering fields specially
+          if (fieldConfig?.isNumbering) {
+            return '###';
+          }
           return `{${fieldConfig?.label || fieldKey}}`;
         });
         displayName = fieldLabels.join(separator);
