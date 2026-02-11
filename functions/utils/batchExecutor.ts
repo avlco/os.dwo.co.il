@@ -406,6 +406,7 @@ async function executeAction(base44, action, batch, context = {}) {
         status: 'pending',
         priority: config.priority || 'medium',
         due_date: config.due_date || null,
+        assigned_to: config.assigned_to || [],
         extracted_data: {
           approval_batch_id: batch.id
         }
@@ -540,13 +541,28 @@ async function executeAction(base44, action, batch, context = {}) {
         throw new Error(resultData.error);
       }
       
-      // Also create a local Deadline record
+      // Also create a local Deadline record with event fields for calendar display
       try {
+        const dueDate = config.start_date ? config.start_date.split('T')[0] : new Date().toISOString().split('T')[0];
+        const startTime = config.time_of_day || (config.start_date ? config.start_date.split('T')[1]?.substring(0, 5) : null) || '09:00';
+        const durationMin = config.duration_minutes || 60;
+        const [sh, sm] = startTime.split(':').map(Number);
+        const endMin = sh * 60 + (sm || 0) + durationMin;
+        const endTime = `${String(Math.floor(endMin / 60) % 24).padStart(2, '0')}:${String(endMin % 60).padStart(2, '0')}`;
+
         await base44.asServiceRole.entities.Deadline.create({
+          entry_type: 'event',
+          title: config.title || 'אירוע מאוטומציה',
           case_id: config.case_id || batch.case_id,
           deadline_type: 'hearing',
-          description: config.title || config.description || 'אירוע מאוטומציה',
-          due_date: config.start_date ? config.start_date.split('T')[0] : new Date().toISOString().split('T')[0],
+          event_type: 'meeting',
+          description: config.description || config.title || 'אירוע מאוטומציה',
+          due_date: dueDate,
+          start_time: startTime,
+          end_time: endTime,
+          all_day: false,
+          color: 'blue',
+          attendees: config.attendees || [],
           status: 'pending',
           is_critical: false,
           metadata: {

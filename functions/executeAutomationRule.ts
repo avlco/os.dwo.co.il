@@ -611,7 +611,8 @@ Deno.serve(async (req) => {
         client_id: clientId,
         mail_id: mailId,
         status: 'pending',
-        due_date: calculateDueDate(actions.create_task.due_offset_days)
+        due_date: calculateDueDate(actions.create_task.due_offset_days),
+        assigned_to: actions.create_task.assigned_to || [],
       };
       
       await handleAction('create_task', taskData, async () => {
@@ -756,10 +757,22 @@ Deno.serve(async (req) => {
             results.push({ action: 'calendar_event', status: 'success', google_event_id: calendarResult?.google_event_id });
             try {
               await base44.entities.Deadline.create({
+                entry_type: 'event',
+                title: eventData.title || 'אירוע מאוטומציה',
                 case_id: caseId,
                 deadline_type: 'hearing',
-                description: eventData.title || eventData.description || 'אירוע מאוטומציה',
+                event_type: 'meeting',
+                description: eventData.description || eventData.title || 'אירוע מאוטומציה',
                 due_date: calculatedDay,
+                start_time: timeOfDay,
+                end_time: (() => {
+                  const [h, m] = timeOfDay.split(':').map(Number);
+                  const endMin = h * 60 + (m || 0) + (eventData.duration_minutes || 60);
+                  return `${String(Math.floor(endMin / 60) % 24).padStart(2, '0')}:${String(endMin % 60).padStart(2, '0')}`;
+                })(),
+                all_day: false,
+                color: 'blue',
+                attendees: eventData.attendees || [],
                 status: 'pending',
                 is_critical: false,
                 metadata: {
