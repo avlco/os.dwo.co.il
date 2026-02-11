@@ -69,11 +69,13 @@ export default function Dashboard() {
   const activeCases = cases.filter(c => !['abandoned', 'expired'].includes(c.status)).length;
   
   const upcomingDeadlines = deadlines.filter(d => {
+    if (d.entry_type === 'event') return false; // Events shown in calendar, not deadline widget
     const dueDate = new Date(d.due_date);
     return d.status !== 'completed' && isAfter(dueDate, today) && isBefore(dueDate, in30Days);
   });
 
   const overdueDeadlines = deadlines.filter(d => {
+    if (d.entry_type === 'event') return false;
     const dueDate = new Date(d.due_date);
     return d.status !== 'completed' && isBefore(dueDate, today);
   });

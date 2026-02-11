@@ -92,7 +92,14 @@ const defaultRule = {
         enable_english: false,
         message_template_en: ''
     },
-    billing: { enabled: false, hours: 0.25, hourly_rate: 0, description_template: '' }
+    billing: { enabled: false, hours: 0.25, hourly_rate: 0, description_template: '' },
+    create_task: {
+      enabled: false,
+      title: '',
+      description: '',
+      due_offset_days: 7,
+      assigned_to: []
+    }
   }
 };
 
@@ -342,6 +349,7 @@ export default function AutomationRulesManager() {
         calendar_event: { ...defaultRule.action_bundle.calendar_event, ...rule.action_bundle?.calendar_event },
         create_alert: { ...defaultRule.action_bundle.create_alert, ...rule.action_bundle?.create_alert },
         billing: { ...defaultRule.action_bundle.billing, ...rule.action_bundle?.billing },
+        create_task: { ...defaultRule.action_bundle.create_task, ...rule.action_bundle?.create_task },
       }
     };
     setCurrentRule(mergedRule);
@@ -727,6 +735,42 @@ export default function AutomationRulesManager() {
                       <div className="col-span-2">
                         <Label className="text-sm">{t('common.description')}</Label>
                         <TokenInput value={currentRule.action_bundle.billing.description_template} onChange={v => updateAction('billing', 'description_template', v)} placeholder={t('automation_rules.processing_placeholder')} />
+                      </div>
+                    </div>
+                  </ActionSection>
+
+                  {/* Create Task */}
+                  <ActionSection
+                    actionKey="create_task"
+                    label={t('settings.create_task_action')}
+                    enabled={currentRule.action_bundle.create_task.enabled}
+                    onToggleEnabled={c => updateAction('create_task', 'enabled', c)}
+                    isCollapsed={!currentRule.action_bundle.create_task.enabled}
+                    onToggleCollapse={() => {}}
+                  >
+                    <div className="space-y-4">
+                      <div>
+                        <Label className="text-sm">{t('tasks_page.title_field')}</Label>
+                        <TokenInput value={currentRule.action_bundle.create_task.title} onChange={v => updateAction('create_task', 'title', v)} placeholder={t('automation_rules.processing_placeholder')} />
+                      </div>
+                      <div>
+                        <Label className="text-sm">{t('tasks_page.description_field')}</Label>
+                        <TokenTextarea value={currentRule.action_bundle.create_task.description || ''} onChange={v => updateAction('create_task', 'description', v)} placeholder="" />
+                      </div>
+                      <div>
+                        <Label className="text-sm">{t('automation_rules.due_offset_days')}</Label>
+                        <Input type="number" value={currentRule.action_bundle.create_task.due_offset_days} onChange={e => updateAction('create_task', 'due_offset_days', parseInt(e.target.value) || 0)} />
+                      </div>
+                      <div>
+                        <Label className="text-sm">{t('tasks_page.assignee_field')}</Label>
+                        <Select value={(currentRule.action_bundle.create_task.assigned_to || [])[0] || ''} onValueChange={v => updateAction('create_task', 'assigned_to', v ? [v] : [])}>
+                          <SelectTrigger><SelectValue placeholder={t('tasks_page.select_assignee')} /></SelectTrigger>
+                          <SelectContent>
+                            {users.map(u => (
+                              <SelectItem key={u.id} value={u.id}>{u.full_name}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
                       </div>
                     </div>
                   </ActionSection>
