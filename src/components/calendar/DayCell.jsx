@@ -2,7 +2,7 @@ import React from 'react';
 import { isSameDay, isSameMonth, isToday } from 'date-fns';
 import { ITEM_COLORS } from './useCalendarData';
 
-export default function DayCell({ date, currentMonth, items, onDateClick, isSelected }) {
+export default function DayCell({ date, currentMonth, items, onDateClick, onEventClick, isSelected }) {
   const isCurrentMonth = isSameMonth(date, currentMonth);
   const today = isToday(date);
   const dayItems = items.filter(item => isSameDay(item.start, date));
@@ -36,8 +36,12 @@ export default function DayCell({ date, currentMonth, items, onDateClick, isSele
           return (
             <div
               key={item.id}
-              className={`text-[11px] px-1.5 py-0.5 rounded truncate ${colors.bg} ${colors.text}`}
+              className={`text-[11px] px-1.5 py-0.5 rounded truncate cursor-pointer hover:opacity-80 ${colors.bg} ${colors.text}`}
               title={item.title}
+              onClick={(e) => {
+                e.stopPropagation();
+                onEventClick?.(item);
+              }}
             >
               {!item.allDay && item.startMinutes != null && (
                 <span className="font-medium">

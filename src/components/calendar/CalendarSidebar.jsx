@@ -6,7 +6,7 @@ import { useDateTimeSettings } from '../DateTimeSettingsProvider';
 import { ITEM_COLORS } from './useCalendarData';
 import { Clock, Briefcase } from 'lucide-react';
 
-export default function CalendarSidebar({ currentDate, selectedDate, items, onDateSelect, getCaseNumber }) {
+export default function CalendarSidebar({ currentDate, selectedDate, items, onDateSelect, getCaseNumber, onEventClick }) {
   const { t, i18n } = useTranslation();
   const isRTL = i18n.language === 'he';
   const { formatDate } = useDateTimeSettings();
@@ -99,7 +99,7 @@ export default function CalendarSidebar({ currentDate, selectedDate, items, onDa
               {displayItems.map(item => {
                 const colors = ITEM_COLORS[item.color] || ITEM_COLORS.blue;
                 return (
-                  <div key={item.id} className="px-3 py-2.5 hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors">
+                  <div key={item.id} className="px-3 py-2.5 hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors cursor-pointer" onClick={() => onEventClick?.(item)}>
                     <div className="flex items-start gap-2">
                       <div className={`w-2 h-2 rounded-full mt-1.5 flex-shrink-0 ${colors.dot}`} />
                       <div className="flex-1 min-w-0">

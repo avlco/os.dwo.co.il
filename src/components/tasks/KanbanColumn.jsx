@@ -19,7 +19,7 @@ export default function KanbanColumn({ status, tasks, onTaskClick, getCaseNumber
 
   return (
     <div className="flex flex-col min-w-[280px] max-w-[320px] flex-1">
-      <div className="flex items-center gap-2 px-3 py-2 mb-3">
+      <div className="flex items-center gap-2 px-3 py-2 mb-3 text-start">
         <div className={`w-2.5 h-2.5 rounded-full ${dotColor}`} />
         <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-300">
           {statusLabel}

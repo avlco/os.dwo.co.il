@@ -77,8 +77,8 @@ export default function CalendarPage() {
       queryClient.invalidateQueries({ queryKey: ['deadlines'] });
       setDialogOpen(false);
       toast.success(t('docketing.create'));
-      // Sync new event to Google Calendar
-      if (result && formData.entry_type === 'event') {
+      // Sync to Google Calendar
+      if (result) {
         syncCreate(result, formData);
       }
     },
@@ -92,7 +92,7 @@ export default function CalendarPage() {
       setDialogOpen(false);
       setPopoverOpen(false);
       // Sync update to Google Calendar
-      if (editingItem && formData.entry_type === 'event') {
+      if (editingItem) {
         const entity = editingItem.originalEntity || {};
         syncUpdate({ ...entity, ...(result || {}), id: editingItem.entityId }, formData);
       }
@@ -153,8 +153,8 @@ export default function CalendarPage() {
     if (isEvent) {
       setFormData({
         entry_type: 'event',
-        title: entity.title || entity.description || '',
-        description: entity.description || '',
+        title: entity.metadata?.title || entity.description || '',
+        description: entity.metadata?.event_description || '',
         event_type: entity.event_type || 'meeting',
         due_date: entity.due_date || '',
         all_day: entity.all_day !== false,
@@ -164,8 +164,8 @@ export default function CalendarPage() {
         case_id: entity.case_id || '',
         location: entity.location || '',
         attendees: entity.attendees || [],
-        client_id: entity.client_id || '',
-        employee_id: entity.employee_id || entity.metadata?.employee_id || '',
+        client_id: entity.metadata?.client_id || '',
+        employee_id: entity.metadata?.employee_id || '',
         create_meet_link: entity.metadata?.create_meet_link || false,
       });
     } else {
@@ -203,8 +203,7 @@ export default function CalendarPage() {
     if (isEvent) {
       data = {
         entry_type: 'event',
-        title: formData.title,
-        description: formData.description,
+        description: formData.title || formData.description,
         event_type: formData.event_type,
         due_date: formData.due_date,
         all_day: formData.all_day,
@@ -212,13 +211,14 @@ export default function CalendarPage() {
         end_time: formData.all_day ? null : formData.end_time,
         color: formData.color,
         case_id: formData.case_id || null,
-        client_id: formData.client_id || null,
-        employee_id: formData.employee_id || null,
         location: formData.location || null,
         attendees,
         status: 'pending',
         metadata: {
+          title: formData.title,
+          event_description: formData.description || '',
           create_meet_link: formData.create_meet_link || false,
+          client_id: formData.client_id || null,
           employee_id: formData.employee_id || null,
         },
       };
@@ -301,6 +301,8 @@ export default function CalendarPage() {
         onDateChange={setCurrentDate}
         onNewEvent={handleNewEvent}
         onNewDeadline={handleNewDeadline}
+        onSyncCalendar={() => pullSync(true)}
+        isSyncing={isSyncing}
       />
 
       <div className="flex gap-6">
@@ -312,6 +314,7 @@ export default function CalendarPage() {
               items={items}
               selectedDate={selectedDate}
               onDateClick={handleDateClick}
+              onEventClick={handleEventClick}
             />
           )}
           {viewMode === 'week' && (
@@ -340,6 +343,7 @@ export default function CalendarPage() {
             items={items}
             onDateSelect={handleDateSelect}
             getCaseNumber={getCaseNumber}
+            onEventClick={handleEventClick}
           />
         </div>
       </div>

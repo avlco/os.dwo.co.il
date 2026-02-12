@@ -5,7 +5,7 @@ import DayCell from './DayCell';
 
 const WEEK_DAYS_EN = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
-export default function MonthView({ currentDate, items, selectedDate, onDateClick }) {
+export default function MonthView({ currentDate, items, selectedDate, onDateClick, onEventClick }) {
   const { t, i18n } = useTranslation();
   const weekDays = i18n.language === 'he' ? t('docketing.week_days', { returnObjects: true }) : WEEK_DAYS_EN;
 
@@ -34,6 +34,7 @@ export default function MonthView({ currentDate, items, selectedDate, onDateClic
             currentMonth={currentDate}
             items={items}
             onDateClick={onDateClick}
+            onEventClick={onEventClick}
             isSelected={selectedDate && day.toDateString() === selectedDate.toDateString()}
           />
         ))}

@@ -37,7 +37,7 @@ function normalizeDeadline(d) {
     id: `deadline-${d.id}`,
     entityId: d.id,
     type: isEvent ? 'event' : 'deadline',
-    title: isEvent ? (d.title || d.description) : d.description,
+    title: isEvent ? (d.metadata?.title || d.title || d.description) : d.description,
     description: isEvent ? d.description : '',
     start: startDate,
     startMinutes,

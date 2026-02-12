@@ -8,6 +8,7 @@ import KanbanBoard from './KanbanBoard';
 import TaskListView from './TaskListView';
 import TaskDialog from './TaskDialog';
 import TaskDetailSheet from './TaskDetailSheet';
+import { useGoogleCalendarSync } from '@/hooks/useGoogleCalendarSync';
 
 const EMPTY_FORM = {
   title: '',
@@ -30,6 +31,9 @@ export default function TasksPage() {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [priorityFilter, setPriorityFilter] = useState('all');
+
+  // Google Calendar sync
+  const { syncCreate, syncUpdate, syncDelete } = useGoogleCalendarSync();
 
   // Dialog state
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -54,20 +58,28 @@ export default function TasksPage() {
   // Mutations
   const createTask = useMutation({
     mutationFn: (data) => base44.entities.Task.create(data),
-    onSuccess: () => {
+    onSuccess: async (result) => {
       queryClient.invalidateQueries({ queryKey: ['tasks'] });
       setDialogOpen(false);
-      setFormData(EMPTY_FORM);
       toast.success(t('tasks_page.create'));
+      // Sync task with due_date to Google Calendar
+      if (result && formData.due_date) {
+        syncCreate(result, { ...formData, entry_type: 'task' });
+      }
+      setFormData(EMPTY_FORM);
     },
     onError: (err) => toast.error(err.message),
   });
 
   const updateTask = useMutation({
     mutationFn: ({ id, data }) => base44.entities.Task.update(id, data),
-    onSuccess: () => {
+    onSuccess: async (result) => {
       queryClient.invalidateQueries({ queryKey: ['tasks'] });
       setDialogOpen(false);
+      // Sync update to Google Calendar
+      if (editingTask && formData.due_date) {
+        syncUpdate({ ...editingTask, ...(result || {}), id: editingTask.id }, { ...formData, entry_type: 'task' });
+      }
       setFormData(EMPTY_FORM);
       setEditingTask(null);
     },
@@ -75,7 +87,14 @@ export default function TasksPage() {
   });
 
   const deleteTask = useMutation({
-    mutationFn: (id) => base44.entities.Task.delete(id),
+    mutationFn: async (id) => {
+      // Sync delete to Google Calendar
+      const task = tasks.find(t => t.id === id);
+      if (task) {
+        await syncDelete(task);
+      }
+      return base44.entities.Task.delete(id);
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['tasks'] });
       setSheetOpen(false);

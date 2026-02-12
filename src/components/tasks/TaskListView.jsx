@@ -55,9 +55,9 @@ export default function TaskListView({
                     onClick={(e) => e.stopPropagation()}
                     className="mt-1"
                   />
-                  <div className="flex-1 min-w-0">
+                  <div className="flex-1 min-w-0 text-start">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <p className="font-medium text-slate-800 dark:text-slate-200">{task.title}</p>
+                      <p className="font-medium text-slate-800 dark:text-slate-200 text-start">{task.title}</p>
                       <StatusBadge status={task.priority} />
                       <StatusBadge status={task.status} />
                       {task.case_id && (
