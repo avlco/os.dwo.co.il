@@ -21,14 +21,20 @@ function parseTimeToMinutes(timeStr) {
 
 function normalizeDeadline(d) {
   const isEvent = d.entry_type === 'event';
-  const allDay = isEvent ? (d.all_day !== false) : true;
+  const md = d.metadata || {};
+
+  const allDay = isEvent
+    ? (md.all_day !== undefined ? md.all_day : (d.all_day !== false))
+    : true;
   const startDate = new Date(d.due_date + 'T00:00:00');
 
   let startMinutes = null;
   let endMinutes = null;
-  if (!allDay && d.start_time) {
-    startMinutes = parseTimeToMinutes(d.start_time);
-    endMinutes = d.end_time ? parseTimeToMinutes(d.end_time) : (startMinutes + 60);
+  const startTime = md.start_time || d.start_time;
+  const endTime = md.end_time || d.end_time;
+  if (!allDay && startTime) {
+    startMinutes = parseTimeToMinutes(startTime);
+    endMinutes = endTime ? parseTimeToMinutes(endTime) : (startMinutes + 60);
   }
 
   let color = d.color || (isEvent ? 'blue' : (d.is_critical ? 'red' : 'amber'));
@@ -37,8 +43,8 @@ function normalizeDeadline(d) {
     id: `deadline-${d.id}`,
     entityId: d.id,
     type: isEvent ? 'event' : 'deadline',
-    title: isEvent ? (d.metadata?.title || d.title || d.description) : d.description,
-    description: isEvent ? d.description : '',
+    title: isEvent ? (md.title || d.title || d.description) : d.description,
+    description: isEvent ? (md.event_description || d.description || '') : '',
     start: startDate,
     startMinutes,
     endMinutes,
@@ -46,10 +52,10 @@ function normalizeDeadline(d) {
     color,
     caseId: d.case_id,
     status: d.status,
-    attendees: d.attendees || [],
-    location: d.location || '',
-    eventType: d.event_type || d.deadline_type,
-    metadata: d.metadata || {},
+    attendees: md.attendees || d.attendees || [],
+    location: md.location || d.location || '',
+    eventType: md.event_type || d.event_type || d.deadline_type,
+    metadata: md,
     originalEntity: d,
   };
 }

@@ -31,6 +31,45 @@ async function decrypt(text) {
   return new TextDecoder().decode(decrypted);
 }
 
+async function encrypt(text) {
+  const key = await getCryptoKey();
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const encoded = new TextEncoder().encode(text);
+  const encrypted = await crypto.subtle.encrypt({ name: "AES-GCM", iv }, key, encoded);
+  const ivHex = Array.from(iv).map(b => b.toString(16).padStart(2, '0')).join('');
+  const encryptedHex = Array.from(new Uint8Array(encrypted)).map(b => b.toString(16).padStart(2, '0')).join('');
+  return `${ivHex}:${encryptedHex}`;
+}
+
+async function refreshGoogleToken(refreshToken, connectionId, base44) {
+  console.log('[CalSync] Refreshing expired Google token...');
+  const clientId = Deno.env.get("GOOGLE_CLIENT_ID");
+  const clientSecret = Deno.env.get("GOOGLE_CLIENT_SECRET");
+  if (!clientId || !clientSecret) throw new Error('Missing Google Client ID/Secret env vars');
+
+  const res = await fetch('https://oauth2.googleapis.com/token', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({
+      client_id: clientId,
+      client_secret: clientSecret,
+      refresh_token: refreshToken,
+      grant_type: 'refresh_token',
+    }).toString(),
+  });
+
+  const data = await res.json();
+  if (data.error) throw new Error(`Token refresh failed: ${JSON.stringify(data)}`);
+
+  const newAccessToken = data.access_token;
+  const encryptedAccess = await encrypt(newAccessToken);
+  await base44.entities.IntegrationConnection.update(connectionId, {
+    access_token_encrypted: encryptedAccess,
+  });
+  console.log('[CalSync] Token refreshed and saved');
+  return newAccessToken;
+}
+
 function extractTimeFromDateTime(isoString) {
   if (!isoString) return null;
   const date = new Date(isoString);
@@ -66,10 +105,18 @@ Deno.serve(async (req) => {
     }
 
     const connection = gmailConnections[0];
-    const accessToken = await decrypt(connection.access_token_encrypted);
+    let accessToken = await decrypt(connection.access_token_encrypted);
+    const refreshToken = connection.refresh_token_encrypted
+      ? await decrypt(connection.refresh_token_encrypted)
+      : null;
 
-    if (!accessToken) {
-      throw new Error('Failed to decrypt access token');
+    if (!accessToken && !refreshToken) {
+      throw new Error('No access or refresh token available - reconnect Google');
+    }
+
+    // Proactively refresh if no access token
+    if (!accessToken && refreshToken) {
+      accessToken = await refreshGoogleToken(refreshToken, connection.id, base44);
     }
 
     // Get stored syncToken
@@ -107,12 +154,24 @@ Deno.serve(async (req) => {
         pageUrl += `&pageToken=${nextPageToken}`;
       }
 
-      const response = await fetch(pageUrl, {
+      let response = await fetch(pageUrl, {
         method: 'GET',
         headers: {
           'Authorization': `Bearer ${accessToken}`,
         }
       });
+
+      // Handle 401 - token expired
+      if (response.status === 401 && refreshToken) {
+        console.log('[CalSync] Token expired, refreshing...');
+        accessToken = await refreshGoogleToken(refreshToken, connection.id, base44);
+        response = await fetch(pageUrl, {
+          method: 'GET',
+          headers: {
+            'Authorization': `Bearer ${accessToken}`,
+          }
+        });
+      }
 
       if (response.status === 410) {
         // Sync token expired, do full sync
@@ -124,10 +183,20 @@ Deno.serve(async (req) => {
           maxResults: '250',
           timeMin: timeMin.toISOString(),
         });
-        const freshResponse = await fetch(
+        let freshResponse = await fetch(
           `https://www.googleapis.com/calendar/v3/calendars/primary/events?${freshParams.toString()}`,
           { headers: { 'Authorization': `Bearer ${accessToken}` } }
         );
+
+        // Handle 401 on fresh sync too
+        if (freshResponse.status === 401 && refreshToken) {
+          accessToken = await refreshGoogleToken(refreshToken, connection.id, base44);
+          freshResponse = await fetch(
+            `https://www.googleapis.com/calendar/v3/calendars/primary/events?${freshParams.toString()}`,
+            { headers: { 'Authorization': `Bearer ${accessToken}` } }
+          );
+        }
+
         const freshData = await freshResponse.json();
         allEvents = freshData.items || [];
         nextSyncToken = freshData.nextSyncToken;
@@ -183,29 +252,36 @@ Deno.serve(async (req) => {
       const startTime = isAllDay ? null : extractTimeFromDateTime(event.start?.dateTime);
       const endTime = isAllDay ? null : extractTimeFromDateTime(event.end?.dateTime);
 
+      // Only use schema-valid fields at top level; everything else in metadata
       const eventData = {
         entry_type: 'event',
-        title: event.summary || '',
-        description: event.description || '',
+        description: event.summary || '',
         due_date: startDate,
-        start_time: startTime,
-        end_time: endTime,
-        all_day: isAllDay,
-        event_type: 'meeting',
         color: 'blue',
         status: 'pending',
-        location: event.location || '',
-        attendees: (event.attendees || []).map(a => a.email),
         metadata: {
           google_event_id: googleEventId,
           html_link: event.htmlLink || '',
           meet_link: event.hangoutLink || '',
           source: 'google_sync',
+          title: event.summary || '',
+          event_description: event.description || '',
+          event_type: 'meeting',
+          all_day: isAllDay,
+          start_time: startTime,
+          end_time: endTime,
+          location: event.location || '',
+          attendees: (event.attendees || []).map(a => a.email),
         },
       };
 
       if (existingDeadline) {
-        // Update existing
+        // Update existing - preserve any extra metadata from existing record
+        const mergedMetadata = {
+          ...(existingDeadline.metadata || {}),
+          ...eventData.metadata,
+        };
+        eventData.metadata = mergedMetadata;
         console.log(`[CalSync] Updating local event: ${googleEventId}`);
         await base44.entities.Deadline.update(existingDeadline.id, eventData);
         updated++;
