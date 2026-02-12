@@ -30,6 +30,45 @@ async function decrypt(text) {
   return new TextDecoder().decode(decrypted);
 }
 
+async function encrypt(text) {
+  const key = await getCryptoKey();
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const encoded = new TextEncoder().encode(text);
+  const encrypted = await crypto.subtle.encrypt({ name: "AES-GCM", iv }, key, encoded);
+  const ivHex = Array.from(iv).map(b => b.toString(16).padStart(2, '0')).join('');
+  const encryptedHex = Array.from(new Uint8Array(encrypted)).map(b => b.toString(16).padStart(2, '0')).join('');
+  return `${ivHex}:${encryptedHex}`;
+}
+
+async function refreshGoogleToken(refreshToken, connectionId, base44) {
+  console.log('[Calendar] Refreshing expired Google token...');
+  const clientId = Deno.env.get("GOOGLE_CLIENT_ID");
+  const clientSecret = Deno.env.get("GOOGLE_CLIENT_SECRET");
+  if (!clientId || !clientSecret) throw new Error('Missing Google Client ID/Secret env vars');
+
+  const res = await fetch('https://oauth2.googleapis.com/token', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({
+      client_id: clientId,
+      client_secret: clientSecret,
+      refresh_token: refreshToken,
+      grant_type: 'refresh_token',
+    }).toString(),
+  });
+
+  const data = await res.json();
+  if (data.error) throw new Error(`Token refresh failed: ${JSON.stringify(data)}`);
+
+  const newAccessToken = data.access_token;
+  const encryptedAccess = await encrypt(newAccessToken);
+  await base44.entities.IntegrationConnection.update(connectionId, {
+    access_token_encrypted: encryptedAccess,
+  });
+  console.log('[Calendar] Token refreshed and saved');
+  return newAccessToken;
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
@@ -39,41 +78,47 @@ Deno.serve(async (req) => {
     const base44 = createClientFromRequest(req);
     const rawBody = await req.json();
     const body = rawBody.body || rawBody;
-    
-    const { 
-      title, 
-      description, 
-      start_date, // Receives UTC ISO string: YYYY-MM-DDTHH:mm:ss.sssZ
+
+    const {
+      title,
+      description,
+      start_date,
       event_timezone = 'Asia/Jerusalem',
       duration_minutes = 60,
-      case_id, 
+      case_id,
       client_id,
       reminder_minutes = 1440,
       create_meet_link = false,
-      attendees = []
+      attendees = [],
+      all_day = false,
     } = body;
 
     console.log('[Calendar] Creating event:', title);
-    console.log('[Calendar] Start date (UTC ISO):', start_date);
-    console.log('[Calendar] Event timezone:', event_timezone);
-    console.log('[Calendar] Attendees:', attendees);
-    console.log('[Calendar] Create Meet:', create_meet_link);
+    console.log('[Calendar] Start date:', start_date, '| All day:', all_day);
 
     // Get Google OAuth connection
     const gmailConnections = await base44.entities.IntegrationConnection.filter({
       provider: 'google',
       is_active: true
     });
-    
+
     if (!gmailConnections || gmailConnections.length === 0) {
       throw new Error('No active Google connection found.');
     }
-    
-    const connection = gmailConnections[0];
-    const accessToken = await decrypt(connection.access_token_encrypted);
 
-    if (!accessToken) {
-      throw new Error('Failed to decrypt access token');
+    const connection = gmailConnections[0];
+    let accessToken = await decrypt(connection.access_token_encrypted);
+    const refreshToken = connection.refresh_token_encrypted
+      ? await decrypt(connection.refresh_token_encrypted)
+      : null;
+
+    if (!accessToken && !refreshToken) {
+      throw new Error('No access or refresh token available - reconnect Google');
+    }
+
+    // Proactively refresh if no access token
+    if (!accessToken && refreshToken) {
+      accessToken = await refreshGoogleToken(refreshToken, connection.id, base44);
     }
 
     // Resolve attendee emails
@@ -84,7 +129,6 @@ Deno.serve(async (req) => {
           const client = await base44.entities.Client.get(client_id);
           if (client?.email) {
             attendeeEmails.push({ email: client.email });
-            console.log('[Calendar] Added client:', client.email);
           }
         } catch (e) {
           console.error('[Calendar] Failed to get client:', e.message);
@@ -96,7 +140,6 @@ Deno.serve(async (req) => {
             const lawyer = await base44.entities.User.get(caseData.assigned_lawyer_id);
             if (lawyer?.email) {
               attendeeEmails.push({ email: lawyer.email });
-              console.log('[Calendar] Added lawyer:', lawyer.email);
             }
           }
         } catch (e) {
@@ -104,26 +147,13 @@ Deno.serve(async (req) => {
         }
       } else if (attendee && attendee.includes('@')) {
         attendeeEmails.push({ email: attendee });
-        console.log('[Calendar] Added direct email:', attendee);
       }
     }
 
-    // start_date is UTC ISO string - parse and calculate end time
-    const start = new Date(start_date);
-    const end = new Date(start.getTime() + duration_minutes * 60 * 1000);
-
-    // Build event - dateTime is UTC ISO, timeZone indicates display timezone
+    // Build Google Calendar event
     const event = {
       summary: title,
       description: description || '',
-      start: {
-        dateTime: start.toISOString(),
-        timeZone: event_timezone
-      },
-      end: {
-        dateTime: end.toISOString(),
-        timeZone: event_timezone
-      },
       reminders: {
         useDefault: false,
         overrides: [
@@ -131,6 +161,21 @@ Deno.serve(async (req) => {
         ]
       }
     };
+
+    // All-day events use 'date' format, timed events use 'dateTime'
+    if (all_day) {
+      const dateOnly = start_date.split('T')[0];
+      const nextDay = new Date(dateOnly + 'T00:00:00');
+      nextDay.setDate(nextDay.getDate() + 1);
+      const endDateOnly = nextDay.toISOString().split('T')[0];
+      event.start = { date: dateOnly };
+      event.end = { date: endDateOnly };
+    } else {
+      const start = new Date(start_date);
+      const end = new Date(start.getTime() + duration_minutes * 60 * 1000);
+      event.start = { dateTime: start.toISOString(), timeZone: event_timezone };
+      event.end = { dateTime: end.toISOString(), timeZone: event_timezone };
+    }
 
     // Add attendees if any
     if (attendeeEmails.length > 0) {
@@ -155,7 +200,7 @@ Deno.serve(async (req) => {
       : 'https://www.googleapis.com/calendar/v3/calendars/primary/events';
 
     // Send to Google Calendar API
-    const response = await fetch(calendarUrl, {
+    let response = await fetch(calendarUrl, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${accessToken}`,
@@ -164,6 +209,20 @@ Deno.serve(async (req) => {
       body: JSON.stringify(event)
     });
 
+    // Retry on 401 with token refresh
+    if (response.status === 401 && refreshToken) {
+      console.log('[Calendar] Token expired, refreshing...');
+      accessToken = await refreshGoogleToken(refreshToken, connection.id, base44);
+      response = await fetch(calendarUrl, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${accessToken}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(event)
+      });
+    }
+
     if (!response.ok) {
       const errorData = await response.json();
       console.error('[Calendar] Google API error:', errorData);
@@ -171,15 +230,11 @@ Deno.serve(async (req) => {
     }
 
     const calendarEvent = await response.json();
-    console.log('[Calendar] ✅ Event created:', calendarEvent.id);
-    
-    if (calendarEvent.hangoutLink) {
-      console.log('[Calendar] ✅ Meet link:', calendarEvent.hangoutLink);
-    }
+    console.log('[Calendar] Event created:', calendarEvent.id);
 
     return new Response(
-      JSON.stringify({ 
-        success: true, 
+      JSON.stringify({
+        success: true,
         google_event_id: calendarEvent.id,
         htmlLink: calendarEvent.htmlLink,
         meetLink: calendarEvent.hangoutLink || null

@@ -31,6 +31,45 @@ async function decrypt(text) {
   return new TextDecoder().decode(decrypted);
 }
 
+async function encrypt(text) {
+  const key = await getCryptoKey();
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const encoded = new TextEncoder().encode(text);
+  const encrypted = await crypto.subtle.encrypt({ name: "AES-GCM", iv }, key, encoded);
+  const ivHex = Array.from(iv).map(b => b.toString(16).padStart(2, '0')).join('');
+  const encryptedHex = Array.from(new Uint8Array(encrypted)).map(b => b.toString(16).padStart(2, '0')).join('');
+  return `${ivHex}:${encryptedHex}`;
+}
+
+async function refreshGoogleToken(refreshToken, connectionId, base44) {
+  console.log('[Calendar] Refreshing expired Google token...');
+  const clientId = Deno.env.get("GOOGLE_CLIENT_ID");
+  const clientSecret = Deno.env.get("GOOGLE_CLIENT_SECRET");
+  if (!clientId || !clientSecret) throw new Error('Missing Google Client ID/Secret env vars');
+
+  const res = await fetch('https://oauth2.googleapis.com/token', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({
+      client_id: clientId,
+      client_secret: clientSecret,
+      refresh_token: refreshToken,
+      grant_type: 'refresh_token',
+    }).toString(),
+  });
+
+  const data = await res.json();
+  if (data.error) throw new Error(`Token refresh failed: ${JSON.stringify(data)}`);
+
+  const newAccessToken = data.access_token;
+  const encryptedAccess = await encrypt(newAccessToken);
+  await base44.entities.IntegrationConnection.update(connectionId, {
+    access_token_encrypted: encryptedAccess,
+  });
+  console.log('[Calendar] Token refreshed and saved');
+  return newAccessToken;
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
@@ -52,6 +91,7 @@ Deno.serve(async (req) => {
       client_id,
       attendees = [],
       create_meet_link = false,
+      all_day = false,
     } = body;
 
     if (!google_event_id) {
@@ -71,10 +111,17 @@ Deno.serve(async (req) => {
     }
 
     const connection = gmailConnections[0];
-    const accessToken = await decrypt(connection.access_token_encrypted);
+    let accessToken = await decrypt(connection.access_token_encrypted);
+    const refreshToken = connection.refresh_token_encrypted
+      ? await decrypt(connection.refresh_token_encrypted)
+      : null;
 
-    if (!accessToken) {
-      throw new Error('Failed to decrypt access token');
+    if (!accessToken && !refreshToken) {
+      throw new Error('No access or refresh token available - reconnect Google');
+    }
+
+    if (!accessToken && refreshToken) {
+      accessToken = await refreshGoogleToken(refreshToken, connection.id, base44);
     }
 
     // Resolve attendee emails
@@ -113,10 +160,19 @@ Deno.serve(async (req) => {
     if (description !== undefined) event.description = description || '';
 
     if (start_date) {
-      const start = new Date(start_date);
-      const end = new Date(start.getTime() + duration_minutes * 60 * 1000);
-      event.start = { dateTime: start.toISOString(), timeZone: event_timezone };
-      event.end = { dateTime: end.toISOString(), timeZone: event_timezone };
+      if (all_day) {
+        const dateOnly = start_date.split('T')[0];
+        const nextDay = new Date(dateOnly + 'T00:00:00');
+        nextDay.setDate(nextDay.getDate() + 1);
+        const endDateOnly = nextDay.toISOString().split('T')[0];
+        event.start = { date: dateOnly };
+        event.end = { date: endDateOnly };
+      } else {
+        const start = new Date(start_date);
+        const end = new Date(start.getTime() + duration_minutes * 60 * 1000);
+        event.start = { dateTime: start.toISOString(), timeZone: event_timezone };
+        event.end = { dateTime: end.toISOString(), timeZone: event_timezone };
+      }
     }
 
     if (attendeeEmails.length > 0) {
@@ -139,7 +195,7 @@ Deno.serve(async (req) => {
       ? `https://www.googleapis.com/calendar/v3/calendars/primary/events/${google_event_id}?conferenceDataVersion=1`
       : `https://www.googleapis.com/calendar/v3/calendars/primary/events/${google_event_id}`;
 
-    const response = await fetch(calendarUrl, {
+    let response = await fetch(calendarUrl, {
       method: 'PATCH',
       headers: {
         'Authorization': `Bearer ${accessToken}`,
@@ -147,6 +203,20 @@ Deno.serve(async (req) => {
       },
       body: JSON.stringify(event)
     });
+
+    // Retry on 401 with token refresh
+    if (response.status === 401 && refreshToken) {
+      console.log('[Calendar] Token expired, refreshing...');
+      accessToken = await refreshGoogleToken(refreshToken, connection.id, base44);
+      response = await fetch(calendarUrl, {
+        method: 'PATCH',
+        headers: {
+          'Authorization': `Bearer ${accessToken}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(event)
+      });
+    }
 
     if (!response.ok) {
       const errorData = await response.json();
