@@ -111,8 +111,23 @@ function renderExecutionSummaryEmail(data) {
 
   const renderActionRow = (r, icon) => {
     const label = ACTION_TYPE_LABELS[r.action]?.he || ACTION_TYPE_LABELS[r.action_type]?.he || r.action || r.action_type || 'פעולה';
-    const detail = r.error ? `<span style="color:#ef4444;font-size:13px;"> - ${r.error}</span>` :
-                   r.reason ? `<span style="color:#6b7280;font-size:13px;"> (${r.reason})</span>` : '';
+    let detail = '';
+    if (r.error) {
+      detail = `<span style="color:#ef4444;font-size:13px;"> - ${r.error}</span>`;
+    } else if (r.reason) {
+      detail = `<span style="color:#6b7280;font-size:13px;"> (${r.reason})</span>`;
+    } else if (r.status === 'success') {
+      if (r.action === 'save_file' && (r.path || r.results)) {
+        const fileNames = (r.results || []).filter(f => f.status === 'success').map(f => f.filename).join(', ');
+        const pathInfo = r.path ? `<br/><span style="color:#6b7280;font-size:12px;">📁 ${r.path}</span>` : '';
+        const filesInfo = fileNames ? `<br/><span style="color:#6b7280;font-size:12px;">📄 ${fileNames}</span>` : '';
+        detail = `<span style="color:#10b981;font-size:13px;"> (${r.uploaded || 0} קבצים)</span>${pathInfo}${filesInfo}`;
+      } else if (r.action === 'send_email' && r.sent_to) {
+        detail = `<span style="color:#6b7280;font-size:13px;"> (אל: ${Array.isArray(r.sent_to) ? r.sent_to.join(', ') : r.sent_to})</span>`;
+      } else if (r.action === 'calendar_event' && r.google_event_id) {
+        detail = `<span style="color:#6b7280;font-size:13px;"> (נוצר ביומן)</span>`;
+      }
+    }
     return `<tr><td style="padding:6px 10px;border-bottom:1px solid #f0f0f0;font-size:14px;">${icon} ${label}${detail}</td></tr>`;
   };
 

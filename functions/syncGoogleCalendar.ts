@@ -252,26 +252,27 @@ Deno.serve(async (req) => {
       const startTime = isAllDay ? null : extractTimeFromDateTime(event.start?.dateTime);
       const endTime = isAllDay ? null : extractTimeFromDateTime(event.end?.dateTime);
 
-      // Only use schema-valid fields at top level; everything else in metadata
       const eventData = {
         entry_type: 'event',
-        description: event.summary || '',
+        deadline_type: 'custom',
+        title: event.summary || '',
+        description: event.description || event.summary || '',
+        event_type: 'meeting',
         due_date: startDate,
+        all_day: isAllDay,
+        start_time: startTime,
+        end_time: endTime,
         color: 'blue',
+        location: event.location || '',
+        attendees: (event.attendees || []).map(a => a.email),
         status: 'pending',
+        is_critical: false,
         metadata: {
           google_event_id: googleEventId,
           html_link: event.htmlLink || '',
           meet_link: event.hangoutLink || '',
           source: 'google_sync',
-          title: event.summary || '',
           event_description: event.description || '',
-          event_type: 'meeting',
-          all_day: isAllDay,
-          start_time: startTime,
-          end_time: endTime,
-          location: event.location || '',
-          attendees: (event.attendees || []).map(a => a.email),
         },
       };
 

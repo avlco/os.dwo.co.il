@@ -156,7 +156,9 @@ Deno.serve(async (req) => {
       return Response.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const { 
+    const rawBody = await req.json();
+    const requestData = rawBody.body || rawBody;
+    const {
       file_url,           // URL של הקובץ להעלאה (או base64)
       file_content_base64, // תוכן הקובץ ב-base64 (אופציונלי)
       file_name,          // שם הקובץ
@@ -167,7 +169,7 @@ Deno.serve(async (req) => {
       custom_path,        // נתיב מותאם אישית (אופציונלי)
       source_mail_id,     // מזהה מייל מקורי (אופציונלי)
       source_task_id      // מזהה משימה מקורית (אופציונלי)
-    } = await req.json();
+    } = requestData;
 
     if (!file_name) {
       return Response.json({ error: 'file_name is required' }, { status: 400 });
