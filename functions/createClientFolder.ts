@@ -76,8 +76,9 @@ Deno.serve(async (req) => {
 
   try {
     const base44 = createClientFromRequest(req);
-    // קריאת הנתונים מהבקשה
-    const requestData = await req.json();
+    // קריאת הנתונים מהבקשה - unwrap body from SDK wrapper
+    const rawBody = await req.json();
+    const requestData = rawBody.body || rawBody;
     const { action } = requestData; // זיהוי סוג הפעולה: 'create' או 'rename'
 
     console.log(`[DropboxHandler] Action received: ${action || 'create (default)'}`);
