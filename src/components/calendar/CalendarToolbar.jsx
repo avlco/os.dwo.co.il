@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { format, addMonths, subMonths, addWeeks, subWeeks, addDays, subDays } from 'date-fns';
 import { he } from 'date-fns/locale';
 import { Button } from "@/components/ui/button";
-import { ChevronLeft, ChevronRight, Plus, Calendar } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Plus, Calendar, RefreshCw } from 'lucide-react';
 
 export default function CalendarToolbar({
   viewMode,
@@ -12,6 +12,8 @@ export default function CalendarToolbar({
   onDateChange,
   onNewEvent,
   onNewDeadline,
+  onSyncCalendar,
+  isSyncing,
 }) {
   const { t, i18n } = useTranslation();
   const isRTL = i18n.language === 'he';
@@ -49,6 +51,18 @@ export default function CalendarToolbar({
           </h1>
         </div>
         <div className="flex items-center gap-2">
+          {onSyncCalendar && (
+            <Button
+              onClick={onSyncCalendar}
+              variant="outline"
+              size="icon"
+              disabled={isSyncing}
+              className="dark:border-slate-600"
+              title={t('docketing.sync_calendar')}
+            >
+              <RefreshCw className={`w-4 h-4 ${isSyncing ? 'animate-spin' : ''}`} />
+            </Button>
+          )}
           <Button onClick={onNewDeadline} variant="outline" className="gap-1.5 dark:border-slate-600">
             <Calendar className="w-4 h-4" />
             {t('docketing.new_deadline')}
