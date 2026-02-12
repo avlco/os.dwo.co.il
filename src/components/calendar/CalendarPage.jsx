@@ -137,7 +137,6 @@ export default function CalendarPage() {
   };
 
   const handleEventClick = (item) => {
-    if (item.type === 'task') return; // Tasks are handled in Tasks page
     setPopoverItem(item);
     setPopoverOpen(true);
   };
@@ -154,17 +153,17 @@ export default function CalendarPage() {
       const md = entity.metadata || {};
       setFormData({
         entry_type: 'event',
-        title: md.title || entity.description || '',
+        title: entity.title || md.title || entity.description || '',
         description: md.event_description || '',
-        event_type: md.event_type || entity.event_type || 'meeting',
+        event_type: entity.event_type || md.event_type || 'meeting',
         due_date: entity.due_date || '',
-        all_day: md.all_day !== undefined ? md.all_day : (entity.all_day !== false),
-        start_time: md.start_time || entity.start_time || '09:00',
-        end_time: md.end_time || entity.end_time || '10:00',
+        all_day: entity.all_day !== undefined ? entity.all_day : (md.all_day !== undefined ? md.all_day : false),
+        start_time: entity.start_time || md.start_time || '09:00',
+        end_time: entity.end_time || md.end_time || '10:00',
         color: entity.color || 'blue',
         case_id: entity.case_id || '',
-        location: md.location || entity.location || '',
-        attendees: md.attendees || entity.attendees || [],
+        location: entity.location || md.location || '',
+        attendees: entity.attendees || md.attendees || [],
         client_id: md.client_id || '',
         employee_id: md.employee_id || '',
         create_meet_link: md.create_meet_link || false,
@@ -204,20 +203,22 @@ export default function CalendarPage() {
     if (isEvent) {
       data = {
         entry_type: 'event',
-        description: formData.title || formData.description,
+        deadline_type: 'custom',
+        title: formData.title,
+        description: formData.description || formData.title,
+        event_type: formData.event_type,
         due_date: formData.due_date,
+        all_day: formData.all_day,
+        start_time: formData.all_day ? null : formData.start_time,
+        end_time: formData.all_day ? null : formData.end_time,
         color: formData.color,
         case_id: formData.case_id || null,
+        location: formData.location || null,
+        attendees,
         status: 'pending',
+        is_critical: false,
         metadata: {
-          title: formData.title,
           event_description: formData.description || '',
-          event_type: formData.event_type,
-          all_day: formData.all_day,
-          start_time: formData.all_day ? null : formData.start_time,
-          end_time: formData.all_day ? null : formData.end_time,
-          location: formData.location || null,
-          attendees,
           create_meet_link: formData.create_meet_link || false,
           client_id: formData.client_id || null,
           employee_id: formData.employee_id || null,
