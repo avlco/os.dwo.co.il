@@ -229,6 +229,7 @@ Deno.serve(async (req) => {
     let created = 0;
     let updated = 0;
     let deleted = 0;
+    let errors = 0;
 
     for (const event of allEvents) {
       try {
@@ -266,7 +267,7 @@ Deno.serve(async (req) => {
           color: 'blue',
           location: event.location || '',
           attendees: (event.attendees || []).map(a => a.email),
-          case_id: null,
+          case_id: '',
           status: 'pending',
           is_critical: false,
           metadata: {
@@ -280,7 +281,7 @@ Deno.serve(async (req) => {
 
         if (existingDeadline) {
           // Update existing - preserve case_id and extra metadata
-          eventData.case_id = existingDeadline.case_id || null;
+          eventData.case_id = existingDeadline.case_id || '';
           const mergedMetadata = {
             ...(existingDeadline.metadata || {}),
             ...eventData.metadata,
@@ -296,12 +297,13 @@ Deno.serve(async (req) => {
           created++;
         }
       } catch (eventError) {
+        errors++;
         console.error(`[CalSync] Failed to process event ${event.id}:`, eventError.message);
       }
     }
 
-    // Store the new syncToken
-    if (nextSyncToken) {
+    // Store the new syncToken only if all events processed successfully
+    if (nextSyncToken && errors === 0) {
       const updatedMetadata = {
         ...(connection.metadata || {}),
         calendar_sync_token: nextSyncToken,

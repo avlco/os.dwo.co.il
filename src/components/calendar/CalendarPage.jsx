@@ -219,6 +219,7 @@ export default function CalendarPage() {
         status: 'pending',
         is_critical: false,
         metadata: {
+          ...(editingItem?.originalEntity?.metadata || {}),
           event_description: formData.description || '',
           create_meet_link: formData.create_meet_link || false,
           client_id: formData.client_id || null,
