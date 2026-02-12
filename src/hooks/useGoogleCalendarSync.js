@@ -10,6 +10,7 @@ export function useGoogleCalendarSync() {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
   const [isSyncing, setIsSyncing] = useState(false);
+  const isSyncingRef = useRef(false);
   const intervalRef = useRef(null);
 
   // Check if Google integration is active
@@ -29,38 +30,66 @@ export function useGoogleCalendarSync() {
     staleTime: 1000 * 60 * 5,
   });
 
-  // Push: Create event in Google Calendar
-  const syncCreate = useCallback(async (deadlineEntity, formData) => {
+  // Push: Create event in Google Calendar (supports events, deadlines, and tasks)
+  const syncCreate = useCallback(async (entity, formData) => {
     if (!isGoogleConnected) return;
-    if (deadlineEntity.entry_type !== 'event') return;
-    if (formData.all_day) return; // Skip all-day events for now
 
     try {
-      const startDate = new Date(`${formData.due_date}T${formData.start_time || '09:00'}:00`);
-      const endDate = new Date(`${formData.due_date}T${formData.end_time || '10:00'}:00`);
-      const durationMinutes = Math.max(15, (endDate - startDate) / 60000);
+      const isEvent = formData.entry_type === 'event';
+      const isDeadline = formData.entry_type === 'deadline';
+      const isTask = !isEvent && !isDeadline;
 
+      // Determine title
+      const title = isEvent
+        ? (formData.title || formData.description)
+        : isDeadline
+          ? formData.description
+          : formData.title;
+
+      if (!title) return;
+
+      // Determine timing
+      const isAllDay = isEvent ? formData.all_day : true;
+      let startDate, durationMinutes;
+
+      if (!isAllDay && formData.start_time) {
+        startDate = new Date(`${formData.due_date}T${formData.start_time}:00`);
+        const endDate = new Date(`${formData.due_date}T${formData.end_time || formData.start_time}:00`);
+        durationMinutes = Math.max(15, (endDate - startDate) / 60000);
+      } else {
+        startDate = new Date(`${formData.due_date}T09:00:00`);
+        durationMinutes = isAllDay ? 1440 : 60; // full day or 1 hour
+      }
+
+      // Build attendees
       const attendees = [];
-      if (formData.client_id) attendees.push('client');
-      if (formData.employee_id) attendees.push('lawyer');
+      const clientId = formData.client_id || formData.metadata?.client_id;
+      const employeeId = formData.employee_id || formData.metadata?.employee_id;
+      if (clientId) attendees.push('client');
+      if (employeeId) attendees.push('lawyer');
 
       const result = await base44.functions.invoke('createCalendarEvent', {
-        title: formData.title,
-        description: formData.description,
+        title,
+        description: isEvent ? (formData.metadata?.event_description || formData.description || '') : (formData.description || ''),
         start_date: startDate.toISOString(),
         duration_minutes: durationMinutes,
         case_id: formData.case_id,
-        client_id: formData.client_id,
-        create_meet_link: formData.create_meet_link || false,
+        client_id: clientId,
+        create_meet_link: formData.create_meet_link || formData.metadata?.create_meet_link || false,
         attendees,
+        all_day: isAllDay,
       });
 
       const resultData = result?.data || result;
       if (resultData?.google_event_id) {
-        // Store google_event_id in the Deadline entity metadata
-        await base44.entities.Deadline.update(deadlineEntity.id, {
+        // Store google_event_id in the entity metadata
+        const EntityType = isTask
+          ? base44.entities.Task
+          : base44.entities.Deadline;
+
+        await EntityType.update(entity.id, {
           metadata: {
-            ...(deadlineEntity.metadata || {}),
+            ...(entity.metadata || {}),
             google_event_id: resultData.google_event_id,
             html_link: resultData.htmlLink,
             meet_link: resultData.meetLink,
@@ -74,36 +103,47 @@ export function useGoogleCalendarSync() {
   }, [isGoogleConnected]);
 
   // Push: Update event in Google Calendar
-  const syncUpdate = useCallback(async (deadlineEntity, formData) => {
+  const syncUpdate = useCallback(async (entity, formData) => {
     if (!isGoogleConnected) return;
-    const googleEventId = deadlineEntity.metadata?.google_event_id;
+    const googleEventId = entity.metadata?.google_event_id;
     if (!googleEventId) return;
 
     try {
-      const startDate = formData && !formData.all_day
-        ? new Date(`${formData.due_date}T${formData.start_time || '09:00'}:00`)
-        : null;
-      const endDate = formData && !formData.all_day
-        ? new Date(`${formData.due_date}T${formData.end_time || '10:00'}:00`)
-        : null;
-      const durationMinutes = startDate && endDate
-        ? Math.max(15, (endDate - startDate) / 60000)
-        : 60;
+      const isEvent = formData?.entry_type === 'event';
+      const title = isEvent
+        ? (formData.title || formData.description)
+        : (formData?.description || formData?.title || entity.description);
+
+      const isAllDay = isEvent ? formData.all_day : true;
+      let startDate = null;
+      let durationMinutes = 60;
+
+      if (!isAllDay && formData?.start_time) {
+        startDate = new Date(`${formData.due_date}T${formData.start_time}:00`);
+        const endDate = new Date(`${formData.due_date}T${formData.end_time || formData.start_time}:00`);
+        durationMinutes = Math.max(15, (endDate - startDate) / 60000);
+      } else if (formData?.due_date) {
+        startDate = new Date(`${formData.due_date}T09:00:00`);
+        durationMinutes = isAllDay ? 1440 : 60;
+      }
 
       const attendees = [];
-      if (formData?.client_id) attendees.push('client');
-      if (formData?.employee_id) attendees.push('lawyer');
+      const clientId = formData?.client_id || formData?.metadata?.client_id;
+      const employeeId = formData?.employee_id || formData?.metadata?.employee_id;
+      if (clientId) attendees.push('client');
+      if (employeeId) attendees.push('lawyer');
 
       await base44.functions.invoke('updateCalendarEvent', {
         google_event_id: googleEventId,
-        title: formData?.title || deadlineEntity.title,
-        description: formData?.description || deadlineEntity.description,
+        title,
+        description: isEvent ? (formData?.metadata?.event_description || '') : (formData?.description || entity.description || ''),
         start_date: startDate ? startDate.toISOString() : undefined,
         duration_minutes: durationMinutes,
-        case_id: formData?.case_id || deadlineEntity.case_id,
-        client_id: formData?.client_id || deadlineEntity.client_id,
+        case_id: formData?.case_id || entity.case_id,
+        client_id: clientId,
         attendees,
-        create_meet_link: formData?.create_meet_link || false,
+        create_meet_link: formData?.create_meet_link || formData?.metadata?.create_meet_link || false,
+        all_day: isAllDay,
       });
     } catch (err) {
       console.error('[GCalSync] Update failed:', err);
@@ -111,9 +151,9 @@ export function useGoogleCalendarSync() {
   }, [isGoogleConnected]);
 
   // Push: Delete event from Google Calendar
-  const syncDelete = useCallback(async (deadlineEntity) => {
+  const syncDelete = useCallback(async (entity) => {
     if (!isGoogleConnected) return;
-    const googleEventId = deadlineEntity.metadata?.google_event_id;
+    const googleEventId = entity.metadata?.google_event_id;
     if (!googleEventId) return;
 
     try {
@@ -127,8 +167,9 @@ export function useGoogleCalendarSync() {
 
   // Pull: Sync from Google Calendar
   const pullSync = useCallback(async (showToast = false) => {
-    if (!isGoogleConnected || isSyncing) return;
+    if (!isGoogleConnected || isSyncingRef.current) return;
 
+    isSyncingRef.current = true;
     setIsSyncing(true);
     try {
       const result = await base44.functions.invoke('syncGoogleCalendar', {});
@@ -136,10 +177,13 @@ export function useGoogleCalendarSync() {
 
       // Invalidate queries to refresh calendar display
       queryClient.invalidateQueries({ queryKey: ['deadlines'] });
+      queryClient.invalidateQueries({ queryKey: ['tasks'] });
 
       if (showToast && resultData) {
         const { created = 0, updated = 0, deleted = 0 } = resultData;
         if (created > 0 || updated > 0 || deleted > 0) {
+          toast.success(t('docketing.sync_success'));
+        } else {
           toast.success(t('docketing.sync_success'));
         }
       }
@@ -151,28 +195,36 @@ export function useGoogleCalendarSync() {
         toast.error(t('docketing.sync_error'));
       }
     } finally {
+      isSyncingRef.current = false;
       setIsSyncing(false);
     }
-  }, [isGoogleConnected, isSyncing, queryClient, t]);
+  }, [isGoogleConnected, queryClient, t]);
+
+  // Use ref to avoid stale closure in useEffect
+  const pullSyncRef = useRef(pullSync);
+  pullSyncRef.current = pullSync;
 
   // Auto-pull on mount and every 5 minutes
   useEffect(() => {
     if (!isGoogleConnected) return;
 
-    // Initial sync
-    pullSync(false);
+    // Initial sync after a short delay
+    const initialTimeout = setTimeout(() => {
+      pullSyncRef.current(false);
+    }, 2000);
 
     // Set up interval
     intervalRef.current = setInterval(() => {
-      pullSync(false);
+      pullSyncRef.current(false);
     }, SYNC_INTERVAL_MS);
 
     return () => {
+      clearTimeout(initialTimeout);
       if (intervalRef.current) {
         clearInterval(intervalRef.current);
       }
     };
-  }, [isGoogleConnected]); // Only re-run when connection status changes
+  }, [isGoogleConnected]);
 
   return {
     isGoogleConnected,

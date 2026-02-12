@@ -154,6 +154,11 @@ export default function Clients() {
         console.log('[Clients] Dropbox folder created');
       } catch (folderError) {
         console.error('[Clients] Failed to create Dropbox folder:', folderError);
+        toast({
+          variant: "destructive",
+          title: "שגיאה ביצירת תיקייה ב-Dropbox",
+          description: folderError?.message || "לא ניתן ליצור תיקייה. בדוק את חיבור ה-Dropbox בהגדרות.",
+        });
       }
       
       resetForm();

@@ -34,9 +34,9 @@ export default function TaskCard({ task, index, onClick, getCaseNumber }) {
             }
           `}
         >
-          <div className="space-y-2">
+          <div className="space-y-2 text-start">
             <div className="flex items-start justify-between gap-2">
-              <p className="text-sm font-medium text-slate-800 dark:text-slate-200 line-clamp-2 flex-1">
+              <p className="text-sm font-medium text-slate-800 dark:text-slate-200 line-clamp-2 flex-1 text-start">
                 {task.title}
               </p>
               <StatusBadge status={task.priority} />

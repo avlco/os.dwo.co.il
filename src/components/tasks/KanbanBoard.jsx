@@ -33,7 +33,7 @@ export default function KanbanBoard({ tasks, onDragEnd, onTaskClick, getCaseNumb
   return (
     <DragDropContext onDragEnd={onDragEnd}>
       <ScrollArea className="w-full" dir={isRTL ? 'rtl' : 'ltr'}>
-        <div className={`flex gap-4 pb-4 min-w-max ${isRTL ? 'flex-row-reverse' : ''}`}>
+        <div className="flex gap-4 pb-4 min-w-max">
           {COLUMN_ORDER.map(status => (
             <KanbanColumn
               key={status}
