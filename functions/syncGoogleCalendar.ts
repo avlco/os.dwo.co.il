@@ -231,66 +231,72 @@ Deno.serve(async (req) => {
     let deleted = 0;
 
     for (const event of allEvents) {
-      const googleEventId = event.id;
-      const existingDeadline = deadlineByGoogleId[googleEventId];
+      try {
+        const googleEventId = event.id;
+        const existingDeadline = deadlineByGoogleId[googleEventId];
 
-      if (event.status === 'cancelled') {
-        // Event was deleted in Google Calendar
-        if (existingDeadline) {
-          console.log(`[CalSync] Deleting local event: ${googleEventId}`);
-          await base44.entities.Deadline.delete(existingDeadline.id);
-          deleted++;
+        if (event.status === 'cancelled') {
+          // Event was deleted in Google Calendar
+          if (existingDeadline) {
+            console.log(`[CalSync] Deleting local event: ${googleEventId}`);
+            await base44.entities.Deadline.delete(existingDeadline.id);
+            deleted++;
+          }
+          continue;
         }
-        continue;
-      }
 
-      // Extract event data
-      const isAllDay = !!event.start?.date && !event.start?.dateTime;
-      const startDate = isAllDay
-        ? event.start.date
-        : extractDateFromDateTime(event.start?.dateTime);
-      const startTime = isAllDay ? null : extractTimeFromDateTime(event.start?.dateTime);
-      const endTime = isAllDay ? null : extractTimeFromDateTime(event.end?.dateTime);
+        // Extract event data
+        const isAllDay = !!event.start?.date && !event.start?.dateTime;
+        const startDate = isAllDay
+          ? event.start.date
+          : extractDateFromDateTime(event.start?.dateTime);
+        const startTime = isAllDay ? null : extractTimeFromDateTime(event.start?.dateTime);
+        const endTime = isAllDay ? null : extractTimeFromDateTime(event.end?.dateTime);
 
-      const eventData = {
-        entry_type: 'event',
-        deadline_type: 'custom',
-        title: event.summary || '',
-        description: event.description || event.summary || '',
-        event_type: 'meeting',
-        due_date: startDate,
-        all_day: isAllDay,
-        start_time: startTime,
-        end_time: endTime,
-        color: 'blue',
-        location: event.location || '',
-        attendees: (event.attendees || []).map(a => a.email),
-        status: 'pending',
-        is_critical: false,
-        metadata: {
-          google_event_id: googleEventId,
-          html_link: event.htmlLink || '',
-          meet_link: event.hangoutLink || '',
-          source: 'google_sync',
-          event_description: event.description || '',
-        },
-      };
-
-      if (existingDeadline) {
-        // Update existing - preserve any extra metadata from existing record
-        const mergedMetadata = {
-          ...(existingDeadline.metadata || {}),
-          ...eventData.metadata,
+        const eventData = {
+          entry_type: 'event',
+          deadline_type: 'custom',
+          title: event.summary || '',
+          description: event.description || event.summary || '',
+          event_type: 'meeting',
+          due_date: startDate,
+          all_day: isAllDay,
+          start_time: startTime,
+          end_time: endTime,
+          color: 'blue',
+          location: event.location || '',
+          attendees: (event.attendees || []).map(a => a.email),
+          case_id: null,
+          status: 'pending',
+          is_critical: false,
+          metadata: {
+            google_event_id: googleEventId,
+            html_link: event.htmlLink || '',
+            meet_link: event.hangoutLink || '',
+            source: 'google_sync',
+            event_description: event.description || '',
+          },
         };
-        eventData.metadata = mergedMetadata;
-        console.log(`[CalSync] Updating local event: ${googleEventId}`);
-        await base44.entities.Deadline.update(existingDeadline.id, eventData);
-        updated++;
-      } else {
-        // Create new
-        console.log(`[CalSync] Creating local event from Google: ${googleEventId}`);
-        await base44.entities.Deadline.create(eventData);
-        created++;
+
+        if (existingDeadline) {
+          // Update existing - preserve case_id and extra metadata
+          eventData.case_id = existingDeadline.case_id || null;
+          const mergedMetadata = {
+            ...(existingDeadline.metadata || {}),
+            ...eventData.metadata,
+          };
+          eventData.metadata = mergedMetadata;
+          console.log(`[CalSync] Updating local event: ${googleEventId}`);
+          await base44.entities.Deadline.update(existingDeadline.id, eventData);
+          updated++;
+        } else {
+          // Create new
+          console.log(`[CalSync] Creating local event from Google: ${googleEventId}`);
+          await base44.entities.Deadline.create(eventData);
+          created++;
+        }
+      } catch (eventError) {
+        console.error(`[CalSync] Failed to process event ${event.id}:`, eventError.message);
       }
     }
 

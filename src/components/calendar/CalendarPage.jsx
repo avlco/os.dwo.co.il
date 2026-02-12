@@ -77,9 +77,10 @@ export default function CalendarPage() {
       queryClient.invalidateQueries({ queryKey: ['deadlines'] });
       setDialogOpen(false);
       toast.success(t('docketing.create'));
-      // Sync to Google Calendar
+      // Sync to Google Calendar and re-invalidate to cache google_event_id
       if (result) {
-        syncCreate(result, formData);
+        await syncCreate(result, formData);
+        queryClient.invalidateQueries({ queryKey: ['deadlines'] });
       }
     },
     onError: (err) => toast.error(err.message),

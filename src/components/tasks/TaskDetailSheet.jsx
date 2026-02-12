@@ -130,13 +130,13 @@ export default function TaskDetailSheet({ task, open, onOpenChange, onEdit, onDe
           </div>
 
           {/* Attachments */}
-          {task.attachments && task.attachments.length > 0 && (
+          {((task.metadata?.attachments || task.attachments || []).length > 0) && (
             <div>
               <h4 className="text-sm font-medium text-slate-500 dark:text-slate-400 mb-2">
                 {t('tasks_page.attachments')}
               </h4>
               <div className="space-y-2">
-                {task.attachments.map((att, i) => (
+                {(task.metadata?.attachments || task.attachments || []).map((att, i) => (
                   <div key={i} className="flex items-center gap-2 text-sm bg-slate-50 dark:bg-slate-900 rounded-lg px-3 py-2">
                     <Paperclip className="w-4 h-4 text-slate-400 flex-shrink-0" />
                     {att.url ? (

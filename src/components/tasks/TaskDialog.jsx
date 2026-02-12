@@ -161,7 +161,7 @@ export default function TaskDialog({
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4 mt-4">
           <div className="space-y-2">
-            <Label className="dark:text-slate-300">{t('tasks_page.title_field')}</Label>
+            <Label className="dark:text-slate-300">{t('tasks_page.title_field')} <span className="text-rose-500">*</span></Label>
             <Input
               value={formData.title}
               onChange={(e) => setFormData({ ...formData, title: e.target.value })}
