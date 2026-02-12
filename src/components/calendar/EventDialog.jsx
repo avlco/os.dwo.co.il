@@ -2,6 +2,7 @@ import React from 'react';
 import { useTranslation } from 'react-i18next';
 import { useQuery } from '@tanstack/react-query';
 import { base44 } from '@/api/base44Client';
+import { Video, User } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
@@ -13,6 +14,7 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Select,
   SelectContent,
@@ -20,6 +22,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import SearchableSelect from '@/components/ui/searchable-select';
 
 const COLOR_OPTIONS = [
   { value: 'blue', label: 'color_blue', class: 'bg-blue-500' },
@@ -47,6 +50,16 @@ export default function EventDialog({
     queryFn: () => base44.entities.Case.list('-created_date', 500),
   });
 
+  const { data: clients = [] } = useQuery({
+    queryKey: ['clients'],
+    queryFn: () => base44.entities.Client.list('-created_date', 500),
+  });
+
+  const { data: users = [] } = useQuery({
+    queryKey: ['users'],
+    queryFn: () => base44.entities.User.list(),
+  });
+
   const eventTypes = [
     { value: 'meeting', label: t('docketing.type_meeting') },
     { value: 'hearing', label: t('docketing.type_hearing') },
@@ -67,6 +80,38 @@ export default function EventDialog({
 
   const isEventMode = mode === 'event';
   const types = isEventMode ? eventTypes : deadlineTypes;
+
+  const caseOptions = cases.map(c => ({
+    value: c.id,
+    label: `${c.case_number} - ${c.title}`,
+  }));
+
+  const clientOptions = clients.map(c => ({
+    value: c.id,
+    label: c.name,
+  }));
+
+  const userOptions = users.map(u => ({
+    value: u.id,
+    label: u.full_name || u.email,
+  }));
+
+  // Auto-lookup assigned lawyer when case changes (deadline mode)
+  const handleCaseChange = (caseId) => {
+    const updates = { ...formData, case_id: caseId };
+    if (!isEventMode && caseId) {
+      const selectedCase = cases.find(c => c.id === caseId);
+      if (selectedCase?.assigned_lawyer_id) {
+        updates.reminder_recipient_id = selectedCase.assigned_lawyer_id;
+      }
+    }
+    setFormData(updates);
+  };
+
+  // Get reminder recipient name
+  const reminderRecipient = !isEventMode && formData.reminder_recipient_id
+    ? users.find(u => u.id === formData.reminder_recipient_id)
+    : null;
 
   const handleSubmit = (e) => {
     e.preventDefault();
@@ -157,54 +202,56 @@ export default function EventDialog({
             </div>
           </div>
 
-          {/* Date */}
-          <div className="space-y-2">
-            <Label className="dark:text-slate-300">
-              {isEventMode ? t('docketing.event_start') : t('docketing.due_date_field')}
-            </Label>
-            <Input
-              type="date"
-              value={formData.due_date}
-              onChange={(e) => setFormData({ ...formData, due_date: e.target.value })}
-              required
-              className="dark:bg-slate-900 dark:border-slate-600"
-            />
-          </div>
-
-          {/* All day toggle + time fields for events */}
+          {/* ===== EVENT MODE: Date + Time in one row ===== */}
           {isEventMode && (
             <>
-              <div className="flex items-center justify-between">
-                <Label className="dark:text-slate-300">{t('docketing.event_all_day')}</Label>
-                <Switch
+              <div className="flex items-center gap-2">
+                <Checkbox
+                  id="all_day"
                   checked={formData.all_day}
-                  onCheckedChange={(v) => setFormData({ ...formData, all_day: v })}
+                  onCheckedChange={(v) => setFormData({ ...formData, all_day: !!v })}
                 />
+                <Label htmlFor="all_day" className="dark:text-slate-300 text-sm cursor-pointer">
+                  {t('docketing.event_all_day')}
+                </Label>
               </div>
 
-              {!formData.all_day && (
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label className="dark:text-slate-300">{t('docketing.event_start_time')}</Label>
-                    <Input
-                      type="time"
-                      value={formData.start_time}
-                      onChange={(e) => setFormData({ ...formData, start_time: e.target.value })}
-                      className="dark:bg-slate-900 dark:border-slate-600"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label className="dark:text-slate-300">{t('docketing.event_end_time')}</Label>
-                    <Input
-                      type="time"
-                      value={formData.end_time}
-                      onChange={(e) => setFormData({ ...formData, end_time: e.target.value })}
-                      className="dark:bg-slate-900 dark:border-slate-600"
-                    />
-                  </div>
+              <div className={`grid gap-4 ${formData.all_day ? 'grid-cols-1' : 'grid-cols-3'}`}>
+                <div className="space-y-2">
+                  <Label className="dark:text-slate-300">{t('docketing.event_start')}</Label>
+                  <Input
+                    type="date"
+                    value={formData.due_date}
+                    onChange={(e) => setFormData({ ...formData, due_date: e.target.value })}
+                    required
+                    className="dark:bg-slate-900 dark:border-slate-600"
+                  />
                 </div>
-              )}
+                {!formData.all_day && (
+                  <>
+                    <div className="space-y-2">
+                      <Label className="dark:text-slate-300">{t('docketing.event_start_time')}</Label>
+                      <Input
+                        type="time"
+                        value={formData.start_time}
+                        onChange={(e) => setFormData({ ...formData, start_time: e.target.value })}
+                        className="dark:bg-slate-900 dark:border-slate-600"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="dark:text-slate-300">{t('docketing.event_end_time')}</Label>
+                      <Input
+                        type="time"
+                        value={formData.end_time}
+                        onChange={(e) => setFormData({ ...formData, end_time: e.target.value })}
+                        className="dark:bg-slate-900 dark:border-slate-600"
+                      />
+                    </div>
+                  </>
+                )}
+              </div>
 
+              {/* Location */}
               <div className="space-y-2">
                 <Label className="dark:text-slate-300">{t('docketing.event_location')}</Label>
                 <Input
@@ -213,13 +260,36 @@ export default function EventDialog({
                   className="dark:bg-slate-900 dark:border-slate-600"
                 />
               </div>
+
+              {/* Google Meet checkbox */}
+              <div className="flex items-center gap-3">
+                <Checkbox
+                  id="create_meet"
+                  checked={formData.create_meet_link || false}
+                  onCheckedChange={(v) => setFormData({ ...formData, create_meet_link: !!v })}
+                />
+                <Label htmlFor="create_meet" className="dark:text-slate-300 flex items-center gap-2 cursor-pointer">
+                  <Video className="w-4 h-4 text-blue-500" />
+                  {t('docketing.create_meet_link')}
+                </Label>
+              </div>
             </>
           )}
 
-          {/* Deadline-specific: reminders + critical */}
+          {/* ===== DEADLINE MODE: Due Date + Reminders in one row ===== */}
           {!isEventMode && (
             <>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-3 gap-4">
+                <div className="space-y-2">
+                  <Label className="dark:text-slate-300">{t('docketing.due_date_field')}</Label>
+                  <Input
+                    type="date"
+                    value={formData.due_date}
+                    onChange={(e) => setFormData({ ...formData, due_date: e.target.value })}
+                    required
+                    className="dark:bg-slate-900 dark:border-slate-600"
+                  />
+                </div>
                 <div className="space-y-2">
                   <Label className="dark:text-slate-300">{t('docketing.reminder_1')}</Label>
                   <Input
@@ -239,32 +309,70 @@ export default function EventDialog({
                   />
                 </div>
               </div>
+
+              {/* Critical toggle with help text */}
               <div className="flex items-center justify-between">
-                <Label className="dark:text-slate-300">{t('docketing.critical')}</Label>
+                <div className="space-y-0.5">
+                  <Label className="dark:text-slate-300">{t('docketing.critical')}</Label>
+                  <p className="text-xs text-slate-400 dark:text-slate-500">{t('docketing.critical_help')}</p>
+                </div>
                 <Switch
                   checked={formData.is_critical}
-                  onCheckedChange={(v) => setFormData({ ...formData, is_critical: v })}
+                  onCheckedChange={(v) => setFormData({
+                    ...formData,
+                    is_critical: v,
+                    color: v ? 'red' : (formData.color === 'red' ? 'amber' : formData.color)
+                  })}
                 />
               </div>
             </>
           )}
 
-          {/* Case */}
+          {/* Case - Searchable */}
           <div className="space-y-2">
             <Label className="dark:text-slate-300">{t('docketing.case_field')}</Label>
-            <Select value={formData.case_id || ''} onValueChange={(v) => setFormData({ ...formData, case_id: v })}>
-              <SelectTrigger className="dark:bg-slate-900 dark:border-slate-600">
-                <SelectValue placeholder={t('docketing.select_case')} />
-              </SelectTrigger>
-              <SelectContent className="dark:bg-slate-800 dark:border-slate-700">
-                {cases.map(c => (
-                  <SelectItem key={c.id} value={c.id} className="dark:text-slate-200">
-                    {c.case_number} - {c.title}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <SearchableSelect
+              value={formData.case_id || ''}
+              onValueChange={handleCaseChange}
+              options={caseOptions}
+              placeholder={t('docketing.select_case')}
+              searchPlaceholder={t('common.search_placeholder')}
+              emptyMessage={t('docketing.no_cases_found')}
+            />
+            {/* Show reminder recipient for deadlines */}
+            {reminderRecipient && (
+              <p className="text-xs text-slate-500 dark:text-slate-400 flex items-center gap-1">
+                <User className="w-3 h-3" />
+                {t('docketing.reminder_to_lawyer')}: {reminderRecipient.full_name}
+              </p>
+            )}
           </div>
+
+          {/* Participants (event mode only) */}
+          {isEventMode && (
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label className="dark:text-slate-300">{t('docketing.client_participant')}</Label>
+                <SearchableSelect
+                  value={formData.client_id || ''}
+                  onValueChange={(v) => setFormData({ ...formData, client_id: v })}
+                  options={clientOptions}
+                  placeholder={t('docketing.select_client')}
+                  searchPlaceholder={t('common.search_placeholder')}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label className="dark:text-slate-300">{t('docketing.employee_participant')}</Label>
+                <SearchableSelect
+                  value={formData.employee_id || ''}
+                  onValueChange={(v) => setFormData({ ...formData, employee_id: v })}
+                  options={userOptions}
+                  placeholder={t('docketing.select_employee')}
+                  searchPlaceholder={t('common.search_placeholder')}
+                />
+              </div>
+            </div>
+          )}
 
           <div className="flex justify-end gap-3 pt-4">
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)} className="dark:border-slate-600">

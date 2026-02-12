@@ -10,7 +10,7 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Edit, Trash2, Clock, Briefcase, MapPin, Users, ExternalLink } from 'lucide-react';
+import { Edit, Trash2, Clock, Briefcase, MapPin, Users, ExternalLink, Video } from 'lucide-react';
 
 const TYPE_LABELS = {
   deadline: { icon: '📌' },
@@ -97,7 +97,28 @@ export default function EventPopover({ item, open, onOpenChange, onEdit, onDelet
             </div>
           )}
 
-          {item.attendees && item.attendees.length > 0 && (
+          {item.metadata?.meet_link && (
+            <a
+              href={item.metadata.meet_link}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-3 text-sm text-blue-600 dark:text-blue-400 hover:underline"
+            >
+              <Video className="w-4 h-4" />
+              <span>{t('docketing.meet_link')}</span>
+            </a>
+          )}
+
+          {(item.metadata?.client_name || item.metadata?.employee_name) && (
+            <div className="flex items-center gap-3 text-sm text-slate-600 dark:text-slate-400">
+              <Users className="w-4 h-4" />
+              <span>
+                {[item.metadata?.client_name, item.metadata?.employee_name].filter(Boolean).join(', ')}
+              </span>
+            </div>
+          )}
+
+          {item.attendees && item.attendees.length > 0 && !item.metadata?.client_name && !item.metadata?.employee_name && (
             <div className="flex items-center gap-3 text-sm text-slate-600 dark:text-slate-400">
               <Users className="w-4 h-4" />
               <span>{item.attendees.join(', ')}</span>

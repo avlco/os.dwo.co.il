@@ -18,6 +18,7 @@ const EMPTY_FORM = {
   case_id: '',
   due_date: '',
   assigned_to: [],
+  attachments: [],
 };
 
 export default function TasksPage() {
@@ -125,6 +126,7 @@ export default function TasksPage() {
       case_id: task.case_id || '',
       due_date: task.due_date || '',
       assigned_to: task.assigned_to || [],
+      attachments: task.attachments || [],
     });
     setSheetOpen(false);
     setDialogOpen(true);
@@ -139,6 +141,7 @@ export default function TasksPage() {
       ...formData,
       case_id: formData.case_id || null,
       assigned_to: formData.assigned_to || [],
+      attachments: formData.attachments || [],
     };
 
     if (editingTask) {

@@ -12,7 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import StatusBadge from '../ui/StatusBadge';
 import AssigneeAvatars from './AssigneeAvatars';
-import { Edit, Trash2, Calendar, Briefcase, User, Clock } from 'lucide-react';
+import { Edit, Trash2, Calendar, Briefcase, User, Clock, Paperclip } from 'lucide-react';
 
 export default function TaskDetailSheet({ task, open, onOpenChange, onEdit, onDelete, getCaseNumber }) {
   const { t, i18n } = useTranslation();
@@ -128,6 +128,34 @@ export default function TaskDetailSheet({ task, open, onOpenChange, onEdit, onDe
               </div>
             )}
           </div>
+
+          {/* Attachments */}
+          {task.attachments && task.attachments.length > 0 && (
+            <div>
+              <h4 className="text-sm font-medium text-slate-500 dark:text-slate-400 mb-2">
+                {t('tasks_page.attachments')}
+              </h4>
+              <div className="space-y-2">
+                {task.attachments.map((att, i) => (
+                  <div key={i} className="flex items-center gap-2 text-sm bg-slate-50 dark:bg-slate-900 rounded-lg px-3 py-2">
+                    <Paperclip className="w-4 h-4 text-slate-400 flex-shrink-0" />
+                    {att.url ? (
+                      <a
+                        href={att.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="truncate flex-1 text-blue-600 dark:text-blue-400 hover:underline"
+                      >
+                        {att.name}
+                      </a>
+                    ) : (
+                      <span className="truncate flex-1 dark:text-slate-300">{att.name}</span>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       </SheetContent>
     </Sheet>

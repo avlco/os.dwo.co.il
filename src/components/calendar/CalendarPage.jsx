@@ -12,6 +12,7 @@ import CalendarSidebar from './CalendarSidebar';
 import EventDialog from './EventDialog';
 import EventPopover from './EventPopover';
 import { useCalendarData } from './useCalendarData';
+import { useGoogleCalendarSync } from '@/hooks/useGoogleCalendarSync';
 
 const EMPTY_EVENT_FORM = {
   entry_type: 'event',
@@ -19,13 +20,16 @@ const EMPTY_EVENT_FORM = {
   description: '',
   event_type: 'meeting',
   due_date: format(new Date(), 'yyyy-MM-dd'),
-  all_day: true,
+  all_day: false,
   start_time: '09:00',
   end_time: '10:00',
   color: 'blue',
   case_id: '',
   location: '',
   attendees: [],
+  client_id: '',
+  employee_id: '',
+  create_meet_link: false,
 };
 
 const EMPTY_DEADLINE_FORM = {
@@ -38,6 +42,7 @@ const EMPTY_DEADLINE_FORM = {
   is_critical: false,
   case_id: '',
   color: 'amber',
+  reminder_recipient_id: '',
 };
 
 export default function CalendarPage() {
@@ -62,29 +67,47 @@ export default function CalendarPage() {
   // Data
   const { items, cases, isLoading } = useCalendarData();
 
+  // Google Calendar sync
+  const { syncCreate, syncUpdate, syncDelete, pullSync, isSyncing } = useGoogleCalendarSync();
+
   // Mutations
   const createDeadline = useMutation({
     mutationFn: (data) => base44.entities.Deadline.create(data),
-    onSuccess: () => {
+    onSuccess: async (result) => {
       queryClient.invalidateQueries({ queryKey: ['deadlines'] });
       setDialogOpen(false);
       toast.success(t('docketing.create'));
+      // Sync new event to Google Calendar
+      if (result && formData.entry_type === 'event') {
+        syncCreate(result, formData);
+      }
     },
     onError: (err) => toast.error(err.message),
   });
 
   const updateDeadline = useMutation({
     mutationFn: ({ id, data }) => base44.entities.Deadline.update(id, data),
-    onSuccess: () => {
+    onSuccess: async (result) => {
       queryClient.invalidateQueries({ queryKey: ['deadlines'] });
       setDialogOpen(false);
       setPopoverOpen(false);
+      // Sync update to Google Calendar
+      if (editingItem && formData.entry_type === 'event') {
+        const entity = editingItem.originalEntity || {};
+        syncUpdate({ ...entity, ...(result || {}), id: editingItem.entityId }, formData);
+      }
     },
     onError: (err) => toast.error(err.message),
   });
 
   const deleteDeadline = useMutation({
-    mutationFn: (id) => base44.entities.Deadline.delete(id),
+    mutationFn: async (id) => {
+      // Sync delete to Google Calendar before removing locally
+      if (popoverItem?.originalEntity) {
+        await syncDelete(popoverItem.originalEntity);
+      }
+      return base44.entities.Deadline.delete(id);
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['deadlines'] });
       setPopoverOpen(false);
@@ -141,6 +164,9 @@ export default function CalendarPage() {
         case_id: entity.case_id || '',
         location: entity.location || '',
         attendees: entity.attendees || [],
+        client_id: entity.client_id || '',
+        employee_id: entity.employee_id || entity.metadata?.employee_id || '',
+        create_meet_link: entity.metadata?.create_meet_link || false,
       });
     } else {
       setFormData({
@@ -153,6 +179,7 @@ export default function CalendarPage() {
         is_critical: entity.is_critical || false,
         case_id: entity.case_id || '',
         color: entity.color || 'amber',
+        reminder_recipient_id: entity.reminder_recipient_id || '',
       });
     }
 
@@ -167,6 +194,11 @@ export default function CalendarPage() {
   const handleSubmit = () => {
     const isEvent = dialogMode === 'event';
 
+    // Build attendees array from participants
+    const attendees = [];
+    if (formData.client_id) attendees.push('client');
+    if (formData.employee_id) attendees.push('lawyer');
+
     let data;
     if (isEvent) {
       data = {
@@ -180,9 +212,15 @@ export default function CalendarPage() {
         end_time: formData.all_day ? null : formData.end_time,
         color: formData.color,
         case_id: formData.case_id || null,
+        client_id: formData.client_id || null,
+        employee_id: formData.employee_id || null,
         location: formData.location || null,
-        attendees: formData.attendees || [],
+        attendees,
         status: 'pending',
+        metadata: {
+          create_meet_link: formData.create_meet_link || false,
+          employee_id: formData.employee_id || null,
+        },
       };
     } else {
       data = {
@@ -195,6 +233,7 @@ export default function CalendarPage() {
         is_critical: formData.is_critical || false,
         case_id: formData.case_id || null,
         color: formData.color || 'amber',
+        reminder_recipient_id: formData.reminder_recipient_id || null,
         status: 'pending',
       };
     }
@@ -243,6 +282,8 @@ export default function CalendarPage() {
           onDateChange={setCurrentDate}
           onNewEvent={handleNewEvent}
           onNewDeadline={handleNewDeadline}
+          onSyncCalendar={() => pullSync(true)}
+          isSyncing={isSyncing}
         />
         <div className="flex items-center justify-center py-20">
           <p className="text-slate-400 dark:text-slate-500">{t('common.loading')}</p>

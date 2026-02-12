@@ -23,6 +23,8 @@ const translations = {
       },
       common: {
         search: "חיפוש תיקים, לקוחות...",
+        search_placeholder: "חיפוש...",
+        no_results: "לא נמצאו תוצאות",
         loading: "טוען...",
         save_changes: "שמור שינויים",
         close_sidebar: "סגור תפריט",
@@ -497,8 +499,8 @@ const translations = {
         type_field: "סוג מועד",
         description_field: "תיאור *",
         due_date_field: "תאריך יעד *",
-        reminder_1: "תזכורת ראשונה",
-        reminder_2: "תזכורת שנייה",
+        reminder_1: "תזכורת 1",
+        reminder_2: "תזכורת 2",
         critical: "מועד קריטי",
         cancel: "ביטול",
         create: "יצירה",
@@ -553,7 +555,23 @@ const translations = {
         legend_task: "משימה",
         // Time
         all_day_section: "כל היום",
-        no_events: "אין אירועים"
+        no_events: "אין אירועים",
+        // Participants & Meet
+        client_participant: "לקוח משתתף",
+        employee_participant: "עו״ד / עובד",
+        select_client: "בחר לקוח",
+        select_employee: "בחר עו״ד",
+        create_meet_link: "צור קישור Google Meet",
+        meet_link: "קישור וידאו",
+        no_cases_found: "לא נמצאו תיקים",
+        // Critical
+        critical_help: "מועד קריטי מוצג בצבע אדום בלוח השנה",
+        reminder_to_lawyer: "תזכורת לעו\"ד מטפל",
+        // Sync
+        sync_calendar: "סנכרון לוח שנה",
+        syncing: "מסנכרן...",
+        sync_success: "הסנכרון הושלם בהצלחה",
+        sync_error: "שגיאה בסנכרון"
       },
       mail_room: {
         title: "חדר דואר",
@@ -697,7 +715,11 @@ const translations = {
         task_detail: "פרטי משימה",
         created_on: "נוצר ב-",
         move_to: "העבר ל-",
-        task_count: "{{count}} משימות"
+        task_count: "{{count}} משימות",
+        // Attachments
+        attachments: "קבצים מצורפים",
+        add_attachment: "הוסף קובץ",
+        uploading: "מעלה..."
       },
       workbench: {
         title: "שולחן עבודה",
@@ -1196,6 +1218,8 @@ const translations = {
       },
       common: {
         search: "Search cases, clients...",
+        search_placeholder: "Search...",
+        no_results: "No results found",
         loading: "Loading...",
         save_changes: "Save Changes",
         close_sidebar: "Close sidebar",
@@ -1669,8 +1693,8 @@ const translations = {
         type_field: "Deadline Type",
         description_field: "Description *",
         due_date_field: "Due Date *",
-        reminder_1: "First Reminder",
-        reminder_2: "Second Reminder",
+        reminder_1: "1st Reminder",
+        reminder_2: "2nd Reminder",
         critical: "Critical Deadline",
         cancel: "Cancel",
         create: "Create",
@@ -1719,7 +1743,20 @@ const translations = {
         legend_event: "Event",
         legend_task: "Task",
         all_day_section: "All Day",
-        no_events: "No events"
+        no_events: "No events",
+        client_participant: "Client Participant",
+        employee_participant: "Lawyer / Employee",
+        select_client: "Select client",
+        select_employee: "Select lawyer",
+        create_meet_link: "Create Google Meet link",
+        meet_link: "Video link",
+        no_cases_found: "No cases found",
+        critical_help: "Critical deadlines are shown in red on the calendar",
+        reminder_to_lawyer: "Reminder to assigned lawyer",
+        sync_calendar: "Sync Calendar",
+        syncing: "Syncing...",
+        sync_success: "Sync completed successfully",
+        sync_error: "Sync error"
       },
       mail_room: {
         title: "Mail Room",
@@ -1859,7 +1896,10 @@ const translations = {
         task_detail: "Task Details",
         created_on: "Created on ",
         move_to: "Move to",
-        task_count: "{{count}} tasks"
+        task_count: "{{count}} tasks",
+        attachments: "Attachments",
+        add_attachment: "Add file",
+        uploading: "Uploading..."
       },
       workbench: {
         title: "Workbench",
