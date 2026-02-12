@@ -62,9 +62,10 @@ export default function TasksPage() {
       queryClient.invalidateQueries({ queryKey: ['tasks'] });
       setDialogOpen(false);
       toast.success(t('tasks_page.create'));
-      // Sync task with due_date to Google Calendar
+      // Sync task with due_date to Google Calendar and re-invalidate to cache google_event_id
       if (result && formData.due_date) {
-        syncCreate(result, { ...formData, entry_type: 'task' });
+        await syncCreate(result, { ...formData, entry_type: 'task' });
+        queryClient.invalidateQueries({ queryKey: ['tasks'] });
       }
       setFormData(EMPTY_FORM);
     },
@@ -145,7 +146,7 @@ export default function TasksPage() {
       case_id: task.case_id || '',
       due_date: task.due_date || '',
       assigned_to: task.assigned_to || [],
-      attachments: task.attachments || [],
+      attachments: task.metadata?.attachments || task.attachments || [],
     });
     setSheetOpen(false);
     setDialogOpen(true);
@@ -156,11 +157,16 @@ export default function TasksPage() {
   };
 
   const handleSubmit = () => {
+    const { attachments, ...restFormData } = formData;
     const data = {
-      ...formData,
+      ...restFormData,
       case_id: formData.case_id || null,
       assigned_to: formData.assigned_to || [],
-      attachments: formData.attachments || [],
+      metadata: {
+        ...(formData.metadata || {}),
+        ...(editingTask?.metadata || {}),
+        attachments: attachments || [],
+      },
     };
 
     if (editingTask) {

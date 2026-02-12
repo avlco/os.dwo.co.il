@@ -134,7 +134,7 @@ export default function EventDialog({
           {/* Title / Description */}
           <div className="space-y-2">
             <Label className="dark:text-slate-300">
-              {isEventMode ? t('docketing.event_title') : t('docketing.description_field')}
+              {isEventMode ? t('docketing.event_title') : t('docketing.description_field')} <span className="text-rose-500">*</span>
             </Label>
             <Input
               value={isEventMode ? formData.title : formData.description}
@@ -218,7 +218,7 @@ export default function EventDialog({
 
               <div className={`grid gap-4 ${formData.all_day ? 'grid-cols-1' : 'grid-cols-3'}`}>
                 <div className="space-y-2">
-                  <Label className="dark:text-slate-300">{t('docketing.event_start')}</Label>
+                  <Label className="dark:text-slate-300">{t('docketing.event_start')} <span className="text-rose-500">*</span></Label>
                   <Input
                     type="date"
                     value={formData.due_date}
@@ -281,7 +281,7 @@ export default function EventDialog({
             <>
               <div className="grid grid-cols-3 gap-4">
                 <div className="space-y-2">
-                  <Label className="dark:text-slate-300">{t('docketing.due_date_field')}</Label>
+                  <Label className="dark:text-slate-300">{t('docketing.due_date_field')} <span className="text-rose-500">*</span></Label>
                   <Input
                     type="date"
                     value={formData.due_date}
