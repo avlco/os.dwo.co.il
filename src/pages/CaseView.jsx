@@ -578,7 +578,7 @@ export default function CaseView() {
           <form onSubmit={handleEditSubmit} className="space-y-6 mt-4">
             <div className="grid grid-cols-3 gap-4">
               <div className="space-y-2">
-                <Label>{t('case_view.case_number_field')}</Label>
+                <Label>{t('case_view.case_number_field')} <span className="text-red-500">*</span></Label>
                 <Input
                   value={editCaseForm.case_number}
                   onChange={(e) => { setEditCaseForm({ ...editCaseForm, case_number: e.target.value }); setFormErrors(prev => ({...prev, case_number: null})); }}

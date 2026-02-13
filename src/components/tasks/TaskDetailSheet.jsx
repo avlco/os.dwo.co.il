@@ -12,7 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import StatusBadge from '../ui/StatusBadge';
 import AssigneeAvatars from './AssigneeAvatars';
-import { Edit, Trash2, Calendar, Briefcase, User, Clock, Paperclip } from 'lucide-react';
+import { Edit, Trash2, Calendar, Briefcase, User, Clock, Paperclip, Mail, ExternalLink } from 'lucide-react';
 
 export default function TaskDetailSheet({ task, open, onOpenChange, onEdit, onDelete, getCaseNumber }) {
   const { t, i18n } = useTranslation();
@@ -36,7 +36,7 @@ export default function TaskDetailSheet({ task, open, onOpenChange, onEdit, onDe
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent side={isRTL ? 'left' : 'right'} className="w-[400px] sm:w-[450px] dark:bg-slate-800 dark:border-slate-700">
+      <SheetContent side={isRTL ? 'left' : 'right'} className="w-[450px] sm:w-[520px] dark:bg-slate-800 dark:border-slate-700 overflow-y-auto">
         <SheetHeader className="pb-4 border-b dark:border-slate-700">
           <div className="flex items-center justify-between gap-2">
             <SheetTitle className="dark:text-slate-200 text-start flex-1">
@@ -125,6 +125,29 @@ export default function TaskDetailSheet({ task, open, onOpenChange, onEdit, onDe
                 <span className="text-sm text-green-600 dark:text-green-400">
                   {t('tasks_page.completed_on')}{formatDate(task.completed_at)}
                 </span>
+              </div>
+            )}
+
+            {task.metadata?.source_mail_id && (
+              <div className="flex items-center gap-3">
+                <Mail className="w-4 h-4 text-slate-400" />
+                <span className="text-sm text-slate-500 dark:text-slate-400">
+                  {t('tasks_page.source_mail', 'נוצר ממייל')}
+                </span>
+              </div>
+            )}
+
+            {task.metadata?.dropbox_link && (
+              <div className="flex items-center gap-3">
+                <ExternalLink className="w-4 h-4 text-slate-400" />
+                <a
+                  href={task.metadata.dropbox_link}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-sm text-blue-600 dark:text-blue-400 hover:underline"
+                >
+                  {t('tasks_page.view_in_dropbox', 'צפה ב-Dropbox')}
+                </a>
               </div>
             )}
           </div>

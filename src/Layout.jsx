@@ -6,6 +6,7 @@ import { ThemeProvider } from './components/ThemeProvider';
 import { DateTimeSettingsProvider } from './components/DateTimeSettingsProvider';
 import './components/i18nConfig';
 import { useAuth } from '@/lib/AuthContext';
+import { useGoogleCalendarSync } from '@/hooks/useGoogleCalendarSync';
 import {
   LayoutDashboard,
   Briefcase,
@@ -43,7 +44,10 @@ function LayoutContent({ children, currentPageName }) {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   
   const { user, isLoading, isAuthenticated, logout, navigateToLogin } = useAuth();
-  
+
+  // Global Google Calendar sync — runs every 5 min regardless of current page
+  useGoogleCalendarSync();
+
   const isRTL = i18n.language === 'he';
 
   const navigation = [
