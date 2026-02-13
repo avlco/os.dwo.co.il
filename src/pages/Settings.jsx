@@ -10,7 +10,6 @@ import IntegrationsTab from '../components/settings/IntegrationsTab';
 import DateTimePreferences from '../components/settings/DateTimePreferences';
 import {
   User,
-  Bell,
   Shield,
   Users,
   Settings as SettingsIcon,
@@ -22,7 +21,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 
-import { Switch } from "@/components/ui/switch";
 import {
   Select,
   SelectContent,
@@ -40,12 +38,6 @@ export default function Settings() {
   const [profile, setProfile] = useState({
     full_name: '',
     phone: '',
-  });
-  const [notifications, setNotifications] = useState({
-    email_new_task: true,
-    email_deadline: true,
-    email_overdue: true,
-    email_frequency: 'immediate',
   });
 
   useEffect(() => {
@@ -97,10 +89,6 @@ export default function Settings() {
           <TabsTrigger value="profile" className="gap-2 dark:text-slate-300 dark:data-[state=active]:bg-slate-700">
             <User className="w-4 h-4" />
             {t('settings.profile')}
-          </TabsTrigger>
-          <TabsTrigger value="notifications" className="gap-2 dark:text-slate-300 dark:data-[state=active]:bg-slate-700">
-            <Bell className="w-4 h-4" />
-            {t('settings.notifications')}
           </TabsTrigger>
           <TabsTrigger value="security" className="gap-2 dark:text-slate-300 dark:data-[state=active]:bg-slate-700">
             <Shield className="w-4 h-4" />
@@ -175,69 +163,6 @@ export default function Settings() {
                 <Button onClick={handleSaveProfile} className="bg-slate-800 hover:bg-slate-700 dark:bg-slate-700 dark:hover:bg-slate-600">
                   {t('common.save_changes')}
                 </Button>
-              </div>
-            </CardContent>
-          </Card>
-          </div>
-        </TabsContent>
-
-        <TabsContent value="notifications">
-          <div className="max-w-4xl mx-auto">
-          <Card className="dark:bg-slate-800 dark:border-slate-700">
-            <CardHeader>
-              <CardTitle className="dark:text-slate-100">{t('settings.notification_preferences')}</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              <div className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="font-medium text-slate-800 dark:text-slate-200">{t('settings.new_task')}</p>
-                    <p className="text-sm text-slate-500 dark:text-slate-400">{t('settings.new_task_desc')}</p>
-                  </div>
-                  <Switch
-                    checked={notifications.email_new_task}
-                    onCheckedChange={(checked) => setNotifications({ ...notifications, email_new_task: checked })}
-                  />
-                </div>
-
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="font-medium text-slate-800 dark:text-slate-200">{t('settings.upcoming_deadline')}</p>
-                    <p className="text-sm text-slate-500 dark:text-slate-400">{t('settings.upcoming_deadline_desc')}</p>
-                  </div>
-                  <Switch
-                    checked={notifications.email_deadline}
-                    onCheckedChange={(checked) => setNotifications({ ...notifications, email_deadline: checked })}
-                  />
-                </div>
-
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="font-medium text-slate-800 dark:text-slate-200">{t('settings.overdue_deadline')}</p>
-                    <p className="text-sm text-slate-500 dark:text-slate-400">{t('settings.overdue_deadline_desc')}</p>
-                  </div>
-                  <Switch
-                    checked={notifications.email_overdue}
-                    onCheckedChange={(checked) => setNotifications({ ...notifications, email_overdue: checked })}
-                  />
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <Label className="dark:text-slate-300">{t('settings.notification_frequency')}</Label>
-                <Select 
-                  value={notifications.email_frequency}
-                  onValueChange={(v) => setNotifications({ ...notifications, email_frequency: v })}
-                >
-                  <SelectTrigger className="dark:bg-slate-900 dark:border-slate-600 dark:text-slate-200">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent className="dark:bg-slate-800 dark:border-slate-700">
-                    <SelectItem value="immediate" className="dark:text-slate-200">{t('settings.immediate')}</SelectItem>
-                    <SelectItem value="daily" className="dark:text-slate-200">{t('settings.daily')}</SelectItem>
-                    <SelectItem value="weekly" className="dark:text-slate-200">{t('settings.weekly')}</SelectItem>
-                  </SelectContent>
-                </Select>
               </div>
             </CardContent>
           </Card>

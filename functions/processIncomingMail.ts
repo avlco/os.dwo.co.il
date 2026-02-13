@@ -270,6 +270,9 @@ async function runAutomation(base44, mails, userId) {
             const body = (mail.body_plain || mail.body_html || '').toLowerCase();
             if (!body.includes(config.body_contains.toLowerCase())) match = false;
         }
+        if (match && config.has_attachments) {
+            if (!mail.has_attachments) match = false;
+        }
         return match;
       });
 

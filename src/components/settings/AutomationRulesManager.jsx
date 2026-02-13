@@ -46,7 +46,7 @@ const defaultRule = {
   is_active: true,
   require_approval: true,
   approver_email: '',
-  catch_config: { senders: [], subject_contains: '', body_contains: '' },
+  catch_config: { senders: [], subject_contains: '', body_contains: '', has_attachments: false },
   map_config: [{ ...defaultMapRow }],
   action_bundle: {
     send_email: { 
@@ -192,30 +192,30 @@ function TimingSelector({ base, docketType, direction, offset, unit, onBaseChang
           if (val === 'mail_date') onDocketTypeChange('');
         }}
       >
-        <SelectTrigger className="w-32"><SelectValue /></SelectTrigger>
-        <SelectContent>
-          <SelectItem value="mail_date">תאריך מייל</SelectItem>
-          <SelectItem value="docket_date">מועד בתיק</SelectItem>
+        <SelectTrigger className="w-32 dark:bg-slate-800 dark:border-slate-600 dark:text-slate-200"><SelectValue /></SelectTrigger>
+        <SelectContent className="dark:bg-slate-800 dark:border-slate-700">
+          <SelectItem value="mail_date" className="dark:text-slate-200">{t('automation_rules.timing_mail_date', 'תאריך מייל')}</SelectItem>
+          <SelectItem value="docket_date" className="dark:text-slate-200">{t('automation_rules.timing_docket_date', 'מועד בתיק')}</SelectItem>
         </SelectContent>
       </Select>
 
       {base === 'docket_date' && (
         <Select value={docketType || ''} onValueChange={onDocketTypeChange}>
-          <SelectTrigger className="w-36"><SelectValue placeholder="סוג מועד" /></SelectTrigger>
-          <SelectContent className="z-[100]">
-            <SelectItem value="expiry">פקיעה</SelectItem>
-            <SelectItem value="renewal">חידוש</SelectItem>
-            <SelectItem value="priority">בכורה</SelectItem>
-            <SelectItem value="publication">פרסום</SelectItem>
+          <SelectTrigger className="w-36 dark:bg-slate-800 dark:border-slate-600 dark:text-slate-200"><SelectValue placeholder={t('automation_rules.docket_type_placeholder', 'סוג מועד')} /></SelectTrigger>
+          <SelectContent className="z-[100] dark:bg-slate-800 dark:border-slate-700">
+            <SelectItem value="expiry" className="dark:text-slate-200">{t('automation_rules.docket_expiry', 'פקיעה')}</SelectItem>
+            <SelectItem value="renewal" className="dark:text-slate-200">{t('automation_rules.docket_renewal', 'חידוש')}</SelectItem>
+            <SelectItem value="priority" className="dark:text-slate-200">{t('automation_rules.docket_priority', 'בכורה')}</SelectItem>
+            <SelectItem value="publication" className="dark:text-slate-200">{t('automation_rules.docket_publication', 'פרסום')}</SelectItem>
           </SelectContent>
         </Select>
       )}
 
       <Select value={direction} onValueChange={onDirectionChange}>
-        <SelectTrigger className="w-24"><SelectValue /></SelectTrigger>
-        <SelectContent>
-          <SelectItem value="before">לפני</SelectItem>
-          <SelectItem value="after">אחרי</SelectItem>
+        <SelectTrigger className="w-24 dark:bg-slate-800 dark:border-slate-600 dark:text-slate-200"><SelectValue /></SelectTrigger>
+        <SelectContent className="dark:bg-slate-800 dark:border-slate-700">
+          <SelectItem value="before" className="dark:text-slate-200">{t('automation_rules.timing_before', 'לפני')}</SelectItem>
+          <SelectItem value="after" className="dark:text-slate-200">{t('automation_rules.timing_after', 'אחרי')}</SelectItem>
         </SelectContent>
       </Select>
 
@@ -223,16 +223,16 @@ function TimingSelector({ base, docketType, direction, offset, unit, onBaseChang
         type="number"
         value={offset}
         onChange={(e) => onOffsetChange(parseInt(e.target.value) || 0)}
-        className="w-20"
+        className="w-20 dark:bg-slate-800 dark:border-slate-600 dark:text-slate-200"
       />
 
       <Select value={unit} onValueChange={onUnitChange}>
-        <SelectTrigger className="w-28"><SelectValue /></SelectTrigger>
-        <SelectContent>
-          <SelectItem value="days">ימים</SelectItem>
-          <SelectItem value="weeks">שבועות</SelectItem>
-          <SelectItem value="months">חודשים</SelectItem>
-          <SelectItem value="years">שנים</SelectItem>
+        <SelectTrigger className="w-28 dark:bg-slate-800 dark:border-slate-600 dark:text-slate-200"><SelectValue /></SelectTrigger>
+        <SelectContent className="dark:bg-slate-800 dark:border-slate-700">
+          <SelectItem value="days" className="dark:text-slate-200">{t('automation_rules.unit_days', 'ימים')}</SelectItem>
+          <SelectItem value="weeks" className="dark:text-slate-200">{t('automation_rules.unit_weeks', 'שבועות')}</SelectItem>
+          <SelectItem value="months" className="dark:text-slate-200">{t('automation_rules.unit_months', 'חודשים')}</SelectItem>
+          <SelectItem value="years" className="dark:text-slate-200">{t('automation_rules.unit_years', 'שנים')}</SelectItem>
         </SelectContent>
       </Select>
     </div>
@@ -330,7 +330,7 @@ export default function AutomationRulesManager() {
     const { id, created_date, updated_date, created_by, ...ruleData } = rule;
     const duplicatedRule = {
       ...ruleData,
-      name: `${ruleData.name} (העתק)`,
+      name: `${ruleData.name} (${t('common.copy', 'העתק')})`,
       is_active: false,
     };
     createMutation.mutate(duplicatedRule);
@@ -456,9 +456,9 @@ export default function AutomationRulesManager() {
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
       
-      toast.success(`${rules.length} חוקי אוטומציה יוצאו בהצלחה`);
+      toast.success(t('automation_rules.export_success', { count: rules.length }));
     } catch (error) {
-      toast.error(`שגיאה בייצוא: ${error.message}`);
+      toast.error(t('automation_rules.export_error', { error: error.message }));
     } finally {
       setIsExporting(false);
     }
@@ -471,12 +471,12 @@ export default function AutomationRulesManager() {
       
       queryClient.invalidateQueries(['automationRules']);
       
-      let description = `נוצרו ${created}, עודכנו ${updated}`;
-      if (failed > 0) description += `, נכשלו ${failed}`;
-      
-      toast.success(`הייבוא הושלם: ${description}`);
+      let description = t('automation_rules.import_summary', { created, updated });
+      if (failed > 0) description += `, ${t('common.failed')}: ${failed}`;
+
+      toast.success(description);
     } catch (error) {
-      toast.error(`שגיאה בייבוא: ${error.message}`);
+      toast.error(t('automation_rules.import_error', { error: error.message }));
       throw error;
     }
   };
@@ -546,7 +546,7 @@ export default function AutomationRulesManager() {
               setSendersInput('');
               setIsEditModalOpen(true);
             }}>
-              <Plus className="w-4 h-4 ml-1" /> {t('automation_rules.manual_setup')}
+              <Plus className="w-4 h-4" /> {t('automation_rules.manual_setup')}
             </Button>
           </div>
         </CardHeader>
@@ -556,7 +556,7 @@ export default function AutomationRulesManager() {
               <div className="text-center py-12">
                 <p className="text-slate-400 mb-4">{t('settings.no_automation_rules')}</p>
                 <Button variant="outline" onClick={() => setIsWizardOpen(true)}>
-                  התחל עם אשף ההגדרות
+                  {t('automation_rules.start_wizard', 'התחל עם אשף ההגדרות')}
                 </Button>
               </div>
             ) : rules.map(rule => (
@@ -675,6 +675,14 @@ export default function AutomationRulesManager() {
                   rows={3}
                 />
                 {fieldErrors.body_contains && <p className="text-sm text-red-500 mt-1">{fieldErrors.body_contains}</p>}
+              </div>
+              <div className="flex items-center gap-2 mt-3">
+                <Checkbox
+                  id="has_attachments_filter"
+                  checked={currentRule.catch_config.has_attachments || false}
+                  onCheckedChange={(checked) => setCurrentRule({...currentRule, catch_config: {...currentRule.catch_config, has_attachments: !!checked}})}
+                />
+                <Label htmlFor="has_attachments_filter" className="dark:text-slate-300 cursor-pointer">{t('automation_rules.has_attachments_filter')}</Label>
               </div>
               {fieldErrors.general && <p className="text-sm text-red-500 mt-1 p-2 bg-red-50 dark:bg-red-900/20 rounded">{fieldErrors.general}</p>}
             </TabsContent>
@@ -1009,7 +1017,7 @@ export default function AutomationRulesManager() {
 
                       {/* Filename Template */}
                       <div>
-                        <Label className="text-sm">תבנית שם קובץ</Label>
+                        <Label className="text-sm">{t('automation_rules.filename_template', 'תבנית שם קובץ')}</Label>
                         <FilenameTemplateInput
                           value={currentRule.action_bundle.save_file.filename_template || '{Original_Filename}'}
                           onChange={(v) => updateAction('save_file', 'filename_template', v)}

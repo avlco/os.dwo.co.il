@@ -343,7 +343,7 @@ export default function CaseView() {
         </Link>
         <div className="flex-1">
           <div className="flex items-center gap-3">
-            <h1 className="text-2xl font-bold text-slate-800">{currentCase.case_number}</h1>
+            <h1 className="text-2xl font-bold text-slate-800 dark:text-slate-200">{currentCase.case_number}</h1>
             <StatusBadge status={currentCase.status} />
             {priorityInfo && (
               <Badge variant="outline" className={`${priorityInfo.color} border-current ml-2`}>
@@ -363,24 +363,24 @@ export default function CaseView() {
 
       {/* Info Cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <Card>
+        <Card className="dark:bg-slate-800 dark:border-slate-700">
           <CardContent className="pt-6">
-            <p className="text-sm text-slate-500 mb-1">{t('case_view.client_label')}</p>
-            <p className="font-medium text-slate-800">{currentClient?.name || '-'}</p>
+            <p className="text-sm text-slate-500 dark:text-slate-400 mb-1">{t('case_view.client_label')}</p>
+            <p className="font-medium text-slate-800 dark:text-slate-200">{currentClient?.name || '-'}</p>
           </CardContent>
         </Card>
-        <Card>
+        <Card className="dark:bg-slate-800 dark:border-slate-700">
           <CardContent className="pt-6">
-            <p className="text-sm text-slate-500 mb-1">{t('cases.case_type')}</p>
-            <p className="font-medium text-slate-800">
+            <p className="text-sm text-slate-500 dark:text-slate-400 mb-1">{t('cases.case_type')}</p>
+            <p className="font-medium text-slate-800 dark:text-slate-200">
               {caseTypes.find(ct => ct.value === currentCase.case_type)?.label || currentCase.case_type}
             </p>
           </CardContent>
         </Card>
-        <Card>
+        <Card className="dark:bg-slate-800 dark:border-slate-700">
           <CardContent className="pt-6">
-            <p className="text-sm text-slate-500 mb-1">{t('case_view.territory_label')}</p>
-            <p className="font-medium text-slate-800">{currentCase.territory || '-'}</p>
+            <p className="text-sm text-slate-500 dark:text-slate-400 mb-1">{t('case_view.territory_label')}</p>
+            <p className="font-medium text-slate-800 dark:text-slate-200">{currentCase.territory || '-'}</p>
           </CardContent>
         </Card>
       </div>
@@ -399,9 +399,9 @@ export default function CaseView() {
         </TabsList>
 
         <TabsContent value="details">
-          <Card>
+          <Card className="dark:bg-slate-800 dark:border-slate-700">
             <CardHeader>
-              <CardTitle>{t('case_view.case_details')}</CardTitle>
+              <CardTitle className="dark:text-slate-100">{t('case_view.case_details')}</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -455,9 +455,9 @@ export default function CaseView() {
         </TabsContent>
 
         <TabsContent value="deadlines">
-          <Card>
+          <Card className="dark:bg-slate-800 dark:border-slate-700">
             <CardHeader className="flex flex-row items-center justify-between">
-              <CardTitle className="flex items-center gap-2">
+              <CardTitle className="flex items-center gap-2 dark:text-slate-100">
                 <Calendar className="w-5 h-5 text-amber-500" />
                 {t('case_view.deadlines_header')}
               </CardTitle>
@@ -477,7 +477,7 @@ export default function CaseView() {
   className="flex items-center gap-4 p-4 bg-slate-50 dark:bg-card rounded-xl"
 >
                       <div className="flex-1">
-                        <p className="font-medium text-slate-800">{deadline.description}</p>
+                        <p className="font-medium text-slate-800 dark:text-slate-200">{deadline.description}</p>
                         <p className="text-sm text-slate-500">
                           {formatDate(deadline.due_date)}
                         </p>
@@ -499,9 +499,9 @@ export default function CaseView() {
         </TabsContent>
 
         <TabsContent value="tasks">
-          <Card>
+          <Card className="dark:bg-slate-800 dark:border-slate-700">
             <CardHeader className="flex flex-row items-center justify-between">
-              <CardTitle className="flex items-center gap-2">
+              <CardTitle className="flex items-center gap-2 dark:text-slate-100">
                 <FileText className="w-5 h-5 text-blue-500" />
                 {t('case_view.tasks_header')}
               </CardTitle>
@@ -517,7 +517,7 @@ export default function CaseView() {
                       className="flex items-center gap-4 p-4 bg-slate-50 dark:bg-card rounded-xl"
                     >
                       <div className="flex-1">
-                        <p className="font-medium text-slate-800">{task.title}</p>
+                        <p className="font-medium text-slate-800 dark:text-slate-200">{task.title}</p>
                         {task.due_date && (
                           <p className="text-sm text-slate-500">
                             {formatDate(task.due_date)}
@@ -540,23 +540,23 @@ export default function CaseView() {
 
         <TabsContent value="financials">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-            <Card>
+            <Card className="dark:bg-slate-800 dark:border-slate-700">
               <CardContent className="pt-6">
-                <p className="text-sm text-slate-500 mb-1">{t('case_view.total_hours')}</p>
-                <p className="text-2xl font-bold text-slate-800">{totalHours.toFixed(1)}</p>
+                <p className="text-sm text-slate-500 dark:text-slate-400 mb-1">{t('case_view.total_hours')}</p>
+                <p className="text-2xl font-bold text-slate-800 dark:text-slate-200">{totalHours.toFixed(1)}</p>
               </CardContent>
             </Card>
-            <Card>
+            <Card className="dark:bg-slate-800 dark:border-slate-700">
               <CardContent className="pt-6">
-                <p className="text-sm text-slate-500 mb-1">{t('case_view.total_billable')}</p>
-                <p className="text-2xl font-bold text-slate-800">₪{totalBillable.toLocaleString()}</p>
+                <p className="text-sm text-slate-500 dark:text-slate-400 mb-1">{t('case_view.total_billable')}</p>
+                <p className="text-2xl font-bold text-slate-800 dark:text-slate-200">₪{totalBillable.toLocaleString()}</p>
               </CardContent>
             </Card>
           </div>
 
-          <Card>
+          <Card className="dark:bg-slate-800 dark:border-slate-700">
             <CardHeader className="flex flex-row items-center justify-between">
-              <CardTitle className="flex items-center gap-2">
+              <CardTitle className="flex items-center gap-2 dark:text-slate-100">
                 <Clock className="w-5 h-5 text-emerald-500" />
                 {t('case_view.time_entries')}
               </CardTitle>
@@ -576,7 +576,7 @@ export default function CaseView() {
                       className="flex items-center gap-4 p-4 bg-slate-50 dark:bg-card rounded-xl"
                     >
                       <div className="flex-1">
-                        <p className="font-medium text-slate-800">{entry.description}</p>
+                        <p className="font-medium text-slate-800 dark:text-slate-200">{entry.description}</p>
                         <p className="text-sm text-slate-500">
                           {formatDate(entry.date_worked)}
                         </p>
@@ -598,7 +598,7 @@ export default function CaseView() {
 
       {/* Edit Case Dialog */}
       <Dialog open={isEditCaseDialogOpen} onOpenChange={setIsEditCaseDialogOpen}>
-        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto dark:bg-slate-800 dark:border-slate-700">
           <DialogHeader>
             <DialogTitle>{t('case_view.edit_case_title')} {editCaseForm.case_number}</DialogTitle>
           </DialogHeader>
@@ -813,7 +813,7 @@ export default function CaseView() {
 
       {/* Deadline Dialog */}
       <Dialog open={isDeadlineDialogOpen} onOpenChange={setIsDeadlineDialogOpen}>
-        <DialogContent>
+        <DialogContent className="max-h-[85vh] overflow-y-auto dark:bg-slate-800 dark:border-slate-700">
           <DialogHeader>
             <DialogTitle>{t('case_view.new_deadline')}</DialogTitle>
           </DialogHeader>
@@ -858,7 +858,7 @@ export default function CaseView() {
 
       {/* Time Entry Dialog */}
       <Dialog open={isTimeEntryDialogOpen} onOpenChange={setIsTimeEntryDialogOpen}>
-        <DialogContent>
+        <DialogContent className="max-h-[85vh] overflow-y-auto dark:bg-slate-800 dark:border-slate-700">
           <DialogHeader>
             <DialogTitle>{t('case_view.time_entries')}</DialogTitle>
           </DialogHeader>

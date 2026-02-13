@@ -17,13 +17,13 @@ import {
   LogOut,
   Menu,
   X,
-  Bell,
   Search,
   ChevronDown,
   Mail,
   PanelLeftClose,
   PanelLeftOpen,
-  Loader2
+  Loader2,
+  BarChart3
 } from 'lucide-react';
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -54,7 +54,7 @@ function LayoutContent({ children, currentPageName }) {
     { name: t('nav.docketing'), href: 'Docketing', icon: Calendar },
     { name: t('nav.tasks'), href: 'Tasks', icon: FileText },
     { name: t('nav.financials'), href: 'Financials', icon: Receipt },
-    { name: t('nav.analytics'), href: 'MailAnalytics', icon: Bell },
+    { name: t('nav.analytics'), href: 'MailAnalytics', icon: BarChart3 },
     { name: t('nav.settings'), href: 'Settings', icon: Settings },
   ];
 
@@ -223,57 +223,6 @@ function LayoutContent({ children, currentPageName }) {
               </div>
             </div>
             <div className="flex items-center gap-3">
-              {/* Notification Bell with Dropdown */}
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button variant="ghost" size="icon" className="relative rounded-xl dark:hover:bg-slate-700" aria-label={t('common.notifications')}>
-                    <Bell className="w-5 h-5 text-slate-600 dark:text-slate-300" />
-                    <span className="absolute top-1 right-1 w-2 h-2 bg-rose-500 rounded-full" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-80 dark:bg-slate-800 dark:border-slate-700">
-                  <div className="p-4">
-                    <div className="flex items-center justify-between mb-3">
-                      <h3 className="font-semibold text-sm dark:text-slate-200">
-                        {t('common.notifications')}
-                      </h3>
-                      <Button 
-                        variant="ghost" 
-                        size="sm" 
-                        className="h-auto p-0 text-xs text-blue-600 dark:text-blue-400 hover:underline"
-                      >
-                        {t('common.mark_all_as_read')}
-                      </Button>
-                    </div>
-                    <div className="space-y-2">
-                      {/* Empty state */}
-                      <div className="text-sm text-slate-500 dark:text-slate-400 text-center py-8">
-                        {t('common.no_new_notifications')}
-                      </div>
-                      
-                      {/* Example notifications (you can remove these later) */}
-                      {/* 
-                      <div className="p-3 hover:bg-slate-50 dark:hover:bg-slate-700 rounded-lg cursor-pointer transition-colors">
-                        <p className="text-sm font-medium dark:text-slate-200">מייל חדש התקבל</p>
-                        <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">לפני 5 דקות</p>
-                      </div>
-                      <div className="p-3 hover:bg-slate-50 dark:hover:bg-slate-700 rounded-lg cursor-pointer transition-colors">
-                        <p className="text-sm font-medium dark:text-slate-200">תיק חדש נוצר</p>
-                        <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">לפני שעה</p>
-                      </div>
-                      */}
-                    </div>
-                  </div>
-                  <DropdownMenuSeparator className="dark:bg-slate-700" />
-                  <div className="p-2">
-                    <Link to={createPageUrl('Settings')}>
-                      <Button variant="ghost" className="w-full justify-center text-sm dark:text-slate-200 dark:hover:bg-slate-700">
-                        {t('common.notification_settings')}
-                      </Button>
-                    </Link>
-                  </div>
-                </DropdownMenuContent>
-              </DropdownMenu>
             </div>
           </div>
         </header>
