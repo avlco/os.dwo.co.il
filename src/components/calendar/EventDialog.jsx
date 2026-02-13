@@ -120,7 +120,7 @@ export default function EventDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg dark:bg-slate-800 dark:border-slate-700">
+      <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto dark:bg-slate-800 dark:border-slate-700">
         <DialogHeader>
           <DialogTitle className="dark:text-slate-200">
             {isEditing

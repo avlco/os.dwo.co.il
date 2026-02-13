@@ -40,6 +40,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/components/ui/use-toast";
 
 import DocumentViewer from '../components/documents/DocumentViewer';
+import DropboxBrowser from '../components/common/DropboxBrowser';
+import { ClipboardList } from 'lucide-react';
 
 // --- הדף הראשי ---
 export default function ClientView() {
@@ -78,6 +80,18 @@ export default function ClientView() {
   const { data: users = [] } = useQuery({
     queryKey: ['users'],
     queryFn: async () => base44.entities.User.list(),
+  });
+
+  // Tasks for all this client's cases
+  const caseIds = cases.map(c => c.id);
+  const { data: clientTasks = [] } = useQuery({
+    queryKey: ['client-tasks', clientId, caseIds],
+    queryFn: async () => {
+      if (caseIds.length === 0) return [];
+      const allTasks = await base44.entities.Task.list('-created_date', 500);
+      return allTasks.filter(t => caseIds.includes(t.case_id));
+    },
+    enabled: caseIds.length > 0,
   });
 
   const client = clientData?.[0];
@@ -351,8 +365,14 @@ export default function ClientView() {
               >
                 <Receipt className={`w-4 h-4 ${isRTL ? 'ml-2' : 'mr-2'}`} /> {t('client_view.financials_tab')}
               </TabsTrigger>
-              <TabsTrigger 
-                value="docs" 
+              <TabsTrigger
+                value="tasks"
+                className="rounded-none border-b-2 border-transparent data-[state=active]:border-blue-600 data-[state=active]:bg-transparent px-2 py-3 dark:data-[state=active]:text-slate-200"
+              >
+                <ClipboardList className={`w-4 h-4 ${isRTL ? 'ml-2' : 'mr-2'}`} /> {t('client_view.tasks_tab', 'משימות')} ({clientTasks.length})
+              </TabsTrigger>
+              <TabsTrigger
+                value="docs"
                 className="rounded-none border-b-2 border-transparent data-[state=active]:border-blue-600 data-[state=active]:bg-transparent px-2 py-3 dark:data-[state=active]:text-slate-200"
               >
                 <Cloud className={`w-4 h-4 ${isRTL ? 'ml-2' : 'mr-2'}`} /> {t('client_view.documents_tab')}
@@ -404,9 +424,57 @@ export default function ClientView() {
                 </Card>
               </TabsContent>
 
+              {/* Tab: Tasks */}
+              <TabsContent value="tasks">
+                <Card className="dark:bg-slate-800 dark:border-slate-700">
+                  <CardHeader>
+                    <CardTitle className="text-base flex items-center gap-2 dark:text-slate-200">
+                      <ClipboardList className="w-5 h-5 text-blue-500" />
+                      {t('client_view.all_tasks', 'כל המשימות')} ({clientTasks.length})
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    {clientTasks.length > 0 ? (
+                      <div className="space-y-2">
+                        {clientTasks.map(task => {
+                          const relatedCase = cases.find(c => c.id === task.case_id);
+                          return (
+                            <div
+                              key={task.id}
+                              className="flex items-center justify-between p-3 bg-slate-50 dark:bg-slate-900 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700/50 transition-colors"
+                            >
+                              <div className="flex-1 min-w-0">
+                                <p className="font-medium text-sm text-slate-800 dark:text-slate-200 truncate">{task.title}</p>
+                                <p className="text-xs text-slate-500">
+                                  {relatedCase ? relatedCase.case_number : ''}{task.due_date ? ` • ${formatDate(task.due_date)}` : ''}
+                                </p>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <StatusBadge status={task.status} />
+                                <StatusBadge status={task.priority} />
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <p className="text-slate-500 text-center py-4">{t('client_view.no_tasks', 'אין משימות')}</p>
+                    )}
+                  </CardContent>
+                </Card>
+              </TabsContent>
+
               {/* Tab: Documents */}
               <TabsContent value="docs">
-                <DocumentViewer clientId={clientId} />
+                <div className="space-y-6">
+                  <DocumentViewer clientId={clientId} />
+                  {client && (
+                    <DropboxBrowser
+                      clientName={client.name}
+                      clientNumber={client.client_number}
+                    />
+                  )}
+                </div>
               </TabsContent>
             </div>
           </Tabs>

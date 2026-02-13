@@ -8,6 +8,7 @@ import { useDateTimeSettings } from '../components/DateTimeSettingsProvider';
 import { formatForDateInput } from '../components/utils/dateTimeUtils';
 import {
   ArrowRight,
+  ArrowLeft,
   Calendar,
   FileText,
   Receipt,
@@ -16,7 +17,10 @@ import {
   Edit,
   Trash2,
   Cloud,
-  AlertTriangle // הוספתי אייקון חסר לדחיפות
+  AlertTriangle,
+  ClipboardList,
+  Briefcase,
+  ExternalLink
 } from 'lucide-react';
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -39,53 +43,25 @@ import {
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import DocumentViewer from '../components/documents/DocumentViewer';
+import DropboxBrowser from '../components/common/DropboxBrowser';
 import { useToast } from "@/components/ui/use-toast";
 import { useTranslation } from 'react-i18next'; // הוספת תרגום
 import { Badge } from "@/components/ui/badge"; // הוספת Badge
 
-// --- הגדרות זהות לקובץ Cases.jsx ---
-const caseTypes = [
-  { value: 'patent', label: 'פטנט' },
-  { value: 'trademark', label: 'סימן מסחר' },
-  { value: 'design', label: 'עיצוב' },
-  { value: 'copyright', label: 'זכויות יוצרים' },
-  { value: 'litigation', label: 'ליטיגציה' },
-  { value: 'opposition', label: 'התנגדות' },
-];
-
-const caseStatuses = [
-  { value: 'draft', label: 'טיוטה' },
-  { value: 'filed', label: 'הוגש' },
-  { value: 'pending', label: 'ממתין' },
-  { value: 'under_examination', label: 'בבחינה' },
-  { value: 'allowed', label: 'קיבול' },
-  { value: 'registered', label: 'רשום' },
-  { value: 'abandoned', label: 'זנוח' },
-  { value: 'expired', label: 'פג תוקף' },
-];
-
-const priorityLevels = [
-  { value: 'low', label: 'נמוכה', color: 'text-gray-600' },
-  { value: 'medium', label: 'בינונית', color: 'text-blue-600' },
-  { value: 'high', label: 'גבוהה', color: 'text-orange-600' },
-  { value: 'urgent', label: 'דחוף', color: 'text-red-600' },
-];
-
-const deadlineTypes = [
-  { value: 'office_action_response', label: 'תגובה לדו״ח בחינה' },
-  { value: 'renewal', label: 'חידוש' },
-  { value: 'opposition_response', label: 'תגובה להתנגדות' },
-  { value: 'appeal', label: 'ערעור' },
-  { value: 'payment', label: 'תשלום' },
-  { value: 'filing', label: 'הגשה' },
-  { value: 'custom', label: 'אחר' },
-];
+// --- Case option arrays using translation keys ---
+const caseTypeValues = ['patent', 'trademark', 'design', 'copyright', 'litigation', 'opposition'];
+const caseStatusValues = ['draft', 'filed', 'pending', 'under_examination', 'allowed', 'registered', 'abandoned', 'expired'];
+const priorityColors = { low: 'text-gray-600', medium: 'text-blue-600', high: 'text-orange-600', urgent: 'text-red-600' };
+const priorityValues = ['low', 'medium', 'high', 'urgent'];
+const deadlineTypeValues = ['office_action_response', 'renewal', 'opposition_response', 'appeal', 'payment', 'filing', 'custom'];
 
 export default function CaseView() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const { formatDate, formatDateTime } = useDateTimeSettings();
+  const isRTL = i18n.language === 'he';
+  const BackIcon = isRTL ? ArrowRight : ArrowLeft;
   const urlParams = new URLSearchParams(window.location.search);
   const caseId = urlParams.get('id');
 
@@ -330,7 +306,8 @@ export default function CaseView() {
     .reduce((sum, t) => sum + ((t.hours || 0) * (t.rate || 0)), 0);
 
   // תווית דחיפות
-  const priorityInfo = priorityLevels.find(p => p.value === currentCase.priority_level);
+  const priorityColor = priorityColors[currentCase.priority_level];
+  const priorityLabel = currentCase.priority_level ? t(`cases.priority_${currentCase.priority_level}`) : null;
 
   return (
     <div className="space-y-6 pb-10">
@@ -338,16 +315,16 @@ export default function CaseView() {
       <div className="flex items-center gap-4">
         <Link to={createPageUrl('Cases')}>
           <Button variant="ghost" size="icon" className="rounded-xl">
-            <ArrowRight className="w-5 h-5" />
+            <BackIcon className="w-5 h-5" />
           </Button>
         </Link>
         <div className="flex-1">
           <div className="flex items-center gap-3">
-            <h1 className="text-2xl font-bold text-slate-800">{currentCase.case_number}</h1>
+            <h1 className="text-2xl font-bold text-slate-800 dark:text-slate-200">{currentCase.case_number}</h1>
             <StatusBadge status={currentCase.status} />
-            {priorityInfo && (
-              <Badge variant="outline" className={`${priorityInfo.color} border-current ml-2`}>
-                {priorityInfo.label}
+            {priorityLabel && (
+              <Badge variant="outline" className={`${priorityColor} border-current ${isRTL ? 'mr-2' : 'ml-2'}`}>
+                {priorityLabel}
               </Badge>
             )}
           </div>
@@ -363,24 +340,24 @@ export default function CaseView() {
 
       {/* Info Cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <Card>
+        <Card className="dark:bg-slate-800 dark:border-slate-700">
           <CardContent className="pt-6">
-            <p className="text-sm text-slate-500 mb-1">{t('case_view.client_label')}</p>
-            <p className="font-medium text-slate-800">{currentClient?.name || '-'}</p>
+            <p className="text-sm text-slate-500 dark:text-slate-400 mb-1">{t('case_view.client_label')}</p>
+            <p className="font-medium text-slate-800 dark:text-slate-200">{currentClient?.name || '-'}</p>
           </CardContent>
         </Card>
-        <Card>
+        <Card className="dark:bg-slate-800 dark:border-slate-700">
           <CardContent className="pt-6">
-            <p className="text-sm text-slate-500 mb-1">{t('cases.case_type')}</p>
-            <p className="font-medium text-slate-800">
-              {caseTypes.find(ct => ct.value === currentCase.case_type)?.label || currentCase.case_type}
+            <p className="text-sm text-slate-500 dark:text-slate-400 mb-1">{t('cases.case_type')}</p>
+            <p className="font-medium text-slate-800 dark:text-slate-200">
+              {currentCase.case_type ? t(`cases.type_${currentCase.case_type}`) : currentCase.case_type}
             </p>
           </CardContent>
         </Card>
-        <Card>
+        <Card className="dark:bg-slate-800 dark:border-slate-700">
           <CardContent className="pt-6">
-            <p className="text-sm text-slate-500 mb-1">{t('case_view.territory_label')}</p>
-            <p className="font-medium text-slate-800">{currentCase.territory || '-'}</p>
+            <p className="text-sm text-slate-500 dark:text-slate-400 mb-1">{t('case_view.territory_label')}</p>
+            <p className="font-medium text-slate-800 dark:text-slate-200">{currentCase.territory || '-'}</p>
           </CardContent>
         </Card>
       </div>
@@ -389,19 +366,23 @@ export default function CaseView() {
       <Tabs defaultValue="details" className="space-y-6">
         <TabsList className="bg-white dark:bg-slate-800 border dark:border-slate-700">
           <TabsTrigger value="details" className="dark:text-slate-300 dark:data-[state=active]:bg-slate-700">{t('case_view.details_tab')}</TabsTrigger>
+          <TabsTrigger value="requests" className="dark:text-slate-300 dark:data-[state=active]:bg-slate-700">
+            <ClipboardList className="w-4 h-4" />
+            {t('case_view.requests_tab', 'בקשות')}
+          </TabsTrigger>
           <TabsTrigger value="deadlines" className="dark:text-slate-300 dark:data-[state=active]:bg-slate-700">{t('case_view.events_tab')}</TabsTrigger>
           <TabsTrigger value="tasks" className="dark:text-slate-300 dark:data-[state=active]:bg-slate-700">{t('case_view.tasks_tab')}</TabsTrigger>
           <TabsTrigger value="documents" className="dark:text-slate-300 dark:data-[state=active]:bg-slate-700">
-            <Cloud className="w-4 h-4 ml-1" />
+            <Cloud className="w-4 h-4" />
             {t('case_view.documents_tab')}
           </TabsTrigger>
           <TabsTrigger value="financials" className="dark:text-slate-300 dark:data-[state=active]:bg-slate-700">{t('case_view.financials_tab')}</TabsTrigger>
         </TabsList>
 
         <TabsContent value="details">
-          <Card>
+          <Card className="dark:bg-slate-800 dark:border-slate-700">
             <CardHeader>
-              <CardTitle>{t('case_view.case_details')}</CardTitle>
+              <CardTitle className="dark:text-slate-100">{t('case_view.case_details')}</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -452,12 +433,141 @@ export default function CaseView() {
               </div>
             </CardContent>
           </Card>
+
+          {/* Related Cases (same client) */}
+          {currentCase?.client_id && (() => {
+            const relatedCases = allCases.filter(c => c.client_id === currentCase.client_id && c.id !== caseId);
+            if (relatedCases.length === 0) return null;
+            return (
+              <Card className="mt-4 dark:bg-slate-800 dark:border-slate-700">
+                <CardHeader>
+                  <CardTitle className="text-base flex items-center gap-2 dark:text-slate-100">
+                    <Briefcase className="w-4 h-4 text-blue-500" />
+                    {t('case_view.related_cases', 'תיקים קשורים')} ({relatedCases.length})
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-2">
+                    {relatedCases.slice(0, 10).map(rc => (
+                      <Link
+                        key={rc.id}
+                        to={createPageUrl('CaseView', { id: rc.id })}
+                        className="flex items-center justify-between p-3 bg-slate-50 dark:bg-slate-900 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700/50 transition-colors"
+                      >
+                        <div className="flex items-center gap-3 min-w-0">
+                          <div className="flex-1 min-w-0">
+                            <p className="font-medium text-sm text-slate-800 dark:text-slate-200 truncate">{rc.title || rc.case_number}</p>
+                            <p className="text-xs text-slate-500">{rc.case_number} • {t(`cases.type_${rc.case_type}`, rc.case_type)}</p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <StatusBadge status={rc.status} />
+                          <ExternalLink className="w-3 h-3 text-slate-400" />
+                        </div>
+                      </Link>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+            );
+          })()}
+        </TabsContent>
+
+        {/* Requests Tab — grouped by IP workflow */}
+        <TabsContent value="requests">
+          <Card className="dark:bg-slate-800 dark:border-slate-700">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 dark:text-slate-100">
+                <ClipboardList className="w-5 h-5 text-indigo-500" />
+                {t('case_view.requests_header', 'בקשות וזרימות עבודה')}
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {(() => {
+                // Group deadlines and tasks by workflow category
+                const workflows = [
+                  { key: 'filing', label: t('case_view.workflow_filing', 'הגשה/רישום'), types: ['filing'], taskTypes: ['file_application'], color: 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400' },
+                  { key: 'oa', label: t('case_view.workflow_oa', 'תגובה לדו"ח בחינה'), types: ['office_action_response'], taskTypes: ['review_oa', 'prepare_response'], color: 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400' },
+                  { key: 'renewal', label: t('case_view.workflow_renewal', 'חידוש'), types: ['renewal'], taskTypes: ['pay_renewal_fee'], color: 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400' },
+                  { key: 'opposition', label: t('case_view.workflow_opposition', 'התנגדות/ערעור'), types: ['opposition_response', 'appeal'], taskTypes: [], color: 'bg-rose-100 text-rose-800 dark:bg-rose-900/30 dark:text-rose-400' },
+                  { key: 'payment', label: t('case_view.workflow_payment', 'תשלומים'), types: ['payment'], taskTypes: [], color: 'bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-400' },
+                ];
+
+                const usedDeadlineIds = new Set();
+                const usedTaskIds = new Set();
+                const groupedWorkflows = workflows.map(wf => {
+                  const wfDeadlines = deadlines.filter(d => wf.types.includes(d.deadline_type));
+                  const wfTasks = tasks.filter(t => wf.taskTypes.includes(t.task_type));
+                  wfDeadlines.forEach(d => usedDeadlineIds.add(d.id));
+                  wfTasks.forEach(t => usedTaskIds.add(t.id));
+                  return { ...wf, deadlines: wfDeadlines, tasks: wfTasks };
+                });
+
+                // "Other" category for uncategorized items
+                const otherDeadlines = deadlines.filter(d => !usedDeadlineIds.has(d.id));
+                const otherTasks = tasks.filter(t => !usedTaskIds.has(t.id));
+                if (otherDeadlines.length > 0 || otherTasks.length > 0) {
+                  groupedWorkflows.push({
+                    key: 'other',
+                    label: t('case_view.workflow_other', 'אחר'),
+                    deadlines: otherDeadlines,
+                    tasks: otherTasks,
+                    color: 'bg-slate-100 text-slate-700 dark:bg-slate-700 dark:text-slate-300'
+                  });
+                }
+
+                const hasItems = groupedWorkflows.some(wf => wf.deadlines.length > 0 || wf.tasks.length > 0);
+
+                if (!hasItems) {
+                  return <p className="text-center text-slate-400 py-8">{t('case_view.no_requests', 'אין בקשות או פעולות פתוחות')}</p>;
+                }
+
+                return (
+                  <div className="space-y-4">
+                    {groupedWorkflows.filter(wf => wf.deadlines.length > 0 || wf.tasks.length > 0).map(wf => (
+                      <div key={wf.key}>
+                        <div className="flex items-center gap-2 mb-2">
+                          <Badge className={wf.color}>{wf.label}</Badge>
+                          <span className="text-xs text-slate-500 dark:text-slate-400">
+                            ({wf.deadlines.length + wf.tasks.length})
+                          </span>
+                        </div>
+                        <div className="space-y-2">
+                          {wf.deadlines.map(dl => (
+                            <div key={`dl-${dl.id}`} className="flex items-center gap-3 p-3 bg-slate-50 dark:bg-slate-900 rounded-lg">
+                              <Calendar className="w-4 h-4 text-amber-500 flex-shrink-0" />
+                              <div className="flex-1 min-w-0">
+                                <p className="text-sm font-medium text-slate-800 dark:text-slate-200 truncate">{dl.description}</p>
+                                <p className="text-xs text-slate-500">{formatDate(dl.due_date)}</p>
+                              </div>
+                              <StatusBadge status={dl.status} />
+                            </div>
+                          ))}
+                          {wf.tasks.map(tk => (
+                            <div key={`tk-${tk.id}`} className="flex items-center gap-3 p-3 bg-slate-50 dark:bg-slate-900 rounded-lg">
+                              <FileText className="w-4 h-4 text-blue-500 flex-shrink-0" />
+                              <div className="flex-1 min-w-0">
+                                <p className="text-sm font-medium text-slate-800 dark:text-slate-200 truncate">{tk.title}</p>
+                                {tk.due_date && <p className="text-xs text-slate-500">{formatDate(tk.due_date)}</p>}
+                              </div>
+                              <StatusBadge status={tk.status} />
+                              <StatusBadge status={tk.priority} />
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                );
+              })()}
+            </CardContent>
+          </Card>
         </TabsContent>
 
         <TabsContent value="deadlines">
-          <Card>
+          <Card className="dark:bg-slate-800 dark:border-slate-700">
             <CardHeader className="flex flex-row items-center justify-between">
-              <CardTitle className="flex items-center gap-2">
+              <CardTitle className="flex items-center gap-2 dark:text-slate-100">
                 <Calendar className="w-5 h-5 text-amber-500" />
                 {t('case_view.deadlines_header')}
               </CardTitle>
@@ -477,7 +587,7 @@ export default function CaseView() {
   className="flex items-center gap-4 p-4 bg-slate-50 dark:bg-card rounded-xl"
 >
                       <div className="flex-1">
-                        <p className="font-medium text-slate-800">{deadline.description}</p>
+                        <p className="font-medium text-slate-800 dark:text-slate-200">{deadline.description}</p>
                         <p className="text-sm text-slate-500">
                           {formatDate(deadline.due_date)}
                         </p>
@@ -499,9 +609,9 @@ export default function CaseView() {
         </TabsContent>
 
         <TabsContent value="tasks">
-          <Card>
+          <Card className="dark:bg-slate-800 dark:border-slate-700">
             <CardHeader className="flex flex-row items-center justify-between">
-              <CardTitle className="flex items-center gap-2">
+              <CardTitle className="flex items-center gap-2 dark:text-slate-100">
                 <FileText className="w-5 h-5 text-blue-500" />
                 {t('case_view.tasks_header')}
               </CardTitle>
@@ -517,7 +627,7 @@ export default function CaseView() {
                       className="flex items-center gap-4 p-4 bg-slate-50 dark:bg-card rounded-xl"
                     >
                       <div className="flex-1">
-                        <p className="font-medium text-slate-800">{task.title}</p>
+                        <p className="font-medium text-slate-800 dark:text-slate-200">{task.title}</p>
                         {task.due_date && (
                           <p className="text-sm text-slate-500">
                             {formatDate(task.due_date)}
@@ -535,28 +645,35 @@ export default function CaseView() {
         </TabsContent>
 
         <TabsContent value="documents">
-          <DocumentViewer caseId={caseId} />
+          <div className="space-y-6">
+            <DocumentViewer caseId={caseId} />
+            <DropboxBrowser
+              caseId={caseId}
+              clientName={currentClient?.name}
+              clientNumber={currentClient?.client_number}
+            />
+          </div>
         </TabsContent>
 
         <TabsContent value="financials">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-            <Card>
+            <Card className="dark:bg-slate-800 dark:border-slate-700">
               <CardContent className="pt-6">
-                <p className="text-sm text-slate-500 mb-1">{t('case_view.total_hours')}</p>
-                <p className="text-2xl font-bold text-slate-800">{totalHours.toFixed(1)}</p>
+                <p className="text-sm text-slate-500 dark:text-slate-400 mb-1">{t('case_view.total_hours')}</p>
+                <p className="text-2xl font-bold text-slate-800 dark:text-slate-200">{totalHours.toFixed(1)}</p>
               </CardContent>
             </Card>
-            <Card>
+            <Card className="dark:bg-slate-800 dark:border-slate-700">
               <CardContent className="pt-6">
-                <p className="text-sm text-slate-500 mb-1">{t('case_view.total_billable')}</p>
-                <p className="text-2xl font-bold text-slate-800">₪{totalBillable.toLocaleString()}</p>
+                <p className="text-sm text-slate-500 dark:text-slate-400 mb-1">{t('case_view.total_billable')}</p>
+                <p className="text-2xl font-bold text-slate-800 dark:text-slate-200">₪{totalBillable.toLocaleString()}</p>
               </CardContent>
             </Card>
           </div>
 
-          <Card>
+          <Card className="dark:bg-slate-800 dark:border-slate-700">
             <CardHeader className="flex flex-row items-center justify-between">
-              <CardTitle className="flex items-center gap-2">
+              <CardTitle className="flex items-center gap-2 dark:text-slate-100">
                 <Clock className="w-5 h-5 text-emerald-500" />
                 {t('case_view.time_entries')}
               </CardTitle>
@@ -576,12 +693,12 @@ export default function CaseView() {
                       className="flex items-center gap-4 p-4 bg-slate-50 dark:bg-card rounded-xl"
                     >
                       <div className="flex-1">
-                        <p className="font-medium text-slate-800">{entry.description}</p>
+                        <p className="font-medium text-slate-800 dark:text-slate-200">{entry.description}</p>
                         <p className="text-sm text-slate-500">
                           {formatDate(entry.date_worked)}
                         </p>
                       </div>
-                      <div className="text-left">
+                      <div className={isRTL ? 'text-right' : 'text-left'}>
                         <p className="font-medium">{entry.hours} {t('case_view.hours_label')}</p>
                         {entry.is_billable && (
                           <p className="text-sm text-emerald-600">₪{((entry.hours || 0) * (entry.rate || 0)).toLocaleString()}</p>
@@ -598,14 +715,14 @@ export default function CaseView() {
 
       {/* Edit Case Dialog */}
       <Dialog open={isEditCaseDialogOpen} onOpenChange={setIsEditCaseDialogOpen}>
-        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto dark:bg-slate-800 dark:border-slate-700">
           <DialogHeader>
             <DialogTitle>{t('case_view.edit_case_title')} {editCaseForm.case_number}</DialogTitle>
           </DialogHeader>
           <form onSubmit={handleEditSubmit} className="space-y-6 mt-4">
             <div className="grid grid-cols-3 gap-4">
               <div className="space-y-2">
-                <Label>{t('case_view.case_number_field')}</Label>
+                <Label>{t('case_view.case_number_field')} <span className="text-red-500">*</span></Label>
                 <Input
                   value={editCaseForm.case_number}
                   onChange={(e) => { setEditCaseForm({ ...editCaseForm, case_number: e.target.value }); setFormErrors(prev => ({...prev, case_number: null})); }}
@@ -625,8 +742,8 @@ export default function CaseView() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {caseTypes.map(type => (
-                      <SelectItem key={type.value} value={type.value}>{type.label}</SelectItem>
+                    {caseTypeValues.map(val => (
+                      <SelectItem key={val} value={val}>{t(`cases.type_${val}`)}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
@@ -641,8 +758,8 @@ export default function CaseView() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {priorityLevels.map(priority => (
-                      <SelectItem key={priority.value} value={priority.value}>{priority.label}</SelectItem>
+                    {priorityValues.map(val => (
+                      <SelectItem key={val} value={val}>{t(`cases.priority_${val}`)}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
@@ -651,7 +768,7 @@ export default function CaseView() {
             
             <div className="space-y-2">
 <Label>
-  שם התיק <span className="text-red-500">*</span>
+  {t('case_view.case_title_field', 'שם התיק')} <span className="text-red-500">*</span>
 </Label>
               <Input
                 value={editCaseForm.title}
@@ -705,8 +822,8 @@ export default function CaseView() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {caseStatuses.map(status => (
-                      <SelectItem key={status.value} value={status.value}>{status.label}</SelectItem>
+                    {caseStatusValues.map(val => (
+                      <SelectItem key={val} value={val}>{t(`cases.status_${val}`)}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
@@ -778,7 +895,7 @@ export default function CaseView() {
             </div>
 
             <div className="space-y-2">
-  <Label>תיאור התיק</Label>
+  <Label>{t('case_view.case_description_field', 'תיאור התיק')}</Label>
   <Textarea
     value={editCaseForm.notes}
     onChange={(e) => setEditCaseForm({ ...editCaseForm, notes: e.target.value })}
@@ -813,7 +930,7 @@ export default function CaseView() {
 
       {/* Deadline Dialog */}
       <Dialog open={isDeadlineDialogOpen} onOpenChange={setIsDeadlineDialogOpen}>
-        <DialogContent>
+        <DialogContent className="max-h-[85vh] overflow-y-auto dark:bg-slate-800 dark:border-slate-700">
           <DialogHeader>
             <DialogTitle>{t('case_view.new_deadline')}</DialogTitle>
           </DialogHeader>
@@ -825,8 +942,8 @@ export default function CaseView() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {deadlineTypes.map(type => (
-                    <SelectItem key={type.value} value={type.value}>{type.label}</SelectItem>
+                  {deadlineTypeValues.map(val => (
+                    <SelectItem key={val} value={val}>{t(`case_view.deadline_type_${val}`, t(`docketing.type_${val}`, val))}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
@@ -858,7 +975,7 @@ export default function CaseView() {
 
       {/* Time Entry Dialog */}
       <Dialog open={isTimeEntryDialogOpen} onOpenChange={setIsTimeEntryDialogOpen}>
-        <DialogContent>
+        <DialogContent className="max-h-[85vh] overflow-y-auto dark:bg-slate-800 dark:border-slate-700">
           <DialogHeader>
             <DialogTitle>{t('case_view.time_entries')}</DialogTitle>
           </DialogHeader>

@@ -74,10 +74,10 @@ Deno.serve(async (req) => {
 
   try {
     const base44 = createClientFromRequest(req);
-    const { caseId, relativePath = "" } = await req.json();
+    const { caseId, clientNumber, clientName, relativePath = "" } = await req.json();
 
-    if (!caseId) {
-      throw new Error('caseId is required');
+    if (!caseId && !clientNumber) {
+      throw new Error('caseId or clientNumber is required');
     }
 
     // 1. Get Integration Connection
@@ -100,27 +100,34 @@ Deno.serve(async (req) => {
     // For now, let's try to use it and handle 401.
 
     // 3. Resolve Path
-    const cases = await base44.entities.Case.filter({ id: caseId });
-    if (!cases.length) throw new Error('Case not found');
-    const currentCase = cases[0];
+    let rootPath;
 
-    const clients = await base44.entities.Client.filter({ id: currentCase.client_id });
-    if (!clients.length) throw new Error('Client not found');
-    const client = clients[0];
+    if (caseId) {
+      // Case-level browsing: resolve client from case
+      const cases = await base44.entities.Case.filter({ id: caseId });
+      if (!cases.length) throw new Error('Case not found');
+      const currentCase = cases[0];
 
-    const safeClientNumber = sanitizeFolderName(client.client_number || client.number || '');
-    const safeClientName = sanitizeFolderName(client.name);
-    const safeCaseNumber = sanitizeFolderName(currentCase.case_number);
+      const clients = await base44.entities.Client.filter({ id: currentCase.client_id });
+      if (!clients.length) throw new Error('Client not found');
+      const client = clients[0];
 
-    // Root path logic matches createClientFolder.ts logic
-    const clientRoot = `/DWO/לקוחות - משרד/${safeClientNumber} - ${safeClientName}`;
-    // We add case subfolder to keep things organized
-    const caseRoot = `${clientRoot}/${safeCaseNumber}`;
-    
+      const safeClientNumber = sanitizeFolderName(client.client_number || client.number || '');
+      const safeClientName = sanitizeFolderName(client.name);
+      const safeCaseNumber = sanitizeFolderName(currentCase.case_number);
+
+      const clientRoot = `/DWO/לקוחות - משרד/${safeClientNumber} - ${safeClientName}`;
+      rootPath = `${clientRoot}/${safeCaseNumber}`;
+    } else {
+      // Client-level browsing: use provided clientNumber/clientName
+      const safeClientNumber = sanitizeFolderName(clientNumber || '');
+      const safeClientName = sanitizeFolderName(clientName || '');
+      rootPath = `/DWO/לקוחות - משרד/${safeClientNumber} - ${safeClientName}`;
+    }
+
     // Construct final path
-    // Remove leading slash from relativePath to avoid double slashes
     const cleanRelative = relativePath.startsWith('/') ? relativePath.substring(1) : relativePath;
-    const finalPath = cleanRelative ? `${caseRoot}/${cleanRelative}` : caseRoot;
+    const finalPath = cleanRelative ? `${rootPath}/${cleanRelative}` : rootPath;
 
     console.log(`[Dropbox] Listing: ${finalPath}`);
 
@@ -168,7 +175,7 @@ Deno.serve(async (req) => {
       return new Response(JSON.stringify({ 
         success: true, 
         folder_missing: true,
-        root_path: caseRoot,
+        root_path: rootPath,
         current_path: finalPath
       }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
@@ -185,7 +192,7 @@ Deno.serve(async (req) => {
       entries: data.entries,
       has_more: data.has_more,
       cursor: data.cursor,
-      root_path: caseRoot,
+      root_path: rootPath,
       current_path: finalPath
     }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
 
