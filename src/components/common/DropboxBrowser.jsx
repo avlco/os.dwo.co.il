@@ -10,6 +10,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from 'sonner';
 import { useDateTimeSettings } from '../DateTimeSettingsProvider';
+import { useTranslation } from 'react-i18next';
 
 const getFileIcon = (filename) => {
   const ext = filename.split('.').pop().toLowerCase();
@@ -27,6 +28,7 @@ const formatSize = (bytes) => {
 };
 
 export default function DropboxBrowser({ caseId, clientName, clientNumber }) {
+  const { t } = useTranslation();
   const [relativePath, setRelativePath] = useState('');
   const { formatDate } = useDateTimeSettings();
   const queryClient = useQueryClient();
@@ -69,11 +71,11 @@ export default function DropboxBrowser({ caseId, clientName, clientNumber }) {
       return res.data;
     },
     onSuccess: () => {
-      toast.success("תיקיית לקוח נוצרה/זוהתה");
+      toast.success(t('dropbox.folder_created', 'תיקיית לקוח נוצרה/זוהתה'));
       refetch();
     },
     onError: (err) => {
-      toast.error("שגיאה ביצירת תיקייה: " + err.message);
+      toast.error(t('dropbox.folder_create_error', 'שגיאה ביצירת תיקייה') + ': ' + err.message);
     }
   });
 
@@ -98,7 +100,7 @@ export default function DropboxBrowser({ caseId, clientName, clientNumber }) {
       // For files, we could implement preview. 
       // Currently Dropbox API returns 'path_display', we can't link directly without a temp link.
       // Placeholder for file action
-      toast.info(`קובץ: ${entry.name} (תצוגה מקדימה בפיתוח)`);
+      toast.info(`${entry.name} — ${t('dropbox.preview_coming_soon', 'תצוגה מקדימה בפיתוח')}`);
     }
   };
 
@@ -106,9 +108,9 @@ export default function DropboxBrowser({ caseId, clientName, clientNumber }) {
     return (
       <div className="p-8 text-center border-2 border-dashed border-red-200 rounded-xl bg-red-50 dark:bg-red-900/10">
         <AlertTriangle className="w-10 h-10 text-red-500 mx-auto mb-3" />
-        <h3 className="font-medium text-red-800 dark:text-red-300">שגיאה בטעינת קבצים</h3>
+        <h3 className="font-medium text-red-800 dark:text-red-300">{t('dropbox.load_error', 'שגיאה בטעינת קבצים')}</h3>
         <p className="text-sm text-red-600 dark:text-red-400 mb-4">{error.message}</p>
-        <Button variant="outline" onClick={() => refetch()}>נסה שוב</Button>
+        <Button variant="outline" onClick={() => refetch()}>{t('common.retry', 'נסה שוב')}</Button>
       </div>
     );
   }
@@ -159,9 +161,9 @@ export default function DropboxBrowser({ caseId, clientName, clientNumber }) {
               <div className="w-16 h-16 bg-blue-50 dark:bg-blue-900/30 rounded-full flex items-center justify-center mb-4">
                 <Folder className="w-8 h-8 text-blue-500" />
               </div>
-              <h3 className="text-lg font-medium mb-2">התיקייה לא קיימת ב-Dropbox</h3>
+              <h3 className="text-lg font-medium mb-2">{t('dropbox.folder_not_found', 'התיקייה לא קיימת ב-Dropbox')}</h3>
               <p className="text-slate-500 mb-6 max-w-sm">
-                הנתיב המצופה: <br/>
+                {t('dropbox.expected_path', 'הנתיב המצופה')}: <br/>
                 <code className="bg-slate-100 dark:bg-slate-900 px-2 py-1 rounded text-xs mt-1 block break-all">
                   {data.root_path}
                 </code>
@@ -172,13 +174,13 @@ export default function DropboxBrowser({ caseId, clientName, clientNumber }) {
                 className="gap-2"
               >
                 {createFolderMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
-                צור תיקייה כעת
+                {t('dropbox.create_folder_now', 'צור תיקייה כעת')}
               </Button>
             </div>
           ) : data?.entries?.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-[300px] text-slate-400">
               <Folder className="w-12 h-12 mb-2 opacity-20" />
-              <p>התיקייה ריקה</p>
+              <p>{t('dropbox.folder_empty', 'התיקייה ריקה')}</p>
             </div>
           ) : (
             <div className="divide-y dark:divide-slate-700">
@@ -203,7 +205,7 @@ export default function DropboxBrowser({ caseId, clientName, clientNumber }) {
                           {entry.name}
                         </p>
                         <p className="text-xs text-slate-500">
-                          {isFolder ? 'תיקייה' : formatSize(entry.size)}
+                          {isFolder ? t('dropbox.folder', 'תיקייה') : formatSize(entry.size)}
                           {entry.server_modified && ` • ${formatDate(entry.server_modified)}`}
                         </p>
                       </div>

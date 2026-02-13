@@ -316,7 +316,14 @@ async function downloadAttachment(attachment, googleToken, mailGmailId) {
     return bytes;
   }
 
-  throw new Error(`Cannot download attachment: ${attachment.filename || 'unknown'} - no URL or Gmail data`);
+  const reason = !googleToken
+    ? 'Google token unavailable - check Google integration in Settings'
+    : !mailGmailId
+      ? 'no Gmail message ID found on mail entity'
+      : !attachment.attachmentId
+        ? 'no attachmentId on attachment'
+        : 'unknown reason';
+  throw new Error(`Cannot download attachment: ${attachment.filename || 'unknown'} - ${reason}`);
 }
 
 // ========================================
@@ -392,6 +399,11 @@ Deno.serve(async (req) => {
       googleToken = await getGoogleToken(base44);
     } catch (e) {
       console.warn('[UploadToDropbox] Google token not available:', e.message);
+      // Check if any attachments require Gmail API (no direct URL)
+      const needsGmail = mail.attachments?.some(att => !att.url && att.attachmentId);
+      if (needsGmail) {
+        console.error('[UploadToDropbox] CRITICAL: Attachments require Gmail API but Google token is unavailable. Check Google integration in Settings.');
+      }
     }
 
     // 5. Build Path - supports both new path_segments and legacy schema_id

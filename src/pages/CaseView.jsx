@@ -40,6 +40,7 @@ import {
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import DocumentViewer from '../components/documents/DocumentViewer';
+import DropboxBrowser from '../components/common/DropboxBrowser';
 import { useToast } from "@/components/ui/use-toast";
 import { useTranslation } from 'react-i18next'; // הוספת תרגום
 import { Badge } from "@/components/ui/badge"; // הוספת Badge
@@ -508,7 +509,14 @@ export default function CaseView() {
         </TabsContent>
 
         <TabsContent value="documents">
-          <DocumentViewer caseId={caseId} />
+          <div className="space-y-6">
+            <DocumentViewer caseId={caseId} />
+            <DropboxBrowser
+              caseId={caseId}
+              clientName={currentClient?.name}
+              clientNumber={currentClient?.client_number}
+            />
+          </div>
         </TabsContent>
 
         <TabsContent value="financials">
