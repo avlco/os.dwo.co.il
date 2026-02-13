@@ -33,18 +33,24 @@ export default function DropboxBrowser({ caseId, clientName, clientNumber }) {
   const { formatDate } = useDateTimeSettings();
   const queryClient = useQueryClient();
 
+  const canBrowse = !!caseId || (!!clientNumber && !!clientName);
+
   const { data, isLoading, error, refetch } = useQuery({
-    queryKey: ['dropbox-files', caseId, relativePath],
+    queryKey: ['dropbox-files', caseId || `client-${clientNumber}`, relativePath],
     queryFn: async () => {
-      const result = await base44.functions.invoke('listDropboxFiles', {
-        caseId,
-        relativePath
-      });
+      const params = { relativePath };
+      if (caseId) {
+        params.caseId = caseId;
+      } else {
+        params.clientNumber = clientNumber;
+        params.clientName = clientName;
+      }
+      const result = await base44.functions.invoke('listDropboxFiles', params);
       if (result.data?.error) throw new Error(result.data.error);
       return result.data;
     },
-    enabled: !!caseId,
-    staleTime: 1000 * 60 * 5, // Cache for 5 minutes
+    enabled: canBrowse,
+    staleTime: 1000 * 60 * 5,
   });
 
   const createFolderMutation = useMutation({

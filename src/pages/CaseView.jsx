@@ -17,7 +17,10 @@ import {
   Edit,
   Trash2,
   Cloud,
-  AlertTriangle // הוספתי אייקון חסר לדחיפות
+  AlertTriangle,
+  ClipboardList,
+  Briefcase,
+  ExternalLink
 } from 'lucide-react';
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -363,6 +366,10 @@ export default function CaseView() {
       <Tabs defaultValue="details" className="space-y-6">
         <TabsList className="bg-white dark:bg-slate-800 border dark:border-slate-700">
           <TabsTrigger value="details" className="dark:text-slate-300 dark:data-[state=active]:bg-slate-700">{t('case_view.details_tab')}</TabsTrigger>
+          <TabsTrigger value="requests" className="dark:text-slate-300 dark:data-[state=active]:bg-slate-700">
+            <ClipboardList className="w-4 h-4" />
+            {t('case_view.requests_tab', 'בקשות')}
+          </TabsTrigger>
           <TabsTrigger value="deadlines" className="dark:text-slate-300 dark:data-[state=active]:bg-slate-700">{t('case_view.events_tab')}</TabsTrigger>
           <TabsTrigger value="tasks" className="dark:text-slate-300 dark:data-[state=active]:bg-slate-700">{t('case_view.tasks_tab')}</TabsTrigger>
           <TabsTrigger value="documents" className="dark:text-slate-300 dark:data-[state=active]:bg-slate-700">
@@ -424,6 +431,135 @@ export default function CaseView() {
                   <p className="font-medium whitespace-pre-wrap">{currentCase.notes || '-'}</p>
                 </div>
               </div>
+            </CardContent>
+          </Card>
+
+          {/* Related Cases (same client) */}
+          {currentCase?.client_id && (() => {
+            const relatedCases = allCases.filter(c => c.client_id === currentCase.client_id && c.id !== caseId);
+            if (relatedCases.length === 0) return null;
+            return (
+              <Card className="mt-4 dark:bg-slate-800 dark:border-slate-700">
+                <CardHeader>
+                  <CardTitle className="text-base flex items-center gap-2 dark:text-slate-100">
+                    <Briefcase className="w-4 h-4 text-blue-500" />
+                    {t('case_view.related_cases', 'תיקים קשורים')} ({relatedCases.length})
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-2">
+                    {relatedCases.slice(0, 10).map(rc => (
+                      <Link
+                        key={rc.id}
+                        to={createPageUrl('CaseView', { id: rc.id })}
+                        className="flex items-center justify-between p-3 bg-slate-50 dark:bg-slate-900 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700/50 transition-colors"
+                      >
+                        <div className="flex items-center gap-3 min-w-0">
+                          <div className="flex-1 min-w-0">
+                            <p className="font-medium text-sm text-slate-800 dark:text-slate-200 truncate">{rc.title || rc.case_number}</p>
+                            <p className="text-xs text-slate-500">{rc.case_number} • {t(`cases.type_${rc.case_type}`, rc.case_type)}</p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <StatusBadge status={rc.status} />
+                          <ExternalLink className="w-3 h-3 text-slate-400" />
+                        </div>
+                      </Link>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+            );
+          })()}
+        </TabsContent>
+
+        {/* Requests Tab — grouped by IP workflow */}
+        <TabsContent value="requests">
+          <Card className="dark:bg-slate-800 dark:border-slate-700">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 dark:text-slate-100">
+                <ClipboardList className="w-5 h-5 text-indigo-500" />
+                {t('case_view.requests_header', 'בקשות וזרימות עבודה')}
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {(() => {
+                // Group deadlines and tasks by workflow category
+                const workflows = [
+                  { key: 'filing', label: t('case_view.workflow_filing', 'הגשה/רישום'), types: ['filing'], taskTypes: ['file_application'], color: 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400' },
+                  { key: 'oa', label: t('case_view.workflow_oa', 'תגובה לדו"ח בחינה'), types: ['office_action_response'], taskTypes: ['review_oa', 'prepare_response'], color: 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400' },
+                  { key: 'renewal', label: t('case_view.workflow_renewal', 'חידוש'), types: ['renewal'], taskTypes: ['pay_renewal_fee'], color: 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400' },
+                  { key: 'opposition', label: t('case_view.workflow_opposition', 'התנגדות/ערעור'), types: ['opposition_response', 'appeal'], taskTypes: [], color: 'bg-rose-100 text-rose-800 dark:bg-rose-900/30 dark:text-rose-400' },
+                  { key: 'payment', label: t('case_view.workflow_payment', 'תשלומים'), types: ['payment'], taskTypes: [], color: 'bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-400' },
+                ];
+
+                const usedDeadlineIds = new Set();
+                const usedTaskIds = new Set();
+                const groupedWorkflows = workflows.map(wf => {
+                  const wfDeadlines = deadlines.filter(d => wf.types.includes(d.deadline_type));
+                  const wfTasks = tasks.filter(t => wf.taskTypes.includes(t.task_type));
+                  wfDeadlines.forEach(d => usedDeadlineIds.add(d.id));
+                  wfTasks.forEach(t => usedTaskIds.add(t.id));
+                  return { ...wf, deadlines: wfDeadlines, tasks: wfTasks };
+                });
+
+                // "Other" category for uncategorized items
+                const otherDeadlines = deadlines.filter(d => !usedDeadlineIds.has(d.id));
+                const otherTasks = tasks.filter(t => !usedTaskIds.has(t.id));
+                if (otherDeadlines.length > 0 || otherTasks.length > 0) {
+                  groupedWorkflows.push({
+                    key: 'other',
+                    label: t('case_view.workflow_other', 'אחר'),
+                    deadlines: otherDeadlines,
+                    tasks: otherTasks,
+                    color: 'bg-slate-100 text-slate-700 dark:bg-slate-700 dark:text-slate-300'
+                  });
+                }
+
+                const hasItems = groupedWorkflows.some(wf => wf.deadlines.length > 0 || wf.tasks.length > 0);
+
+                if (!hasItems) {
+                  return <p className="text-center text-slate-400 py-8">{t('case_view.no_requests', 'אין בקשות או פעולות פתוחות')}</p>;
+                }
+
+                return (
+                  <div className="space-y-4">
+                    {groupedWorkflows.filter(wf => wf.deadlines.length > 0 || wf.tasks.length > 0).map(wf => (
+                      <div key={wf.key}>
+                        <div className="flex items-center gap-2 mb-2">
+                          <Badge className={wf.color}>{wf.label}</Badge>
+                          <span className="text-xs text-slate-500 dark:text-slate-400">
+                            ({wf.deadlines.length + wf.tasks.length})
+                          </span>
+                        </div>
+                        <div className="space-y-2">
+                          {wf.deadlines.map(dl => (
+                            <div key={`dl-${dl.id}`} className="flex items-center gap-3 p-3 bg-slate-50 dark:bg-slate-900 rounded-lg">
+                              <Calendar className="w-4 h-4 text-amber-500 flex-shrink-0" />
+                              <div className="flex-1 min-w-0">
+                                <p className="text-sm font-medium text-slate-800 dark:text-slate-200 truncate">{dl.description}</p>
+                                <p className="text-xs text-slate-500">{formatDate(dl.due_date)}</p>
+                              </div>
+                              <StatusBadge status={dl.status} />
+                            </div>
+                          ))}
+                          {wf.tasks.map(tk => (
+                            <div key={`tk-${tk.id}`} className="flex items-center gap-3 p-3 bg-slate-50 dark:bg-slate-900 rounded-lg">
+                              <FileText className="w-4 h-4 text-blue-500 flex-shrink-0" />
+                              <div className="flex-1 min-w-0">
+                                <p className="text-sm font-medium text-slate-800 dark:text-slate-200 truncate">{tk.title}</p>
+                                {tk.due_date && <p className="text-xs text-slate-500">{formatDate(tk.due_date)}</p>}
+                              </div>
+                              <StatusBadge status={tk.status} />
+                              <StatusBadge status={tk.priority} />
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                );
+              })()}
             </CardContent>
           </Card>
         </TabsContent>

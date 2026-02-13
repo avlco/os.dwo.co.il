@@ -7,6 +7,7 @@ import { DateTimeSettingsProvider } from './components/DateTimeSettingsProvider'
 import './components/i18nConfig';
 import { useAuth } from '@/lib/AuthContext';
 import { useGoogleCalendarSync } from '@/hooks/useGoogleCalendarSync';
+import { useMailSync } from '@/hooks/useMailSync';
 import {
   LayoutDashboard,
   Briefcase,
@@ -47,6 +48,7 @@ function LayoutContent({ children, currentPageName }) {
 
   // Global Google Calendar sync — runs every 5 min regardless of current page
   useGoogleCalendarSync();
+  useMailSync();
 
   const isRTL = i18n.language === 'he';
 
