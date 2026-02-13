@@ -156,23 +156,23 @@ export default function Clients() {
         console.error('[Clients] Failed to create Dropbox folder:', folderError);
         toast({
           variant: "destructive",
-          title: "שגיאה ביצירת תיקייה ב-Dropbox",
-          description: folderError?.message || "לא ניתן ליצור תיקייה. בדוק את חיבור ה-Dropbox בהגדרות.",
+          title: t('clients.dropbox_folder_error', 'שגיאה ביצירת תיקייה ב-Dropbox'),
+          description: folderError?.message || t('clients.dropbox_folder_error_desc', 'לא ניתן ליצור תיקייה. בדוק את חיבור ה-Dropbox בהגדרות.'),
         });
       }
       
       resetForm();
       toast({
-        title: "הלקוח נוסף בהצלחה",
-        description: `הלקוח "${formData.name}" נוצר במערכת`,
+        title: t('clients.client_added_success', 'הלקוח נוסף בהצלחה'),
+        description: t('clients.client_created_desc', { name: formData.name, defaultValue: `הלקוח "${formData.name}" נוצר במערכת` }),
       });
     },
     onError: (error) => {
       console.error('Failed to create client:', error);
       toast({
         variant: "destructive",
-        title: "שגיאה ביצירת לקוח",
-        description: error.message || "אנא נסה שנית או פנה לתמיכה",
+        title: t('clients.client_create_error', 'שגיאה ביצירת לקוח'),
+        description: error.message || t('clients.try_again_or_support', 'אנא נסה שנית או פנה לתמיכה'),
       });
     },
   });
@@ -184,16 +184,16 @@ export default function Clients() {
       setIsDialogOpen(false);
       resetForm();
       toast({
-        title: "הלקוח עודכן בהצלחה",
-        description: "השינויים נשמרו במערכת",
+        title: t('clients.client_updated_success', 'הלקוח עודכן בהצלחה'),
+        description: t('clients.changes_saved', 'השינויים נשמרו במערכת'),
       });
     },
     onError: (error) => {
       console.error('Failed to update client:', error);
       toast({
         variant: "destructive",
-        title: "שגיאה בעדכון לקוח",
-        description: error.message || "אנא נסה שנית",
+        title: t('clients.client_update_error', 'שגיאה בעדכון לקוח'),
+        description: error.message || t('clients.try_again', 'אנא נסה שנית'),
       });
     },
   });
@@ -205,9 +205,9 @@ export default function Clients() {
 
       if (clientCases.length > 0) {
         const confirmed = window.confirm(
-          `ללקוח זה יש ${clientCases.length} תיקים פעילים.\n\n` +
-          `העברת הלקוח לארכיון תסתיר אותו מהרשימות השוטפות.\n\n` +
-          `האם להמשיך?`
+          t('clients.archive_confirm_cases', { count: clientCases.length, defaultValue: `ללקוח זה יש ${clientCases.length} תיקים פעילים.` }) + '\n\n' +
+          t('clients.archive_confirm_desc', 'העברת הלקוח לארכיון תסתיר אותו מהרשימות השוטפות.') + '\n\n' +
+          t('clients.archive_confirm_continue', 'האם להמשיך?')
         );
 
         if (!confirmed) {
@@ -220,8 +220,8 @@ export default function Clients() {
     onSuccess: () => {
       queryClient.invalidateQueries(['clients']);
       toast({
-        title: "הלקוח הועבר לארכיון",
-        description: "ניתן לצפות בלקוח על ידי לחיצה על 'הצג ארכיון'",
+        title: t('clients.client_archived', 'הלקוח הועבר לארכיון'),
+        description: t('clients.client_archived_desc', "ניתן לצפות בלקוח על ידי לחיצה על 'הצג ארכיון'"),
       });
     },
     onError: (error) => {
@@ -229,8 +229,8 @@ export default function Clients() {
         console.error('Failed to archive client:', error);
         toast({
           variant: "destructive",
-          title: "שגיאה בעדכון סטטוס",
-          description: error.message || "אנא נסה שנית",
+          title: t('clients.status_update_error', 'שגיאה בעדכון סטטוס'),
+          description: error.message || t('clients.try_again', 'אנא נסה שנית'),
         });
       }
     },
@@ -263,36 +263,36 @@ export default function Clients() {
     const errors = [];
 
     if (!data.name || data.name.trim() === '') {
-      errors.push('שם הלקוח הוא שדה חובה');
+      errors.push(t('clients.validation_name_required', 'שם הלקוח הוא שדה חובה'));
     }
 
     if (!data.client_number || data.client_number.trim() === '') {
-      errors.push('מספר לקוח הוא שדה חובה');
+      errors.push(t('clients.validation_number_required', 'מספר לקוח הוא שדה חובה'));
     }
 
     const hasEmail = data.email && data.email.trim() !== '';
     const hasPhone = data.phone && data.phone.trim() !== '';
 
     if (!hasEmail && !hasPhone) {
-      errors.push('חובה למלא לפחות אמצעי תקשורת אחד: אימייל או טלפון');
+      errors.push(t('clients.validation_contact_required', 'חובה למלא לפחות אמצעי תקשורת אחד: אימייל או טלפון'));
     }
 
     if (hasEmail) {
       const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
       if (!emailRegex.test(data.email)) {
-        errors.push('כתובת האימייל אינה תקינה');
+        errors.push(t('clients.validation_email_invalid', 'כתובת האימייל אינה תקינה'));
       }
     }
 
     if (hasPhone) {
       const phoneRegex = /^[\d\s\-\+\(\)]+$/;
       if (!phoneRegex.test(data.phone)) {
-        errors.push('מספר הטלפון אינו תקין');
+        errors.push(t('clients.validation_phone_invalid', 'מספר הטלפון אינו תקין'));
       }
     }
 
     if (data.hourly_rate && parseFloat(data.hourly_rate) < 0) {
-      errors.push('תעריף שעתי חייב להיות מספר חיובי');
+      errors.push(t('clients.validation_rate_positive', 'תעריף שעתי חייב להיות מספר חיובי'));
     }
 
     return errors;
@@ -335,7 +335,7 @@ export default function Clients() {
     if (validationErrors.length > 0) {
       toast({
         variant: "destructive",
-        title: "שגיאת ולידציה",
+        title: t('clients.validation_error', 'שגיאת ולידציה'),
         description: validationErrors.join(', '),
       });
       return;
@@ -352,8 +352,8 @@ export default function Clients() {
         const nextNumber = (parseInt(formData.client_number) + 1).toString().padStart(4, '0');
         toast({
           variant: "destructive",
-          title: `מספר ${formData.client_number} תפוס`,
-          description: `"${duplicate.name}" משתמש בו. נסה ${nextNumber}`,
+          title: t('clients.number_taken', { number: formData.client_number, defaultValue: `מספר ${formData.client_number} תפוס` }),
+          description: t('clients.number_taken_desc', { name: duplicate.name, nextNumber, defaultValue: `"${duplicate.name}" משתמש בו. נסה ${nextNumber}` }),
         });
         return;
       }
@@ -386,9 +386,9 @@ export default function Clients() {
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
       
-      toast({ title: "הייצוא הושלם", description: `${clients.length} לקוחות יוצאו בהצלחה` });
+      toast({ title: t('clients.export_complete', 'הייצוא הושלם'), description: t('clients.export_success_desc', { count: clients.length, defaultValue: `${clients.length} לקוחות יוצאו בהצלחה` }) });
     } catch (error) {
-      toast({ variant: "destructive", title: "שגיאה בייצוא", description: error.message });
+      toast({ variant: "destructive", title: t('clients.export_error', 'שגיאה בייצוא'), description: error.message });
     } finally {
       setIsExporting(false);
     }
@@ -401,16 +401,16 @@ export default function Clients() {
       
       queryClient.invalidateQueries(['clients']);
       
-      let description = `נוצרו ${created}, עודכנו ${updated}`;
-      if (failed > 0) description += `, נכשלו ${failed}`;
-      
-      toast({ 
-        title: "הייבוא הושלם", 
+      let description = t('clients.import_summary', { created, updated, defaultValue: `נוצרו ${created}, עודכנו ${updated}` });
+      if (failed > 0) description += `, ${t('common.failed', 'נכשלו')}: ${failed}`;
+
+      toast({
+        title: t('clients.import_complete', 'הייבוא הושלם'),
         description,
         variant: failed > 0 ? "warning" : "default"
       });
     } catch (error) {
-      toast({ variant: "destructive", title: "שגיאה בייבוא", description: error.message });
+      toast({ variant: "destructive", title: t('clients.import_error', 'שגיאה בייבוא'), description: error.message });
       throw error;
     }
   };
@@ -664,7 +664,7 @@ export default function Clients() {
           variant="outline" 
           size="sm" 
           onClick={() => setShowArchived(!showArchived)}
-          className="ml-2"
+          className="ltr:ml-2 rtl:mr-2"
         >
           {showArchived ? t('common.hide_archive') : t('common.show_archive')}
         </Button>
@@ -692,13 +692,13 @@ export default function Clients() {
         <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto dark:bg-slate-800 dark:border-slate-700">
           <DialogHeader>
             <DialogTitle className="dark:text-slate-200">
-              {editingClient ? 'עריכת לקוח' : 'לקוח חדש'}
+              {editingClient ? t('clients.edit_client') : t('clients.new_client')}
             </DialogTitle>
           </DialogHeader>
           <form onSubmit={handleSubmit} className="space-y-6 mt-4">
             <div className="grid grid-cols-3 gap-4">
               <div className="col-span-2 space-y-2">
-                <Label className="dark:text-slate-300">{formData.type === 'company' ? 'שם החברה *' : 'שם הלקוח *'}</Label>
+                <Label className="dark:text-slate-300">{formData.type === 'company' ? t('clients.company_name_required') : t('clients.client_name') + ' *'}</Label>
                 <Input
                   value={formData.name}
                   onChange={(e) => setFormData({ ...formData, name: e.target.value })}
@@ -707,7 +707,7 @@ export default function Clients() {
                 />
               </div>
               <div className="space-y-2">
-                <Label className="dark:text-slate-300">מספר לקוח *</Label>
+                <Label className="dark:text-slate-300">{t('clients.client_number_required')}</Label>
                 <Input
                   value={formData.client_number}
                   onChange={(e) => setFormData({ ...formData, client_number: e.target.value })}
@@ -721,7 +721,7 @@ export default function Clients() {
 
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label className="dark:text-slate-300">סוג לקוח *</Label>
+                <Label className="dark:text-slate-300">{t('clients.client_type_required')}</Label>
                 <Select
                   value={formData.type}
                   onValueChange={(v) => setFormData({ ...formData, type: v })}
@@ -739,13 +739,13 @@ export default function Clients() {
                 </Select>
               </div>
               <div className="space-y-2">
-                <Label className="dark:text-slate-300">עו"ד מטפל</Label>
+                <Label className="dark:text-slate-300">{t('clients.assigned_lawyer')}</Label>
                 <Select
                   value={formData.assigned_lawyer_id || undefined}
                   onValueChange={(v) => setFormData({ ...formData, assigned_lawyer_id: v })}
                 >
                   <SelectTrigger className="dark:bg-slate-900 dark:border-slate-600">
-                    <SelectValue placeholder="בחר עו״ד" />
+                    <SelectValue placeholder={t('clients.select_lawyer')} />
                   </SelectTrigger>
                   <SelectContent className="dark:bg-slate-800 dark:border-slate-700">
                     {users.map(user => (
@@ -760,11 +760,11 @@ export default function Clients() {
 
             {formData.type === 'company' && (
               <div className="space-y-2">
-                <Label className="dark:text-slate-300">שם איש קשר בחברה</Label>
+                <Label className="dark:text-slate-300">{t('clients.contact_person_name')}</Label>
                 <Input
                   value={formData.contact_person_name}
                   onChange={(e) => setFormData({ ...formData, contact_person_name: e.target.value })}
-                  placeholder="שם איש הקשר הראשי"
+                  placeholder={t('clients.contact_person_placeholder')}
                   className="dark:bg-slate-900 dark:border-slate-600"
                 />
               </div>
@@ -772,7 +772,7 @@ export default function Clients() {
 
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label className="dark:text-slate-300">אימייל (לפחות אמצעי תקשורת אחד חובה)</Label>
+                <Label className="dark:text-slate-300">{t('clients.email_required')}</Label>
                 <Input
                   type="email"
                   value={formData.email}
@@ -782,7 +782,7 @@ export default function Clients() {
                 />
               </div>
               <div className="space-y-2">
-                <Label className="dark:text-slate-300">טלפון (לפחות אמצעי תקשורת אחד חובה)</Label>
+                <Label className="dark:text-slate-300">{t('clients.phone_required')}</Label>
                 <Input
                   value={formData.phone}
                   onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
@@ -794,7 +794,7 @@ export default function Clients() {
 
             <div className="grid grid-cols-3 gap-4">
               <div className="space-y-2">
-                <Label className="dark:text-slate-300">תעריף שעתי</Label>
+                <Label className="dark:text-slate-300">{t('clients.hourly_rate')}</Label>
                 <Input
                   type="number"
                   step="0.01"
@@ -809,7 +809,7 @@ export default function Clients() {
                 />
               </div>
               <div className="space-y-2">
-                <Label className="dark:text-slate-300">מטבע</Label>
+                <Label className="dark:text-slate-300">{t('clients.currency')}</Label>
                 <Select
                   value={formData.billing_currency}
                   onValueChange={(v) => setFormData({ ...formData, billing_currency: v })}
@@ -827,7 +827,7 @@ export default function Clients() {
                 </Select>
               </div>
               <div className="space-y-2">
-                <Label className="dark:text-slate-300">תנאי תשלום</Label>
+                <Label className="dark:text-slate-300">{t('clients.payment_terms')}</Label>
                 <Select
                   value={formData.payment_terms}
                   onValueChange={(v) => setFormData({ ...formData, payment_terms: v })}
@@ -848,7 +848,7 @@ export default function Clients() {
 
             <div className="grid grid-cols-3 gap-4">
               <div className="space-y-2">
-                <Label className="dark:text-slate-300">מדינה</Label>
+                <Label className="dark:text-slate-300">{t('clients.country')}</Label>
                 <Input
                   value={formData.country}
                   onChange={(e) => setFormData({ ...formData, country: e.target.value })}
@@ -856,7 +856,7 @@ export default function Clients() {
                 />
               </div>
               <div className="space-y-2">
-                <Label className="dark:text-slate-300">שפת תקשורת</Label>
+                <Label className="dark:text-slate-300">{t('clients.communication_language')}</Label>
                 <Select
                   value={formData.communication_language}
                   onValueChange={(v) => setFormData({ ...formData, communication_language: v })}
@@ -865,13 +865,13 @@ export default function Clients() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent className="dark:bg-slate-800 dark:border-slate-700">
-                    <SelectItem value="he" className="dark:text-slate-200">עברית</SelectItem>
-                    <SelectItem value="en" className="dark:text-slate-200">אנגלית (English)</SelectItem>
+                    <SelectItem value="he" className="dark:text-slate-200">{t('settings.hebrew')}</SelectItem>
+                    <SelectItem value="en" className="dark:text-slate-200">{t('settings.english')}</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
               <div className="space-y-2">
-                <Label className="dark:text-slate-300">מספר תאגיד</Label>
+                <Label className="dark:text-slate-300">{t('clients.registration_number')}</Label>
                 <Input
                   value={formData.registration_number}
                   onChange={(e) =>
@@ -881,7 +881,7 @@ export default function Clients() {
                 />
               </div>
               <div className="space-y-2">
-                <Label className="dark:text-slate-300">מספר עוסק</Label>
+                <Label className="dark:text-slate-300">{t('clients.tax_id')}</Label>
                 <Input
                   value={formData.tax_id}
                   onChange={(e) => setFormData({ ...formData, tax_id: e.target.value })}
@@ -891,7 +891,7 @@ export default function Clients() {
             </div>
 
             <div className="space-y-2">
-              <Label className="dark:text-slate-300">כתובת</Label>
+              <Label className="dark:text-slate-300">{t('clients.address')}</Label>
               <Input
                 value={formData.address}
                 onChange={(e) => setFormData({ ...formData, address: e.target.value })}
@@ -900,7 +900,7 @@ export default function Clients() {
             </div>
 
             <div className="space-y-2">
-              <Label className="dark:text-slate-300">הערות</Label>
+              <Label className="dark:text-slate-300">{t('clients.notes')}</Label>
               <Textarea
                 value={formData.notes}
                 onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
@@ -923,7 +923,7 @@ export default function Clients() {
                 className="bg-slate-800 hover:bg-slate-700 dark:bg-slate-700"
                 disabled={createMutation.isPending || updateMutation.isPending}
               >
-                {editingClient ? 'עדכן' : 'צור'}
+                {editingClient ? t('clients.update') : t('clients.create')}
               </Button>
             </div>
           </form>

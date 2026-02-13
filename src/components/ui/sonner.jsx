@@ -7,10 +7,14 @@ const Toaster = ({
 }) => {
   const { theme = "system" } = useTheme()
 
+  const isRTL = document.documentElement.dir === 'rtl' || document.querySelector('[dir="rtl"]');
+
   return (
     (<Sonner
       theme={theme}
       className="toaster group"
+      dir={isRTL ? 'rtl' : 'ltr'}
+      position={isRTL ? 'bottom-left' : 'bottom-right'}
       toastOptions={{
         classNames: {
           toast:

@@ -107,7 +107,7 @@ export default function Settings() {
 
           <TabsTrigger value="integrations" className="gap-2 dark:text-slate-300 dark:data-[state=active]:bg-slate-700">
             <Link2 className="w-4 h-4" />
-            אינטגרציות
+            {t('settings.integrations')}
           </TabsTrigger>
         </TabsList>
 

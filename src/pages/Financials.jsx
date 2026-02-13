@@ -365,7 +365,7 @@ export default function Financials() {
                       <div key={entry.id} className="flex items-center gap-4 p-4">
                         <div className="flex-1 min-w-0">
                           <p className="font-medium text-slate-800 dark:text-slate-200">
-                            {entry.description || 'ללא תיאור'}
+                            {entry.description || t('common.no_description', 'ללא תיאור')}
                           </p>
                           <div className="flex gap-3 text-sm text-slate-500 dark:text-slate-400 mt-1">
                             {/* ⭐ הצג שם לקוח */}

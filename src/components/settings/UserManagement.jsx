@@ -101,7 +101,7 @@ export default function UserManagement({ currentUser }) {
               disabled={inviteUserMutation.isPending}
               className="bg-slate-800 hover:bg-slate-700 dark:bg-slate-700 dark:hover:bg-slate-600"
             >
-              <Mail className="w-4 h-4 mr-2" />
+              <Mail className="w-4 h-4 ltr:mr-2 rtl:ml-2" />
               {t('settings.send_invitation')}
             </Button>
           </form>

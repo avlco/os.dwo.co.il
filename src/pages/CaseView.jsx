@@ -8,6 +8,7 @@ import { useDateTimeSettings } from '../components/DateTimeSettingsProvider';
 import { formatForDateInput } from '../components/utils/dateTimeUtils';
 import {
   ArrowRight,
+  ArrowLeft,
   Calendar,
   FileText,
   Receipt,
@@ -43,49 +44,20 @@ import { useToast } from "@/components/ui/use-toast";
 import { useTranslation } from 'react-i18next'; // הוספת תרגום
 import { Badge } from "@/components/ui/badge"; // הוספת Badge
 
-// --- הגדרות זהות לקובץ Cases.jsx ---
-const caseTypes = [
-  { value: 'patent', label: 'פטנט' },
-  { value: 'trademark', label: 'סימן מסחר' },
-  { value: 'design', label: 'עיצוב' },
-  { value: 'copyright', label: 'זכויות יוצרים' },
-  { value: 'litigation', label: 'ליטיגציה' },
-  { value: 'opposition', label: 'התנגדות' },
-];
-
-const caseStatuses = [
-  { value: 'draft', label: 'טיוטה' },
-  { value: 'filed', label: 'הוגש' },
-  { value: 'pending', label: 'ממתין' },
-  { value: 'under_examination', label: 'בבחינה' },
-  { value: 'allowed', label: 'קיבול' },
-  { value: 'registered', label: 'רשום' },
-  { value: 'abandoned', label: 'זנוח' },
-  { value: 'expired', label: 'פג תוקף' },
-];
-
-const priorityLevels = [
-  { value: 'low', label: 'נמוכה', color: 'text-gray-600' },
-  { value: 'medium', label: 'בינונית', color: 'text-blue-600' },
-  { value: 'high', label: 'גבוהה', color: 'text-orange-600' },
-  { value: 'urgent', label: 'דחוף', color: 'text-red-600' },
-];
-
-const deadlineTypes = [
-  { value: 'office_action_response', label: 'תגובה לדו״ח בחינה' },
-  { value: 'renewal', label: 'חידוש' },
-  { value: 'opposition_response', label: 'תגובה להתנגדות' },
-  { value: 'appeal', label: 'ערעור' },
-  { value: 'payment', label: 'תשלום' },
-  { value: 'filing', label: 'הגשה' },
-  { value: 'custom', label: 'אחר' },
-];
+// --- Case option arrays using translation keys ---
+const caseTypeValues = ['patent', 'trademark', 'design', 'copyright', 'litigation', 'opposition'];
+const caseStatusValues = ['draft', 'filed', 'pending', 'under_examination', 'allowed', 'registered', 'abandoned', 'expired'];
+const priorityColors = { low: 'text-gray-600', medium: 'text-blue-600', high: 'text-orange-600', urgent: 'text-red-600' };
+const priorityValues = ['low', 'medium', 'high', 'urgent'];
+const deadlineTypeValues = ['office_action_response', 'renewal', 'opposition_response', 'appeal', 'payment', 'filing', 'custom'];
 
 export default function CaseView() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const { formatDate, formatDateTime } = useDateTimeSettings();
+  const isRTL = i18n.language === 'he';
+  const BackIcon = isRTL ? ArrowRight : ArrowLeft;
   const urlParams = new URLSearchParams(window.location.search);
   const caseId = urlParams.get('id');
 
@@ -330,7 +302,8 @@ export default function CaseView() {
     .reduce((sum, t) => sum + ((t.hours || 0) * (t.rate || 0)), 0);
 
   // תווית דחיפות
-  const priorityInfo = priorityLevels.find(p => p.value === currentCase.priority_level);
+  const priorityColor = priorityColors[currentCase.priority_level];
+  const priorityLabel = currentCase.priority_level ? t(`cases.priority_${currentCase.priority_level}`) : null;
 
   return (
     <div className="space-y-6 pb-10">
@@ -338,16 +311,16 @@ export default function CaseView() {
       <div className="flex items-center gap-4">
         <Link to={createPageUrl('Cases')}>
           <Button variant="ghost" size="icon" className="rounded-xl">
-            <ArrowRight className="w-5 h-5" />
+            <BackIcon className="w-5 h-5" />
           </Button>
         </Link>
         <div className="flex-1">
           <div className="flex items-center gap-3">
             <h1 className="text-2xl font-bold text-slate-800 dark:text-slate-200">{currentCase.case_number}</h1>
             <StatusBadge status={currentCase.status} />
-            {priorityInfo && (
-              <Badge variant="outline" className={`${priorityInfo.color} border-current ml-2`}>
-                {priorityInfo.label}
+            {priorityLabel && (
+              <Badge variant="outline" className={`${priorityColor} border-current ${isRTL ? 'mr-2' : 'ml-2'}`}>
+                {priorityLabel}
               </Badge>
             )}
           </div>
@@ -373,7 +346,7 @@ export default function CaseView() {
           <CardContent className="pt-6">
             <p className="text-sm text-slate-500 dark:text-slate-400 mb-1">{t('cases.case_type')}</p>
             <p className="font-medium text-slate-800 dark:text-slate-200">
-              {caseTypes.find(ct => ct.value === currentCase.case_type)?.label || currentCase.case_type}
+              {currentCase.case_type ? t(`cases.type_${currentCase.case_type}`) : currentCase.case_type}
             </p>
           </CardContent>
         </Card>
@@ -392,7 +365,7 @@ export default function CaseView() {
           <TabsTrigger value="deadlines" className="dark:text-slate-300 dark:data-[state=active]:bg-slate-700">{t('case_view.events_tab')}</TabsTrigger>
           <TabsTrigger value="tasks" className="dark:text-slate-300 dark:data-[state=active]:bg-slate-700">{t('case_view.tasks_tab')}</TabsTrigger>
           <TabsTrigger value="documents" className="dark:text-slate-300 dark:data-[state=active]:bg-slate-700">
-            <Cloud className="w-4 h-4 ml-1" />
+            <Cloud className="w-4 h-4" />
             {t('case_view.documents_tab')}
           </TabsTrigger>
           <TabsTrigger value="financials" className="dark:text-slate-300 dark:data-[state=active]:bg-slate-700">{t('case_view.financials_tab')}</TabsTrigger>
@@ -581,7 +554,7 @@ export default function CaseView() {
                           {formatDate(entry.date_worked)}
                         </p>
                       </div>
-                      <div className="text-left">
+                      <div className={isRTL ? 'text-right' : 'text-left'}>
                         <p className="font-medium">{entry.hours} {t('case_view.hours_label')}</p>
                         {entry.is_billable && (
                           <p className="text-sm text-emerald-600">₪{((entry.hours || 0) * (entry.rate || 0)).toLocaleString()}</p>
@@ -625,8 +598,8 @@ export default function CaseView() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {caseTypes.map(type => (
-                      <SelectItem key={type.value} value={type.value}>{type.label}</SelectItem>
+                    {caseTypeValues.map(val => (
+                      <SelectItem key={val} value={val}>{t(`cases.type_${val}`)}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
@@ -641,8 +614,8 @@ export default function CaseView() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {priorityLevels.map(priority => (
-                      <SelectItem key={priority.value} value={priority.value}>{priority.label}</SelectItem>
+                    {priorityValues.map(val => (
+                      <SelectItem key={val} value={val}>{t(`cases.priority_${val}`)}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
@@ -651,7 +624,7 @@ export default function CaseView() {
             
             <div className="space-y-2">
 <Label>
-  שם התיק <span className="text-red-500">*</span>
+  {t('case_view.case_title_field', 'שם התיק')} <span className="text-red-500">*</span>
 </Label>
               <Input
                 value={editCaseForm.title}
@@ -705,8 +678,8 @@ export default function CaseView() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {caseStatuses.map(status => (
-                      <SelectItem key={status.value} value={status.value}>{status.label}</SelectItem>
+                    {caseStatusValues.map(val => (
+                      <SelectItem key={val} value={val}>{t(`cases.status_${val}`)}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
@@ -778,7 +751,7 @@ export default function CaseView() {
             </div>
 
             <div className="space-y-2">
-  <Label>תיאור התיק</Label>
+  <Label>{t('case_view.case_description_field', 'תיאור התיק')}</Label>
   <Textarea
     value={editCaseForm.notes}
     onChange={(e) => setEditCaseForm({ ...editCaseForm, notes: e.target.value })}
@@ -825,8 +798,8 @@ export default function CaseView() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {deadlineTypes.map(type => (
-                    <SelectItem key={type.value} value={type.value}>{type.label}</SelectItem>
+                  {deadlineTypeValues.map(val => (
+                    <SelectItem key={val} value={val}>{t(`case_view.deadline_type_${val}`, t(`docketing.type_${val}`, val))}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
